@@ -6,6 +6,7 @@ Community component marketplace for NeoMind Edge AI Platform.
 
 ```
 index.json                        # Component index (fetched by NeoMind backend)
+STYLE_GUIDE.md                    # Visual style guide for component authors
 components/
   └── {component-id}/
       ├── manifest.json           # Component metadata
@@ -63,3 +64,116 @@ var MyComponent = (function() {
 ```
 
 Available globals: `window.React`, `window.jsxRuntime` (jsx, jsxs).
+
+## Device Binding Components
+
+Components can bind to specific device types to receive rich device context (metrics, commands, current values).
+
+### Manifest Fields
+
+```json
+{
+  "has_device_binding": true,
+  "device_type_filter": ["ne101_camera"]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `has_device_binding` | `boolean` | Component requires a device instance to function |
+| `device_type_filter` | `string[]` | Restrict device selector to these device_type strings |
+
+### Props Received
+
+When a device is bound, the component receives these additional props:
+
+```javascript
+{
+  deviceContext: {
+    device: {
+      id: "ne101_abc123",
+      name: "Front Door Camera",
+      deviceType: "ne101_camera",
+      status: "online",
+      lastSeen: "2026-05-11T06:00:00Z",
+      currentValues: {
+        "ts": 1740640441620,
+        "values.battery": 84,
+        "values.devName": "NE101"
+      }
+    },
+    deviceType: {
+      name: "CamThink Sensing Camera",
+      deviceType: "ne101_camera",
+      metrics: [
+        { "name": "ts", "display_name": "Timestamp", "data_type": "Integer" },
+        { "name": "values.battery", "display_name": "Battery Level", "data_type": "Integer", "unit": "%" }
+      ],
+      commands: []
+    }
+  },
+  sendDeviceCommand: async (command, params?) => boolean
+}
+```
+
+### Example: Rendering Device Metrics
+
+```javascript
+function DevicePanel(props) {
+  var device = props.deviceContext && props.deviceContext.device;
+  var deviceType = props.deviceContext && props.deviceContext.deviceType;
+
+  if (!device) {
+    return jsx('div', { className: '...', children: 'No device bound' });
+  }
+
+  var values = device.currentValues || {};
+  var metrics = (deviceType && deviceType.metrics) || [];
+
+  // Render each metric
+  var rows = metrics.map(function(m) {
+    var v = values[m.name];
+    return jsx('div', { key: m.name, children: (m.display_name || m.name) + ': ' + (v != null ? v : '--') });
+  });
+
+  return jsx('div', { children: rows });
+}
+```
+
+### Example: Sending Commands
+
+```javascript
+function DeviceControls(props) {
+  var commands = (props.deviceContext && props.deviceContext.deviceType && props.deviceContext.deviceType.commands) || [];
+  var sendCmd = props.sendDeviceCommand;
+
+  return jsx('div', {
+    children: commands.map(function(cmd) {
+      return jsx('button', {
+        key: cmd.name,
+        onClick: function() { sendCmd(cmd.name); },
+        children: cmd.display_name || cmd.name
+      });
+    })
+  });
+}
+```
+
+## Style Guide
+
+See [STYLE_GUIDE.md](./STYLE_GUIDE.md) for the full visual style guide covering:
+
+- Color tokens and semantic colors
+- Typography scale and font rules
+- Spacing, radius, and layout patterns
+- Status colors and badges
+- Animation classes
+- Dark mode handling
+- Device binding prop reference
+
+## Existing Components
+
+| ID | Category | Description |
+|----|----------|-------------|
+| `clock` | Display | Real-time clock widget with 12h/24h format |
+| `ne101-camera` | Device | CamThink NE101 camera panel with capture display, battery, and device commands |

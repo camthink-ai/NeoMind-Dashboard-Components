@@ -1,0 +1,39 @@
+{
+  "id": "ne101-camera",
+  "name": { "en": "NE101 Camera Panel", "zh": "NE101 感知摄像头面板" },
+  "description": {
+    "en": "CamThink NE101 sensing camera — displays latest capture, battery status, and trigger controls",
+    "zh": "CamThink NE101 感知摄像头 — 显示最新抓拍、电量状态和触发控制"
+  },
+  "icon": "Camera",
+  "category": "device",
+  "version": "1.0.0",
+  "author": "CamThink Team",
+  "size_constraints": { "min_w": 2, "min_h": 2, "default_w": 3, "default_h": 3, "max_w": 6, "max_h": 6 },
+  "has_data_source": false,
+  "has_device_binding": true,
+  "device_type_filter": ["ne101_camera"],
+  "has_display_config": false,
+  "has_actions": false,
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "showMetrics": {
+        "type": "boolean",
+        "default": true,
+        "title": "Show Metrics Panel"
+      },
+      "showCommands": {
+        "type": "boolean",
+        "default": true,
+        "title": "Show Command Buttons"
+      }
+    }
+  },
+  "default_config": {
+    "showMetrics": true,
+    "showCommands": true
+  },
+  "global_name": "NE101CameraPanel",
+  "export_name": "NE101CameraPanel"
+}
