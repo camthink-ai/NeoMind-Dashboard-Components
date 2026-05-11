@@ -32,6 +32,31 @@ var NE101CameraPanel = (function () {
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
+  // Resolve value by dot-path or nested object (handles both flat and nested currentValues)
+  // e.g. getVal({ values: { battery: 84 } }, 'values.battery') => 84
+  function getVal(obj, key) {
+    if (!obj) return undefined;
+    // Try direct key first (flat access)
+    if (obj[key] !== undefined) return obj[key];
+    // Try nested path
+    var parts = key.split('.');
+    var cur = obj;
+    for (var i = 0; i < parts.length; i++) {
+      if (cur == null || typeof cur !== 'object') return undefined;
+      cur = cur[parts[i]];
+    }
+    return cur;
+  }
+
+  // Try multiple keys, return first match
+  function getFirst(obj, keys) {
+    for (var i = 0; i < keys.length; i++) {
+      var v = getVal(obj, keys[i]);
+      if (v != null && v !== '') return v;
+    }
+    return null;
+  }
+
   // Sub-components
   function StatusDot(props) {
     var on = props.online;
@@ -135,9 +160,9 @@ var NE101CameraPanel = (function () {
 
     var vals = device.currentValues || {};
     var online = device.status === 'online';
-    var batteryVal = vals['values.battery'] != null ? vals['values.battery'] : vals['battery'];
-    var devName = vals['values.devName'] || vals['devName'] || device.name;
-    var imageSrc = vals['values.imageUrl'] || vals['values.image'] || vals['imageUrl'] || vals['image'] || vals['values.photo'] || vals['photo'] || null;
+    var batteryVal = getFirst(vals, ['values.battery', 'battery']);
+    var devName = getFirst(vals, ['values.devName', 'devName']) || device.name;
+    var imageSrc = getFirst(vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
 
     var metrics = (deviceType && deviceType.metrics) || [];
     var displayMetrics = [];
@@ -180,7 +205,7 @@ var NE101CameraPanel = (function () {
       var metricChildren = [jsx(BatteryBar, { key: 'bat', level: batteryVal })];
       if (displayMetrics.length > 0) {
         var rows = displayMetrics.map(function (m) {
-          var v = vals[m.name];
+          var v = getVal(vals, m.name);
           return jsx(MetricRow, { label: m.display_name || m.name, value: formatValue(v, m), unit: unitStr(m).trim() }, m.name);
         });
         metricChildren.push(jsx('div', { key: 'extra', className: 'border-t border-border pt-1', children: rows }));
