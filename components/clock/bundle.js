@@ -36,7 +36,7 @@ var ClockWidget = (function() {
     var dateStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
     return jsx('div', {
-      className: 'flex flex-col items-center justify-center h-full w-full p-3 select-none',
+      className: 'flex flex-col items-center justify-center h-full w-full p-3 select-none rounded-lg border border-border bg-card',
       children: jsxs('div', {
         className: 'flex flex-col items-center gap-1',
         children: [
