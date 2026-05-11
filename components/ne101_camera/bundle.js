@@ -32,13 +32,9 @@ var NE101CameraPanel = (function () {
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
-  // Resolve value by dot-path or nested object (handles both flat and nested currentValues)
-  // e.g. getVal({ values: { battery: 84 } }, 'values.battery') => 84
   function getVal(obj, key) {
     if (!obj) return undefined;
-    // Try direct key first (flat access)
     if (obj[key] !== undefined) return obj[key];
-    // Try nested path
     var parts = key.split('.');
     var cur = obj;
     for (var i = 0; i < parts.length; i++) {
@@ -48,7 +44,6 @@ var NE101CameraPanel = (function () {
     return cur;
   }
 
-  // Try multiple keys, return first match
   function getFirst(obj, keys) {
     for (var i = 0; i < keys.length; i++) {
       var v = getVal(obj, keys[i]);
@@ -57,77 +52,7 @@ var NE101CameraPanel = (function () {
     return null;
   }
 
-  // Sub-components
-  function StatusDot(props) {
-    var on = props.online;
-    return jsxs('div', {
-      className: 'flex items-center gap-1.5',
-      children: [
-        jsx('div', {
-          className: 'h-1.5 w-1.5 rounded-full ' + (on ? 'bg-success' : 'bg-muted-foreground'),
-          style: on ? { boxShadow: '0 0 4px oklch(0.72 0.19 155)' } : {}
-        }),
-        jsx('span', {
-          className: 'text-[10px] font-medium ' + (on ? 'text-success' : 'text-muted-foreground'),
-          children: on ? 'Online' : 'Offline'
-        })
-      ]
-    });
-  }
-
-  function BatteryBar(props) {
-    var level = props.level;
-    var bm = batteryMeta(level);
-    var pct = level != null ? Math.max(0, Math.min(100, level)) : 0;
-    return jsxs('div', { className: 'space-y-0.5', children: [
-      jsxs('div', { className: 'flex justify-between items-center', children: [
-        jsx('span', { className: 'text-[10px] text-muted-foreground', children: 'Battery' }),
-        jsx('span', { className: 'text-xs font-mono font-semibold tabular-nums ' + bm.text, children: (level != null ? level : '--') + '%' })
-      ]}),
-      jsx('div', { className: 'h-1.5 bg-muted-30 rounded-full overflow-hidden', children:
-        jsx('div', { className: 'h-full rounded-full transition-all duration-500 ' + bm.bar, style: { width: pct + '%' } })
-      })
-    ]});
-  }
-
-  function MetricRow(props) {
-    return jsxs('div', { className: 'flex items-center justify-between py-0.5', children: [
-      jsx('span', { className: 'text-[10px] text-muted-foreground truncate mr-2', children: props.label }),
-      jsxs('span', { className: 'text-xs font-mono tabular-nums text-foreground flex-shrink-0', children: [
-        props.value,
-        jsx('span', { className: 'text-[10px] text-muted-foreground ml-0.5', children: props.unit })
-      ]})
-    ]});
-  }
-
-  function CommandButton(props) {
-    return jsx('button', {
-      className: 'flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium ' +
-        'bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50',
-      onClick: props.onClick,
-      disabled: props.sending,
-      children: props.sending ? 'Sending...' : props.label
-    });
-  }
-
-  function CaptureDisplay(props) {
-    if (!props.src) {
-      return jsxs('div', {
-        className: 'flex-1 flex flex-col items-center justify-center rounded-lg bg-muted-30 min-h-0',
-        children: [
-          jsx('div', { className: 'w-7 h-7 rounded-md bg-muted flex items-center justify-center mb-2', children:
-            jsx('span', { className: 'text-xs text-muted-foreground', children: 'CAM' })
-          }),
-          jsx('span', { className: 'text-[10px] text-muted-foreground', children: props.online ? 'Waiting for capture...' : 'Device offline' })
-        ]
-      });
-    }
-    return jsx('div', {
-      className: 'flex-1 rounded-lg overflow-hidden bg-black min-h-0',
-      children: jsx('img', { src: props.src, alt: 'Latest capture', className: 'w-full h-full object-contain', loading: 'lazy' })
-    });
-  }
-
+  // No device placeholder
   function NoDevice() {
     return jsxs('div', {
       className: 'flex flex-col items-center justify-center h-full w-full p-4 text-center',
@@ -141,10 +66,9 @@ var NE101CameraPanel = (function () {
     });
   }
 
-  // Main Component
+  // Main Component — image-centric layout
   function NE101CameraPanel(props) {
     var config = props.config || {};
-    var showMetrics = config.showMetrics !== false;
     var showCommands = config.showCommands !== false;
 
     var deviceCtx = props.deviceContext;
@@ -177,75 +101,135 @@ var NE101CameraPanel = (function () {
     }
 
     var commands = (deviceType && deviceType.commands) || [];
+    var bm = batteryMeta(batteryVal);
+    var batteryPct = batteryVal != null ? Math.max(0, Math.min(100, batteryVal)) : 0;
 
-    // Build children array
-    var children = [];
-
-    // Header
-    children.push(
-      jsxs('div', { key: 'hdr', className: 'flex items-center justify-between flex-shrink-0', children: [
-        jsxs('div', { className: 'flex items-center gap-2 min-w-0', children: [
-          jsx('div', { className: 'flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-md bg-accent-cyan-light', children:
-            jsx('span', { className: 'text-[10px] font-bold text-accent-cyan', children: 'CAM' })
+    // Build overlay badges for top-right
+    var topRightBadges = [];
+    // Status dot
+    topRightBadges.push(
+      jsx('div', {
+        key: 'status',
+        className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-bg-90/80 backdrop-blur-sm',
+        children: [
+          jsx('div', {
+            className: 'h-1.5 w-1.5 rounded-full ' + (online ? 'bg-success' : 'bg-muted-foreground'),
+            style: online ? { boxShadow: '0 0 4px oklch(0.72 0.19 155)' } : {}
           }),
-          jsxs('div', { className: 'min-w-0', children: [
-            jsx('p', { className: 'text-xs font-semibold text-foreground truncate', children: devName }),
-            jsx('p', { className: 'text-[10px] text-muted-foreground', children: timeAgo(device.lastSeen) })
-          ]})
+          jsx('span', {
+            className: 'text-[9px] font-medium ' + (online ? 'text-success' : 'text-muted-foreground'),
+            children: online ? 'Online' : 'Offline'
+          })
+        ]
+      })
+    );
+    // Battery badge
+    topRightBadges.push(
+      jsxs('div', {
+        key: 'bat',
+        className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-bg-90/80 backdrop-blur-sm',
+        children: [
+          jsx('div', { className: 'w-6 h-2.5 rounded-sm bg-muted-30 overflow-hidden', children:
+            jsx('div', { className: 'h-full rounded-sm ' + bm.bar, style: { width: batteryPct + '%' } })
+          }),
+          jsx('span', { className: 'text-[9px] font-mono font-semibold tabular-nums ' + bm.text, children: (batteryVal != null ? batteryVal : '--') + '%' })
+        ]
+      })
+    );
+
+    // Build bottom overlay: name + last seen + metrics + commands
+    var bottomChildren = [];
+
+    // Name + time row
+    bottomChildren.push(
+      jsxs('div', { key: 'info', className: 'flex items-center justify-between', children: [
+        jsxs('div', { className: 'flex items-center gap-1.5 min-w-0', children: [
+          jsx('span', { className: 'text-[9px] font-medium px-1 py-0.5 rounded bg-accent-cyan/20 text-accent-cyan', children: 'NE101' }),
+          jsx('span', { className: 'text-[10px] font-semibold text-white truncate', children: devName })
         ]}),
-        jsx(StatusDot, { online: online })
+        jsx('span', { className: 'text-[9px] text-white/60 flex-shrink-0', children: timeAgo(device.lastSeen) })
       ]})
     );
 
-    // Capture image
-    children.push(jsx(CaptureDisplay, { key: 'img', src: imageSrc, online: online }));
-
-    // Metrics
-    if (showMetrics) {
-      var metricChildren = [jsx(BatteryBar, { key: 'bat', level: batteryVal })];
-      if (displayMetrics.length > 0) {
-        var rows = displayMetrics.map(function (m) {
-          var v = getVal(vals, m.name);
-          return jsx(MetricRow, { label: m.display_name || m.name, value: formatValue(v, m), unit: unitStr(m).trim() }, m.name);
-        });
-        metricChildren.push(jsx('div', { key: 'extra', className: 'border-t border-border pt-1', children: rows }));
-      }
-      children.push(jsxs('div', { key: 'met', className: 'flex-shrink-0 space-y-1.5', children: metricChildren }));
+    // Metrics row (compact, horizontal)
+    if (displayMetrics.length > 0) {
+      var metricBadges = displayMetrics.slice(0, 4).map(function (m) {
+        var v = getVal(vals, m.name);
+        var displayVal = formatValue(v, m);
+        var u = unitStr(m).trim();
+        return jsxs('span', {
+          className: 'text-[9px] font-mono tabular-nums text-white/80 bg-white/10 px-1.5 py-0.5 rounded',
+          children: [
+            jsx('span', { className: 'text-white/50 mr-0.5', children: (m.display_name || m.name).substring(0, 6) }),
+            displayVal + (u ? ' ' + u : '')
+          ]
+        }, m.name);
+      });
+      bottomChildren.push(
+        jsx('div', { key: 'metrics', className: 'flex gap-1 flex-wrap', children: metricBadges })
+      );
     }
 
-    // Commands
+    // Commands row
     if (showCommands && commands.length > 0) {
-      children.push(jsx('div', {
-        key: 'cmd',
-        className: 'flex gap-1.5 flex-shrink-0 flex-wrap',
-        children: commands.map(function (cmd) {
-          var isLoading = !!cmdLoading[cmd.name];
-          return jsx(CommandButton, {
-            label: cmd.display_name || cmd.name,
-            sending: isLoading,
-            onClick: function () {
-              if (!sendCmd || isLoading) return;
-              setCmdLoading(function (prev) { var u = {}; u[cmd.name] = true; return Object.assign({}, prev, u); });
-              sendCmd(cmd.name).then(function () {
-                setCmdLoading(function (prev) { var u = {}; u[cmd.name] = false; return Object.assign({}, prev, u); });
-              }).catch(function () {
-                setCmdLoading(function (prev) { var u = {}; u[cmd.name] = false; return Object.assign({}, prev, u); });
-              });
-            }
-          }, cmd.name);
-        })
-      }));
+      var cmdButtons = commands.slice(0, 4).map(function (cmd) {
+        var isLoading = !!cmdLoading[cmd.name];
+        return jsx('button', {
+          className: 'text-[9px] font-medium px-2 py-1 rounded bg-white/20 text-white hover:bg-white/30 transition-colors disabled:opacity-50',
+          onClick: function () {
+            if (!sendCmd || isLoading) return;
+            setCmdLoading(function (prev) { var u = {}; u[cmd.name] = true; return Object.assign({}, prev, u); });
+            sendCmd(cmd.name).then(function () {
+              setCmdLoading(function (prev) { var u = {}; u[cmd.name] = false; return Object.assign({}, prev, u); });
+            }).catch(function () {
+              setCmdLoading(function (prev) { var u = {}; u[cmd.name] = false; return Object.assign({}, prev, u); });
+            });
+          },
+          disabled: isLoading,
+          children: isLoading ? '...' : (cmd.display_name || cmd.name)
+        }, cmd.name);
+      });
+      bottomChildren.push(
+        jsx('div', { key: 'cmds', className: 'flex gap-1 flex-wrap', children: cmdButtons })
+      );
     }
 
-    // Footer
-    children.push(
-      jsxs('div', { key: 'ftr', className: 'flex items-center justify-between flex-shrink-0 pt-0.5', children: [
-        jsx('span', { className: 'text-[10px] font-medium px-1.5 py-0.5 rounded bg-accent-cyan-light text-accent-cyan', children: 'NE101' }),
-        jsx('span', { className: 'text-[10px] text-muted-foreground', children: device.id })
-      ]})
-    );
+    return jsxs('div', {
+      className: 'relative h-full w-full overflow-hidden bg-black',
+      children: [
+        // Full-bleed image or placeholder
+        imageSrc
+          ? jsx('img', {
+              src: imageSrc,
+              alt: 'Latest capture',
+              className: 'w-full h-full object-cover',
+              loading: 'lazy',
+              style: { imageRendering: 'auto' }
+            })
+          : jsxs('div', {
+              className: 'w-full h-full flex flex-col items-center justify-center bg-muted-30',
+              children: [
+                jsx('div', { className: 'w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center mb-2', children:
+                  jsx('span', { className: 'text-xs font-bold text-muted-foreground', children: 'CAM' })
+                }),
+                jsx('span', { className: 'text-[10px] text-muted-foreground', children: online ? 'Waiting for capture...' : 'Device offline' })
+              ]
+            }),
 
-    return jsxs('div', { className: 'flex flex-col h-full w-full p-2.5 gap-2', children: children });
+        // Top-right badges (status + battery) — always overlay
+        jsxs('div', {
+          className: 'absolute top-2 right-2 flex gap-1',
+          children: topRightBadges
+        }),
+
+        // Bottom overlay bar — gradient fade from transparent to dark
+        jsx('div', {
+          className: 'absolute bottom-0 left-0 right-0',
+          style: { background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)' },
+          children: jsx('div', { className: 'px-2.5 pb-2 pt-8 space-y-1', children: bottomChildren })
+        })
+      ]
+    });
   }
 
   return { default: NE101CameraPanel, NE101CameraPanel: NE101CameraPanel };
