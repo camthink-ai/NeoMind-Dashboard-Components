@@ -1,0 +1,30 @@
+{
+  "id": "clock",
+  "name": { "en": "Clock", "zh": "时钟" },
+  "description": { "en": "A real-time clock widget with 12h/24h format", "zh": "实时时钟组件，支持12/24小时格式" },
+  "icon": "Clock",
+  "category": "display",
+  "version": "1.0.0",
+  "author": "NeoMind Team",
+  "size_constraints": { "min_w": 2, "min_h": 1, "default_w": 3, "default_h": 2, "max_w": 6, "max_h": 4 },
+  "has_data_source": false,
+  "max_data_sources": 0,
+  "has_display_config": true,
+  "has_actions": false,
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "format": {
+        "type": "string",
+        "enum": ["12h", "24h"],
+        "default": "24h",
+        "title": "Time Format"
+      }
+    }
+  },
+  "default_config": {
+    "format": "24h"
+  },
+  "global_name": "ClockWidget",
+  "export_name": "Clock"
+}

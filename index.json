@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "components": [
+    {
+      "id": "clock",
+      "name": { "en": "Clock", "zh": "时钟" },
+      "description": { "en": "A real-time clock widget", "zh": "实时时钟组件" },
+      "icon": "Clock",
+      "category": "display",
+      "version": "1.0.0",
+      "author": "NeoMind Team",
+      "size_constraints": { "min_w": 2, "min_h": 1, "default_w": 3, "default_h": 2, "max_w": 6, "max_h": 4 },
+      "has_data_source": false,
+      "max_data_sources": 0,
+      "has_display_config": true,
+      "has_actions": false,
+      "screenshot_url": "https://raw.githubusercontent.com/camthink-ai/NeoMind-Dashboard-Components/main/components/clock/screenshot.png",
+      "manifest_url": "https://raw.githubusercontent.com/camthink-ai/NeoMind-Dashboard-Components/main/components/clock/manifest.json",
+      "bundle_url": "https://raw.githubusercontent.com/camthink-ai/NeoMind-Dashboard-Components/main/components/clock/bundle.js"
+    }
+  ]
+}
