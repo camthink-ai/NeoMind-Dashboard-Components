@@ -85,7 +85,7 @@ var NE101CameraPanel = (function () {
     var vals = device.currentValues || {};
     var online = device.status === 'online';
     var batteryVal = getFirst(vals, ['values.battery', 'battery']);
-    var devName = getFirst(vals, ['values.devName', 'devName']) || device.name;
+    var devName = device.name || getFirst(vals, ['values.devName', 'devName']) || 'NE101 Camera';
     var imageSrc = getFirst(vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
 
     var metrics = (deviceType && deviceType.metrics) || [];
@@ -103,14 +103,24 @@ var NE101CameraPanel = (function () {
     var commands = (deviceType && deviceType.commands) || [];
     var bm = batteryMeta(batteryVal);
     var batteryPct = batteryVal != null ? Math.max(0, Math.min(100, batteryVal)) : 0;
+    var hasImage = !!imageSrc;
+
+    // Color scheme: white on image, dark on placeholder
+    var tc = hasImage ? 'text-white' : 'text-foreground';
+    var tcSub = hasImage ? 'text-white/60' : 'text-muted-foreground';
+    var tcVal = hasImage ? 'text-white/80' : 'text-foreground';
+    var tcLabel = hasImage ? 'text-white/50' : 'text-muted-foreground';
+    var bgChip = hasImage ? 'bg-white/20' : 'bg-muted';
+    var bgChipHover = hasImage ? 'bg-white/30' : 'bg-accent';
+    var bgBadge = hasImage ? 'bg-black/40 backdrop-blur-sm' : 'bg-muted-30';
+    var bgMetric = hasImage ? 'bg-white/10' : 'bg-muted-30';
 
     // Build overlay badges for top-right
     var topRightBadges = [];
-    // Status dot
     topRightBadges.push(
       jsx('div', {
         key: 'status',
-        className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-bg-90/80 backdrop-blur-sm',
+        className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md ' + bgBadge,
         children: [
           jsx('div', {
             className: 'h-1.5 w-1.5 rounded-full ' + (online ? 'bg-success' : 'bg-muted-foreground'),
@@ -123,16 +133,15 @@ var NE101CameraPanel = (function () {
         ]
       })
     );
-    // Battery badge
     topRightBadges.push(
       jsxs('div', {
         key: 'bat',
-        className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-bg-90/80 backdrop-blur-sm',
+        className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md ' + bgBadge,
         children: [
           jsx('div', { className: 'w-6 h-2.5 rounded-sm bg-muted-30 overflow-hidden', children:
             jsx('div', { className: 'h-full rounded-sm ' + bm.bar, style: { width: batteryPct + '%' } })
           }),
-          jsx('span', { className: 'text-[9px] font-mono font-semibold tabular-nums ' + bm.text, children: (batteryVal != null ? batteryVal : '--') + '%' })
+          jsx('span', { className: 'text-[9px] font-mono font-semibold tabular-nums ' + (hasImage ? 'text-white' : bm.text), children: (batteryVal != null ? batteryVal : '--') + '%' })
         ]
       })
     );
@@ -140,27 +149,25 @@ var NE101CameraPanel = (function () {
     // Build bottom overlay: name + last seen + metrics + commands
     var bottomChildren = [];
 
-    // Name + time row
     bottomChildren.push(
       jsxs('div', { key: 'info', className: 'flex items-center justify-between', children: [
         jsxs('div', { className: 'flex items-center gap-1.5 min-w-0', children: [
-          jsx('span', { className: 'text-[9px] font-medium px-1 py-0.5 rounded bg-accent-cyan/20 text-accent-cyan', children: 'NE101' }),
-          jsx('span', { className: 'text-[10px] font-semibold text-white truncate', children: devName })
+          jsx('span', { className: 'text-[9px] font-medium px-1 py-0.5 rounded ' + bgChip + ' ' + tc, children: 'NE101' }),
+          jsx('span', { className: 'text-[10px] font-semibold ' + tc + ' truncate', children: devName })
         ]}),
-        jsx('span', { className: 'text-[9px] text-white/60 flex-shrink-0', children: timeAgo(device.lastSeen) })
+        jsx('span', { className: 'text-[9px] ' + tcSub + ' flex-shrink-0', children: timeAgo(device.lastSeen) })
       ]})
     );
 
-    // Metrics row (compact, horizontal)
     if (displayMetrics.length > 0) {
       var metricBadges = displayMetrics.slice(0, 4).map(function (m) {
         var v = getVal(vals, m.name);
         var displayVal = formatValue(v, m);
         var u = unitStr(m).trim();
         return jsxs('span', {
-          className: 'text-[9px] font-mono tabular-nums text-white/80 bg-white/10 px-1.5 py-0.5 rounded',
+          className: 'text-[9px] font-mono tabular-nums ' + tcVal + ' ' + bgMetric + ' px-1.5 py-0.5 rounded',
           children: [
-            jsx('span', { className: 'text-white/50 mr-0.5', children: (m.display_name || m.name).substring(0, 6) }),
+            jsx('span', { className: tcLabel + ' mr-0.5', children: (m.display_name || m.name).substring(0, 6) }),
             displayVal + (u ? ' ' + u : '')
           ]
         }, m.name);
@@ -170,12 +177,11 @@ var NE101CameraPanel = (function () {
       );
     }
 
-    // Commands row
     if (showCommands && commands.length > 0) {
       var cmdButtons = commands.slice(0, 4).map(function (cmd) {
         var isLoading = !!cmdLoading[cmd.name];
         return jsx('button', {
-          className: 'text-[9px] font-medium px-2 py-1 rounded bg-white/20 text-white hover:bg-white/30 transition-colors disabled:opacity-50',
+          className: 'text-[9px] font-medium px-2 py-1 rounded ' + bgChip + ' ' + tc + ' hover:' + bgChipHover + ' transition-colors disabled:opacity-50',
           onClick: function () {
             if (!sendCmd || isLoading) return;
             setCmdLoading(function (prev) { var u = {}; u[cmd.name] = true; return Object.assign({}, prev, u); });
@@ -198,7 +204,7 @@ var NE101CameraPanel = (function () {
       className: 'relative h-full w-full overflow-hidden bg-black',
       children: [
         // Full-bleed image or placeholder
-        imageSrc
+        hasImage
           ? jsx('img', {
               src: imageSrc,
               alt: 'Latest capture',
@@ -222,11 +228,22 @@ var NE101CameraPanel = (function () {
           children: topRightBadges
         }),
 
-        // Bottom overlay bar — gradient fade from transparent to dark
+        // Bottom overlay bar — gradient fade (dark on image, light on placeholder)
         jsx('div', {
           className: 'absolute bottom-0 left-0 right-0',
-          style: { background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)' },
-          children: jsx('div', { className: 'px-2.5 pb-2 pt-8 space-y-1', children: bottomChildren })
+          style: hasImage
+            ? { background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)' }
+            : { background: 'linear-gradient(to top, rgba(0,0,0,0.05) 0%, transparent 100%)' },
+          children: jsx('div', {
+            className: 'px-2.5 pb-2 pt-8 space-y-1',
+            children: bottomChildren.map(function (child) {
+              // When no image, use dark text instead of white
+              if (!hasImage && child && child.props && child.props.children) {
+                return child;
+              }
+              return child;
+            })
+          })
         })
       ]
     });
