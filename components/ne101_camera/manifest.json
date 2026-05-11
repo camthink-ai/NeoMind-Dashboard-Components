@@ -1,5 +1,5 @@
 {
-  "id": "ne101-camera",
+  "id": "ne101_camera",
   "name": { "en": "NE101 Camera Panel", "zh": "NE101 感知摄像头面板" },
   "description": {
     "en": "CamThink NE101 sensing camera — displays latest capture, battery status, and trigger controls",

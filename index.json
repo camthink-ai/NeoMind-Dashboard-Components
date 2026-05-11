@@ -18,7 +18,7 @@
       "bundle_url": "https://raw.githubusercontent.com/camthink-ai/NeoMind-Dashboard-Components/main/components/clock/bundle.js"
     },
     {
-      "id": "ne101-camera",
+      "id": "ne101_camera",
       "name": { "en": "NE101 Camera Panel", "zh": "NE101 感知摄像头面板" },
       "description": {
         "en": "CamThink NE101 sensing camera — displays latest capture, battery status, and trigger controls",
@@ -30,12 +30,10 @@
       "author": "CamThink Team",
       "size_constraints": { "min_w": 2, "min_h": 2, "default_w": 3, "default_h": 3, "max_w": 6, "max_h": 6 },
       "has_data_source": false,
-      "has_device_binding": true,
-      "device_type_filter": ["ne101_camera"],
       "has_display_config": false,
       "has_actions": false,
-      "manifest_url": "https://raw.githubusercontent.com/camthink-ai/NeoMind-Dashboard-Components/main/components/ne101-camera/manifest.json",
-      "bundle_url": "https://raw.githubusercontent.com/camthink-ai/NeoMind-Dashboard-Components/main/components/ne101-camera/bundle.js"
+      "manifest_url": "https://raw.githubusercontent.com/camthink-ai/NeoMind-Dashboard-Components/main/components/ne101_camera/manifest.json",
+      "bundle_url": "https://raw.githubusercontent.com/camthink-ai/NeoMind-Dashboard-Components/main/components/ne101_camera/bundle.js"
     }
   ]
 }
