@@ -55,7 +55,7 @@ var NE101CameraPanel = (function () {
   // No device placeholder
   function NoDevice() {
     return jsxs('div', {
-      className: 'flex flex-col items-center justify-center h-full w-full p-4 text-center',
+      className: 'flex flex-col items-center justify-center h-full w-full p-4 text-center border border-border rounded-lg',
       children: [
         jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg bg-muted flex items-center justify-center mb-3', children:
           jsx('span', { className: 'text-sm font-bold text-muted-foreground', children: 'CAM' })
@@ -199,7 +199,7 @@ var NE101CameraPanel = (function () {
     }
 
     return jsxs('div', {
-      className: 'relative h-full w-full overflow-hidden bg-black',
+      className: 'relative h-full w-full overflow-hidden bg-black border border-border rounded-lg',
       children: [
         // Full-bleed image or placeholder
         hasImage
