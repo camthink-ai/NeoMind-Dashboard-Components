@@ -57,11 +57,11 @@ var NE101CameraPanel = (function () {
     return jsxs('div', {
       className: 'flex flex-col items-center justify-center h-full w-full p-4 text-center',
       children: [
-        jsx('div', { className: 'w-10 h-10 rounded-lg bg-muted flex items-center justify-center mb-3', children:
+        jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg bg-muted flex items-center justify-center mb-3', children:
           jsx('span', { className: 'text-sm font-bold text-muted-foreground', children: 'CAM' })
         }),
-        jsx('p', { className: 'text-sm text-muted-foreground font-medium', children: 'NE101 Camera' }),
-        jsx('p', { className: 'text-[10px] text-muted-foreground mt-1', children: 'Bind a device in config panel' })
+        jsx('p', { key: 'title', className: 'text-sm text-muted-foreground font-medium', children: 'NE101 Camera' }),
+        jsx('p', { key: 'hint', className: 'text-[10px] text-muted-foreground mt-1', children: 'Bind a device in config panel' })
       ]
     });
   }
@@ -119,7 +119,6 @@ var NE101CameraPanel = (function () {
     var topRightBadges = [];
     topRightBadges.push(
       jsx('div', {
-        key: 'status',
         className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md ' + bgBadge,
         children: [
           jsx('div', {
@@ -131,11 +130,10 @@ var NE101CameraPanel = (function () {
             children: online ? 'Online' : 'Offline'
           })
         ]
-      })
+      }, 'status')
     );
     topRightBadges.push(
       jsxs('div', {
-        key: 'bat',
         className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md ' + bgBadge,
         children: [
           jsx('div', { className: 'w-6 h-2.5 rounded-sm bg-muted-30 overflow-hidden', children:
@@ -143,20 +141,20 @@ var NE101CameraPanel = (function () {
           }),
           jsx('span', { className: 'text-[9px] font-mono font-semibold tabular-nums ' + (hasImage ? 'text-white' : bm.text), children: (batteryVal != null ? batteryVal : '--') + '%' })
         ]
-      })
+      }, 'bat')
     );
 
     // Build bottom overlay: name + last seen + metrics + commands
     var bottomChildren = [];
 
     bottomChildren.push(
-      jsxs('div', { key: 'info', className: 'flex items-center justify-between', children: [
+      jsxs('div', { className: 'flex items-center justify-between', children: [
         jsxs('div', { className: 'flex items-center gap-1.5 min-w-0', children: [
           jsx('span', { className: 'text-[9px] font-medium px-1 py-0.5 rounded ' + bgChip + ' ' + tc, children: 'NE101' }),
           jsx('span', { className: 'text-[10px] font-semibold ' + tc + ' truncate', children: devName })
         ]}),
         jsx('span', { className: 'text-[9px] ' + tcSub + ' flex-shrink-0', children: timeAgo(device.lastSeen) })
-      ]})
+      ]}, 'info')
     );
 
     if (displayMetrics.length > 0) {
@@ -173,7 +171,7 @@ var NE101CameraPanel = (function () {
         }, m.name);
       });
       bottomChildren.push(
-        jsx('div', { key: 'metrics', className: 'flex gap-1 flex-wrap', children: metricBadges })
+        jsx('div', { className: 'flex gap-1 flex-wrap', children: metricBadges }, 'metrics')
       );
     }
 
@@ -196,7 +194,7 @@ var NE101CameraPanel = (function () {
         }, cmd.name);
       });
       bottomChildren.push(
-        jsx('div', { key: 'cmds', className: 'flex gap-1 flex-wrap', children: cmdButtons })
+        jsx('div', { className: 'flex gap-1 flex-wrap', children: cmdButtons }, 'cmds')
       );
     }
 
@@ -211,7 +209,7 @@ var NE101CameraPanel = (function () {
               className: 'w-full h-full object-cover',
               loading: 'lazy',
               style: { imageRendering: 'auto' }
-            })
+            }, 'media')
           : jsxs('div', {
               className: 'w-full h-full flex flex-col items-center justify-center bg-muted-30',
               children: [
@@ -220,13 +218,13 @@ var NE101CameraPanel = (function () {
                 }),
                 jsx('span', { className: 'text-[10px] text-muted-foreground', children: online ? 'Waiting for capture...' : 'Device offline' })
               ]
-            }),
+            }, 'media'),
 
         // Top-right badges (status + battery) — always overlay
         jsxs('div', {
           className: 'absolute top-2 right-2 flex gap-1',
           children: topRightBadges
-        }),
+        }, 'overlay-top'),
 
         // Bottom overlay bar — gradient fade (dark on image, light on placeholder)
         jsx('div', {
@@ -244,7 +242,7 @@ var NE101CameraPanel = (function () {
               return child;
             })
           })
-        })
+        }, 'overlay-bottom')
       ]
     });
   }

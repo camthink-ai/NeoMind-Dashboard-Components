@@ -41,23 +41,21 @@ var ClockWidget = (function() {
         className: 'flex flex-col items-center gap-1',
         children: [
           jsxs('div', {
-            key: 'time',
             className: 'flex items-baseline gap-0.5',
             children: [
               jsx('span', { className: 'text-3xl font-mono font-bold tracking-tight text-foreground tabular-nums', children: h + ':' + m }),
               showSeconds ? jsx('span', { className: 'text-lg font-mono text-muted-foreground tabular-nums', children: ':' + s }) : null,
               is12 ? jsx('span', { className: 'text-xs font-medium text-muted-foreground ml-1', children: ampm }) : null
             ]
-          }),
+          }, 'time'),
           jsxs('div', {
-            key: 'date',
             className: 'flex items-center gap-1.5 text-xs text-muted-foreground',
             children: [
               jsx('span', { children: day }),
               jsx('span', { children: '·' }),
               jsx('span', { children: dateStr })
             ]
-          })
+          }, 'date')
         ]
       })
     });
