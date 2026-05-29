@@ -118,43 +118,47 @@ var NE101CameraPanel = (function () {
     // Build overlay badges for top-right
     var topRightBadges = [];
     topRightBadges.push(
-      jsx('div', {
+      jsxs('div', {
+        key: 'status',
         className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md ' + bgBadge,
         children: [
           jsx('div', {
+            key: 'dot',
             className: 'h-1.5 w-1.5 rounded-full ' + (online ? 'bg-success' : 'bg-muted-foreground'),
             style: online ? { boxShadow: '0 0 4px oklch(0.72 0.19 155)' } : {}
           }),
           jsx('span', {
+            key: 'label',
             className: 'text-[9px] font-medium ' + (online ? 'text-success' : 'text-muted-foreground'),
             children: online ? 'Online' : 'Offline'
           })
         ]
-      }, 'status')
+      })
     );
     topRightBadges.push(
       jsxs('div', {
+        key: 'bat',
         className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md ' + bgBadge,
         children: [
-          jsx('div', { className: 'w-6 h-2.5 rounded-sm bg-muted-30 overflow-hidden', children:
+          jsx('div', { key: 'bar', className: 'w-6 h-2.5 rounded-sm bg-muted-30 overflow-hidden', children:
             jsx('div', { className: 'h-full rounded-sm ' + bm.bar, style: { width: batteryPct + '%' } })
           }),
-          jsx('span', { className: 'text-[9px] font-mono font-semibold tabular-nums ' + (hasImage ? 'text-white' : bm.text), children: (batteryVal != null ? batteryVal : '--') + '%' })
+          jsx('span', { key: 'pct', className: 'text-[9px] font-mono font-semibold tabular-nums ' + (hasImage ? 'text-white' : bm.text), children: (batteryVal != null ? batteryVal : '--') + '%' })
         ]
-      }, 'bat')
+      })
     );
 
     // Build bottom overlay: name + last seen + metrics + commands
     var bottomChildren = [];
 
     bottomChildren.push(
-      jsxs('div', { className: 'flex items-center justify-between', children: [
+      jsxs('div', { key: 'info', className: 'flex items-center justify-between', children: [
         jsxs('div', { className: 'flex items-center gap-1.5 min-w-0', children: [
           jsx('span', { className: 'text-[9px] font-medium px-1 py-0.5 rounded ' + bgChip + ' ' + tc, children: 'NE101' }),
           jsx('span', { className: 'text-[10px] font-semibold ' + tc + ' truncate', children: devName })
         ]}),
         jsx('span', { className: 'text-[9px] ' + tcSub + ' flex-shrink-0', children: timeAgo(device.lastSeen) })
-      ]}, 'info')
+      ]})
     );
 
     if (displayMetrics.length > 0) {
@@ -163,15 +167,16 @@ var NE101CameraPanel = (function () {
         var displayVal = formatValue(v, m);
         var u = unitStr(m).trim();
         return jsxs('span', {
+          key: m.name,
           className: 'text-[9px] font-mono tabular-nums ' + tcVal + ' ' + bgMetric + ' px-1.5 py-0.5 rounded',
           children: [
             jsx('span', { className: tcLabel + ' mr-0.5', children: (m.display_name || m.name).substring(0, 6) }),
             displayVal + (u ? ' ' + u : '')
           ]
-        }, m.name);
+        });
       });
       bottomChildren.push(
-        jsx('div', { className: 'flex gap-1 flex-wrap', children: metricBadges }, 'metrics')
+        jsx('div', { key: 'metrics', className: 'flex gap-1 flex-wrap', children: metricBadges })
       );
     }
 
@@ -179,6 +184,7 @@ var NE101CameraPanel = (function () {
       var cmdButtons = commands.slice(0, 4).map(function (cmd) {
         var isLoading = !!cmdLoading[cmd.name];
         return jsx('button', {
+          key: cmd.name,
           className: 'text-[9px] font-medium px-2 py-1 rounded ' + bgChip + ' ' + tc + ' hover:' + bgChipHover + ' transition-colors disabled:opacity-50',
           onClick: function () {
             if (!sendCmd || isLoading) return;
@@ -191,10 +197,10 @@ var NE101CameraPanel = (function () {
           },
           disabled: isLoading,
           children: isLoading ? '...' : (cmd.display_name || cmd.name)
-        }, cmd.name);
+        });
       });
       bottomChildren.push(
-        jsx('div', { className: 'flex gap-1 flex-wrap', children: cmdButtons }, 'cmds')
+        jsx('div', { key: 'cmds', className: 'flex gap-1 flex-wrap', children: cmdButtons })
       );
     }
 
@@ -204,30 +210,34 @@ var NE101CameraPanel = (function () {
         // Full-bleed image or placeholder
         hasImage
           ? jsx('img', {
+              key: 'media',
               src: imageSrc,
               alt: 'Latest capture',
               className: 'w-full h-full object-cover',
               loading: 'lazy',
               style: { imageRendering: 'auto' }
-            }, 'media')
+            })
           : jsxs('div', {
+              key: 'media',
               className: 'w-full h-full flex flex-col items-center justify-center bg-muted-30',
               children: [
-                jsx('div', { className: 'w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center mb-2', children:
+                jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center mb-2', children:
                   jsx('span', { className: 'text-xs font-bold text-muted-foreground', children: 'CAM' })
                 }),
-                jsx('span', { className: 'text-[10px] text-muted-foreground', children: online ? 'Waiting for capture...' : 'Device offline' })
+                jsx('span', { key: 'hint', className: 'text-[10px] text-muted-foreground', children: online ? 'Waiting for capture...' : 'Device offline' })
               ]
-            }, 'media'),
+            }),
 
         // Top-right badges (status + battery) — always overlay
         jsxs('div', {
+          key: 'overlay-top',
           className: 'absolute top-2 right-2 flex gap-1',
           children: topRightBadges
-        }, 'overlay-top'),
+        }),
 
         // Bottom overlay bar — gradient fade (dark on image, light on placeholder)
         jsx('div', {
+          key: 'overlay-bottom',
           className: 'absolute bottom-0 left-0 right-0',
           style: hasImage
             ? { background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)' }
@@ -242,7 +252,7 @@ var NE101CameraPanel = (function () {
               return child;
             })
           })
-        }, 'overlay-bottom')
+        })
       ]
     });
   }
