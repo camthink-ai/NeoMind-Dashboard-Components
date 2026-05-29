@@ -159,6 +159,58 @@ function DeviceControls(props) {
 }
 ```
 
+## Data Access (fetchData Prop)
+
+Community and extension components receive a `fetchData` prop for unified data access. This is available to **all** community/extension components (not just device-bound ones), regardless of `has_data_source` setting.
+
+```javascript
+// fetchData is an async function that resolves DataSource data
+// Returns { value } for latest/info modes, { series } for timeseries mode
+props.fetchData(options?)  // → Promise<{ value?: any, series?: any[] } | null>
+```
+
+### Example: Fetch Device Metric
+
+```javascript
+function MetricWidget(props) {
+  var React = window.React;
+  var jsx = window.jsxRuntime.jsx;
+  var dataState = React.useState(null);
+  var data = dataState[0];
+  var setData = dataState[1];
+
+  React.useEffect(function() {
+    if (props.fetchData) {
+      props.fetchData().then(function(result) {
+        if (result) setData(result.value || result.series);
+      });
+    }
+  }, [props.dataSource]);
+
+  return jsx('div', { children: data != null ? String(data) : 'Loading...' });
+}
+```
+
+### Example: Fetch with Time Range
+
+```javascript
+// Fetch last 24 hours of telemetry data
+props.fetchData({ timeRange: 24, limit: 200 }).then(function(result) {
+  // result.series → array of { timestamp, value } points
+});
+```
+
+### Return Format
+
+| Mode | Returns | Use Case |
+|------|---------|----------|
+| `latest` | `{ value: <any> }` | Single metric value |
+| `timeseries` | `{ series: [{ timestamp, value }] }` | Historical chart data |
+| `info` | `{ value: <string> }` | Device metadata (name, status) |
+| `command` | `{ value: undefined }` | Command sources (no fetch) |
+
+> **Note**: `fetchData` resolves the component's configured `dataSource` from the dashboard config. If no dataSource is configured, returns `null`.
+
 ## Style Guide
 
 See [STYLE_GUIDE.md](./STYLE_GUIDE.md) for the full visual style guide covering:

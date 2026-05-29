@@ -293,16 +293,67 @@ Components with `has_device_binding: true` receive these additional props:
 
 ```javascript
 function MyComponent(props) {
-  var device = props.deviceContext?.device;
-  var deviceType = props.deviceContext?.deviceType;
+  var device = props.deviceContext && props.deviceContext.device;
+  var deviceType = props.deviceContext && props.deviceContext.deviceType;
 
   if (!device) {
     return jsx('div', { className: '...', children: 'No device bound' });
   }
 
   var values = device.currentValues || {};
-  var battery = values['values.battery'] ?? values['battery'] ?? '--';
+  var battery = values['values.battery'] != null ? values['values.battery'] : (values['battery'] != null ? values['battery'] : '--');
 
   // ...
 }
 ```
+
+---
+
+## 11. fetchData Prop
+
+All community and extension components receive a `fetchData` prop for unified data access. Use it to fetch data from configured DataSource bindings without managing React hooks.
+
+```javascript
+// Basic usage
+var result = await props.fetchData();
+// result → { value: <any> } or { series: [<points>] } or null
+
+// With options
+var result = await props.fetchData({ timeRange: 24, limit: 200 });
+```
+
+| Mode | Returns | Description |
+|------|---------|-------------|
+| latest | `{ value: <any> }` | Single current value |
+| timeseries | `{ series: [{ timestamp, value }] }` | Historical time-series data |
+| info | `{ value: <string> }` | Device metadata |
+| command | `{ value: undefined }` | No fetch available |
+
+> Returns `null` if no dataSource is configured in the component.
+
+---
+
+## 12. React Key Rules
+
+When rendering arrays of children with `jsxs()`, every element **must** have a `key` prop:
+
+```javascript
+// CORRECT
+jsxs('div', { children: [
+  jsx('span', { key: 'label', children: 'Status' }),
+  jsx('span', { key: 'value', children: 'Online' })
+]})
+
+// WRONG — React will warn "Each child in a list should have a unique key prop"
+jsxs('div', { children: [
+  jsx('span', { children: 'Status' }),
+  jsx('span', { children: 'Online' })
+]})
+```
+
+### Rules
+
+1. Use `jsxs` (not `jsx`) when children is an array of 2+ elements
+2. Every element in a `jsxs` children array needs a unique `key`
+3. For `.map()` results, use a unique property as key: `key: item.id`
+4. Single-child renders can use `jsx` without keys
