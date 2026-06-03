@@ -317,3 +317,57 @@ The templates define how device data maps to extension inputs and how extension 
 ```
 
 The component does **not** interpret these mappings — they are passed through to `createTransform()` for the backend TransformEngine to process.
+
+## NeoMind Runtime API (`window.neomind`)
+
+Components running inside NeoMind have access to the platform API via `window.neomind`. All methods are async and degrade gracefully when unavailable.
+
+```javascript
+var neomind = window.neomind;
+if (!neomind) {
+  // Running outside NeoMind — disable platform features
+}
+```
+
+### Available Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `callExtension(id, command, args?)` | `Promise<unknown>` | Execute a command on an installed extension |
+| `listExtensions()` | `Promise<Extension[]>` | List all installed extensions |
+| `createTransform(config)` | `Promise<Transform>` | Create a transform (processing pipeline step) |
+| `deleteTransform(id)` | `Promise<void>` | Delete a transform by ID |
+| `listTransforms(filter?)` | `Promise<Transform[]>` | List transforms, optionally filtered |
+| `writeMetric(deviceId, metric, value)` | `Promise<void>` | Write a virtual metric value for a device |
+
+### Extension Object
+
+```javascript
+{
+  id: "locate-anything-v2",
+  name: "Locate Anything",
+  version: "2.0.0",
+  state: "running"  // "running" | "stopped" | "error"
+}
+```
+
+### TransformConfig
+
+```javascript
+{
+  name: "unique-name",
+  scope: "device-id",          // Scope to a device's data stream
+  extension_id: "ext-id",      // Extension to invoke
+  command: "detect",           // Extension command
+  rule: { device_id: "..." },  // Matching rule
+  input: { ... },              // Input field mappings (optional)
+  output: { ... }              // Output field mappings (optional)
+}
+```
+
+### Best Practices
+
+- **Always check** `window.neomind` exists before calling methods
+- **Wrap calls** in try/catch — methods may fail if extension is unavailable
+- **Clean up transforms** on component unmount (use `useEffect` cleanup)
+- **Never block rendering** — use async patterns and show loading/fallback states

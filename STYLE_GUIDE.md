@@ -2,7 +2,7 @@
 
 Community component visual standards. Follow these rules to ensure your component looks native in NeoMind dashboards.
 
-> Synced from the main project's `web/DESIGN_SPEC.md`. When the main spec changes, update this file accordingly.
+> Visual design tokens for NeoMind community components. Keep in sync with the main NeoMind project's design system.
 
 ---
 
