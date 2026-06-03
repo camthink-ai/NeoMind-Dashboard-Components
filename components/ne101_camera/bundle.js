@@ -105,11 +105,11 @@ var NE101CameraPanel = (function () {
     var batteryPct = batteryVal != null ? Math.max(0, Math.min(100, batteryVal)) : 0;
     var hasImage = !!imageSrc;
 
-    // Color scheme: always white text
+    // Color scheme: always white text (use inline style for opacity since Tailwind modifiers may not be available)
     var tc = 'text-white';
-    var tcSub = 'text-white/60';
-    var tcVal = 'text-white/80';
-    var tcLabel = 'text-white/50';
+    var tcSubStyle = { color: 'rgba(255,255,255,0.6)' };
+    var tcValStyle = { color: 'rgba(255,255,255,0.85)' };
+    var tcLabelStyle = { color: 'rgba(255,255,255,0.55)' };
     var bgChip = 'bg-white/20';
     var bgChipHover = 'bg-white/30';
     var bgBadge = 'bg-black/40 backdrop-blur-sm';
@@ -157,7 +157,7 @@ var NE101CameraPanel = (function () {
           jsx('span', { className: 'text-[9px] font-medium px-1 py-0.5 rounded ' + bgChip + ' ' + tc, children: 'NE101' }),
           jsx('span', { className: 'text-[10px] font-semibold ' + tc + ' truncate', children: devName })
         ]}),
-        jsx('span', { className: 'text-[9px] ' + tcSub + ' flex-shrink-0', children: timeAgo(device.lastSeen) })
+        jsx('span', { className: 'text-[9px] flex-shrink-0', style: tcSubStyle, children: timeAgo(device.lastSeen) })
       ]})
     );
 
@@ -168,9 +168,10 @@ var NE101CameraPanel = (function () {
         var u = unitStr(m).trim();
         return jsxs('span', {
           key: m.name,
-          className: 'text-[9px] font-mono tabular-nums ' + tcVal + ' ' + bgMetric + ' px-1.5 py-0.5 rounded',
+          className: 'text-[9px] font-mono tabular-nums ' + bgMetric + ' px-1.5 py-0.5 rounded',
+          style: tcValStyle,
           children: [
-            jsx('span', { className: tcLabel + ' mr-0.5', children: (m.display_name || m.name).substring(0, 6) }),
+            jsx('span', { className: 'mr-0.5', style: tcLabelStyle, children: (m.display_name || m.name).substring(0, 6) }),
             displayVal + (u ? ' ' + u : '')
           ]
         });
