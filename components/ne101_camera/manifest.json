@@ -48,6 +48,7 @@
         "type": "string",
         "default": "object_detection",
         "enum": ["object_detection", "object_detection_roi", "grounding", "text_detection"],
+        "enumTitles": ["Object Detection", "Object Detection (ROI)", "Grounding", "Text Detection"],
         "title": "Processing Template",
         "description": "Built-in template that determines the transform pipeline"
       },
@@ -93,6 +94,46 @@
         "title": "ROI Height",
         "description": "Region of interest height (0–1 normalized)"
       }
+    },
+    "ui_hints": {
+      "field_order": [
+        "showMetrics", "showCommands", "location",
+        "processingEnabled", "processingExtensionId", "processingTemplate",
+        "processingCategories", "processingPhrase", "processingClassFilter",
+        "processingRoiX", "processingRoiY", "processingRoiW", "processingRoiH"
+      ],
+      "visibility_rules": [
+        {
+          "field": "processingEnabled",
+          "condition": "equals",
+          "value": true,
+          "then_show": ["processingExtensionId", "processingTemplate", "processingClassFilter"]
+        },
+        {
+          "field": "processingTemplate",
+          "condition": "equals",
+          "value": "object_detection",
+          "then_show": ["processingCategories"]
+        },
+        {
+          "field": "processingTemplate",
+          "condition": "equals",
+          "value": "object_detection_roi",
+          "then_show": ["processingCategories", "processingRoiX", "processingRoiY", "processingRoiW", "processingRoiH"]
+        },
+        {
+          "field": "processingTemplate",
+          "condition": "equals",
+          "value": "grounding",
+          "then_show": ["processingPhrase"]
+        },
+        {
+          "field": "processingTemplate",
+          "condition": "equals",
+          "value": "text_detection",
+          "then_show": ["processingPhrase"]
+        }
+      ]
     }
   },
   "default_config": {
