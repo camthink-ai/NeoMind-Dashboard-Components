@@ -57,11 +57,11 @@ var NE101CameraPanel = (function () {
     return jsxs('div', {
       className: 'flex flex-col items-center justify-center h-full w-full p-4 text-center border border-border rounded-lg',
       children: [
-        jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg bg-muted flex items-center justify-center mb-3', children:
-          jsx('span', { className: 'text-sm font-bold text-muted-foreground', children: 'CAM' })
+        jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center mb-3', children:
+          jsx('span', { className: 'text-sm font-bold text-white', children: 'CAM' })
         }),
-        jsx('p', { key: 'title', className: 'text-sm text-muted-foreground font-medium', children: 'NE101 Camera' }),
-        jsx('p', { key: 'hint', className: 'text-[10px] text-muted-foreground mt-1', children: 'Bind a device in config panel' })
+        jsx('p', { key: 'title', className: 'text-sm text-white font-medium', children: 'NE101 Camera' }),
+        jsx('p', { key: 'hint', className: 'text-[10px] text-white/60 mt-1', children: 'Bind a device in config panel' })
       ]
     });
   }
@@ -105,15 +105,15 @@ var NE101CameraPanel = (function () {
     var batteryPct = batteryVal != null ? Math.max(0, Math.min(100, batteryVal)) : 0;
     var hasImage = !!imageSrc;
 
-    // Color scheme: white on image, dark on placeholder
-    var tc = hasImage ? 'text-white' : 'text-foreground';
-    var tcSub = hasImage ? 'text-white/60' : 'text-muted-foreground';
-    var tcVal = hasImage ? 'text-white/80' : 'text-foreground';
-    var tcLabel = hasImage ? 'text-white/50' : 'text-muted-foreground';
-    var bgChip = hasImage ? 'bg-white/20' : 'bg-muted';
-    var bgChipHover = hasImage ? 'bg-white/30' : 'bg-accent';
-    var bgBadge = hasImage ? 'bg-black/40 backdrop-blur-sm' : 'bg-muted-30';
-    var bgMetric = hasImage ? 'bg-white/10' : 'bg-muted-30';
+    // Color scheme: always white text
+    var tc = 'text-white';
+    var tcSub = 'text-white/60';
+    var tcVal = 'text-white/80';
+    var tcLabel = 'text-white/50';
+    var bgChip = 'bg-white/20';
+    var bgChipHover = 'bg-white/30';
+    var bgBadge = 'bg-black/40 backdrop-blur-sm';
+    var bgMetric = 'bg-white/10';
 
     // Build overlay badges for top-right
     var topRightBadges = [];
@@ -129,7 +129,7 @@ var NE101CameraPanel = (function () {
           }),
           jsx('span', {
             key: 'label',
-            className: 'text-[9px] font-medium ' + (online ? 'text-success' : 'text-muted-foreground'),
+            className: 'text-[9px] font-medium text-white',
             children: online ? 'Online' : 'Offline'
           })
         ]
@@ -143,7 +143,7 @@ var NE101CameraPanel = (function () {
           jsx('div', { key: 'bar', className: 'w-6 h-2.5 rounded-sm bg-muted-30 overflow-hidden', children:
             jsx('div', { className: 'h-full rounded-sm ' + bm.bar, style: { width: batteryPct + '%' } })
           }),
-          jsx('span', { key: 'pct', className: 'text-[9px] font-mono font-semibold tabular-nums ' + (hasImage ? 'text-white' : bm.text), children: (batteryVal != null ? batteryVal : '--') + '%' })
+          jsx('span', { key: 'pct', className: 'text-[9px] font-mono font-semibold tabular-nums text-white', children: (batteryVal != null ? batteryVal : '--') + '%' })
         ]
       })
     );
@@ -209,22 +209,32 @@ var NE101CameraPanel = (function () {
       children: [
         // Full-bleed image or placeholder
         hasImage
-          ? jsx('img', {
+          ? jsxs('div', {
               key: 'media',
-              src: imageSrc,
-              alt: 'Latest capture',
-              className: 'w-full h-full object-cover',
-              loading: 'lazy',
-              style: { imageRendering: 'auto' }
+              className: 'relative w-full h-full',
+              children: [
+                jsx('img', {
+                  src: imageSrc,
+                  alt: 'Latest capture',
+                  className: 'w-full h-full object-cover',
+                  loading: 'lazy',
+                  style: { imageRendering: 'auto' }
+                }),
+                jsx('div', {
+                  key: 'scrim',
+                  className: 'absolute inset-0',
+                  style: { background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.1) 40%, rgba(0,0,0,0.45) 100%)' }
+                })
+              ]
             })
           : jsxs('div', {
               key: 'media',
               className: 'w-full h-full flex flex-col items-center justify-center bg-muted-30',
               children: [
-                jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center mb-2', children:
-                  jsx('span', { className: 'text-xs font-bold text-muted-foreground', children: 'CAM' })
+                jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center mb-2', children:
+                  jsx('span', { className: 'text-xs font-bold text-white', children: 'CAM' })
                 }),
-                jsx('span', { key: 'hint', className: 'text-[10px] text-muted-foreground', children: online ? 'Waiting for capture...' : 'Device offline' })
+                jsx('span', { key: 'hint', className: 'text-[10px] text-white/60', children: online ? 'Waiting for capture...' : 'Device offline' })
               ]
             }),
 
@@ -232,18 +242,18 @@ var NE101CameraPanel = (function () {
         jsxs('div', {
           key: 'overlay-top',
           className: 'absolute top-2 right-2 flex gap-1',
+          style: { textShadow: '0 1px 3px rgba(0,0,0,0.8)' },
           children: topRightBadges
         }),
 
-        // Bottom overlay bar — gradient fade (dark on image, light on placeholder)
+        // Bottom overlay bar — gradient fade
         jsx('div', {
           key: 'overlay-bottom',
           className: 'absolute bottom-0 left-0 right-0',
-          style: hasImage
-            ? { background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 60%, transparent 100%)' }
-            : { background: 'linear-gradient(to top, rgba(0,0,0,0.05) 0%, transparent 100%)' },
+          style: { background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.35) 70%, transparent 100%)' },
           children: jsx('div', {
             className: 'px-2.5 pb-2 pt-8 space-y-1',
+            style: { textShadow: '0 1px 3px rgba(0,0,0,0.8)' },
             children: bottomChildren.map(function (child) {
               // When no image, use dark text instead of white
               if (!hasImage && child && child.props && child.props.children) {
