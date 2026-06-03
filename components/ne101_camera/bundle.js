@@ -756,5 +756,185 @@ var NE101CameraPanel = (function () {
     });
   }
 
-  return { default: NE101CameraPanel, NE101CameraPanel: NE101CameraPanel };
+  // ---------------------------------------------------------------------------
+  // ConfigPanel — custom configuration UI for NeoMind config dialog
+  // ---------------------------------------------------------------------------
+  function ConfigPanel(props) {
+    var config = props.config || {};
+    var onChange = props.onChange;
+
+    var processingEnabled = config.processingEnabled === true;
+    var template = config.processingTemplate || 'object_detection';
+
+    // Section style helpers
+    var sectionStyle = { marginBottom: '12px' };
+    var labelStyle = { display: 'block', fontSize: '12px', fontWeight: '500', color: '#e4e4e7', marginBottom: '4px' };
+    var inputStyle = { width: '100%', height: '32px', padding: '4px 8px', fontSize: '12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#e4e4e7', outline: 'none', boxSizing: 'border-box' };
+    var selectStyle = Object.assign({}, inputStyle);
+    var checkRowStyle = { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' };
+    var checkboxStyle = { width: '16px', height: '16px', accentColor: '#3b82f6' };
+    var dividerStyle = { border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '12px 0' };
+
+    // Build children array
+    var children = [];
+
+    // -- Basic settings --
+    children.push(
+      jsxs('div', { key: 'basic', style: { fontSize: '11px', fontWeight: '600', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }, children: ['Display'] })
+    );
+
+    children.push(
+      jsxs('label', { key: 'showMetrics', style: checkRowStyle, children: [
+        jsx('input', { type: 'checkbox', style: checkboxStyle, checked: config.showMetrics !== false, onChange: function (e) { onChange('showMetrics', e.target.checked); } }),
+        jsx('span', { style: { fontSize: '12px', color: '#e4e4e7' }, children: 'Show Metrics Panel' })
+      ]})
+    );
+
+    children.push(
+      jsxs('label', { key: 'showCommands', style: checkRowStyle, children: [
+        jsx('input', { type: 'checkbox', style: checkboxStyle, checked: config.showCommands !== false, onChange: function (e) { onChange('showCommands', e.target.checked); } }),
+        jsx('span', { style: { fontSize: '12px', color: '#e4e4e7' }, children: 'Show Command Buttons' })
+      ]})
+    );
+
+    children.push(
+      jsxs('div', { key: 'location', style: sectionStyle, children: [
+        jsx('label', { style: labelStyle, children: 'Location Title' }),
+        jsx('input', {
+          style: inputStyle,
+          value: config.location || '',
+          placeholder: 'e.g. Front Door',
+          onChange: function (e) { onChange('location', e.target.value); }
+        })
+      ]})
+    );
+
+    // -- Processing section --
+    children.push(jsx('hr', { key: 'div1', style: dividerStyle }));
+    children.push(
+      jsxs('div', { key: 'proc-title', style: { fontSize: '11px', fontWeight: '600', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }, children: ['AI Processing'] })
+    );
+
+    children.push(
+      jsxs('label', { key: 'procToggle', style: checkRowStyle, children: [
+        jsx('input', { type: 'checkbox', style: checkboxStyle, checked: processingEnabled, onChange: function (e) { onChange('processingEnabled', e.target.checked); } }),
+        jsx('span', { style: { fontSize: '12px', color: '#e4e4e7' }, children: 'Enable Processing' })
+      ]})
+    );
+
+    if (processingEnabled) {
+      // Extension ID
+      children.push(
+        jsxs('div', { key: 'extId', style: sectionStyle, children: [
+          jsx('label', { style: labelStyle, children: 'Extension ID' }),
+          jsx('input', {
+            style: inputStyle,
+            value: config.processingExtensionId || '',
+            placeholder: 'e.g. locate-anything-v2',
+            onChange: function (e) { onChange('processingExtensionId', e.target.value); }
+          })
+        ]})
+      );
+
+      // Template selector
+      var templates = [
+        { value: 'object_detection', label: 'Object Detection' },
+        { value: 'object_detection_roi', label: 'Object Detection (ROI)' },
+        { value: 'grounding', label: 'Grounding' },
+        { value: 'text_detection', label: 'Text Detection' }
+      ];
+      children.push(
+        jsxs('div', { key: 'template', style: sectionStyle, children: [
+          jsx('label', { style: labelStyle, children: 'Processing Template' }),
+          jsx('select', {
+            style: selectStyle,
+            value: template,
+            onChange: function (e) { onChange('processingTemplate', e.target.value); },
+            children: templates.map(function (t) {
+              return jsx('option', { key: t.value, value: t.value, children: t.label });
+            })
+          })
+        ]})
+      );
+
+      // Template-specific fields
+      if (template === 'object_detection' || template === 'object_detection_roi') {
+        children.push(
+          jsxs('div', { key: 'categories', style: sectionStyle, children: [
+            jsx('label', { style: labelStyle, children: 'Detection Categories' }),
+            jsx('input', {
+              style: inputStyle,
+              value: config.processingCategories || '',
+              placeholder: 'person, car, dog',
+              onChange: function (e) { onChange('processingCategories', e.target.value); }
+            })
+          ]})
+        );
+      }
+
+      if (template === 'grounding' || template === 'text_detection') {
+        children.push(
+          jsxs('div', { key: 'phrase', style: sectionStyle, children: [
+            jsx('label', { style: labelStyle, children: 'Search Phrase' }),
+            jsx('input', {
+              style: inputStyle,
+              value: config.processingPhrase || '',
+              placeholder: 'Describe what to find',
+              onChange: function (e) { onChange('processingPhrase', e.target.value); }
+            })
+          ]})
+        );
+      }
+
+      // Class filter
+      children.push(
+        jsxs('div', { key: 'classFilter', style: sectionStyle, children: [
+          jsx('label', { style: labelStyle, children: 'Class Filter' }),
+          jsx('input', {
+            style: inputStyle,
+            value: config.processingClassFilter || '',
+            placeholder: 'Empty = all classes',
+            onChange: function (e) { onChange('processingClassFilter', e.target.value); }
+          }),
+          jsx('span', { style: { fontSize: '10px', color: '#71717a', marginTop: '2px', display: 'block' }, children: 'Comma-separated class names to include' })
+        ]})
+      );
+
+      // ROI fields (only for object_detection_roi)
+      if (template === 'object_detection_roi') {
+        children.push(jsx('hr', { key: 'div2', style: dividerStyle }));
+        children.push(
+          jsxs('div', { key: 'roi-title', style: { fontSize: '11px', fontWeight: '600', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }, children: ['Region of Interest'] })
+        );
+
+        var roiFields = [
+          { key: 'processingRoiX', label: 'X Position', step: 0.01 },
+          { key: 'processingRoiY', label: 'Y Position', step: 0.01 },
+          { key: 'processingRoiW', label: 'Width', step: 0.01 },
+          { key: 'processingRoiH', label: 'Height', step: 0.01 }
+        ];
+        for (var ri = 0; ri < roiFields.length; ri++) {
+          (function (rf) {
+            children.push(
+              jsxs('div', { key: rf.key, style: Object.assign({}, sectionStyle, { display: 'flex', alignItems: 'center', gap: '8px' }), children: [
+                jsx('label', { style: Object.assign({}, labelStyle, { marginBottom: '0', minWidth: '70px' }), children: rf.label }),
+                jsx('input', {
+                  style: Object.assign({}, inputStyle, { width: '80px' }),
+                  type: 'number',
+                  min: 0, max: 1, step: rf.step,
+                  value: config[rf.key] != null ? config[rf.key] : 0.1,
+                  onChange: function (e) { onChange(rf.key, Number(e.target.value)); }
+                }),
+                jsx('span', { style: { fontSize: '10px', color: '#71717a' }, children: '0–1' })
+              ]})
+            );
+          })(roiFields[ri]);
+        }
+      }
+    }
+
+    return jsx('div', { className: 'space-y-0', children: children });
+  }
+
+  return { default: NE101CameraPanel, NE101CameraPanel: NE101CameraPanel, ConfigPanel: ConfigPanel };
 })();

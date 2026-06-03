@@ -211,6 +211,64 @@ props.fetchData({ timeRange: 24, limit: 200 }).then(function(result) {
 
 > **Note**: `fetchData` resolves the component's configured `dataSource` from the dashboard config. If no dataSource is configured, returns `null`.
 
+## Custom Config Panel
+
+Components can export an optional `ConfigPanel` for rich configuration UI. When detected, NeoMind will use it instead of the auto-generated JSON Schema form.
+
+### Bundle Export
+
+```javascript
+var MyComponent = (function () {
+  var React = window.React;
+  var jsx = window.jsxRuntime.jsx;
+
+  function ConfigPanel(props) {
+    var config = props.config;
+    var onChange = props.onChange;
+
+    return jsx('div', { className: 'space-y-3', children: [
+      jsx('label', { className: 'flex items-center gap-2', children: [
+        jsx('input', {
+          type: 'checkbox',
+          checked: config.enabled || false,
+          onChange: function (e) { onChange('enabled', e.target.checked); }
+        }),
+        jsx('span', { children: 'Enabled' })
+      ]}),
+      jsx('div', { children: [
+        jsx('label', { children: 'Threshold' }),
+        jsx('input', {
+          type: 'number',
+          value: config.threshold || 0,
+          onChange: function (e) { onChange('threshold', Number(e.target.value)); }
+        })
+      ]})
+    ]});
+  }
+
+  function Component(props) { /* ... */ }
+
+  return { default: Component, MyComponent: Component, ConfigPanel: ConfigPanel };
+})();
+```
+
+### ConfigPanel Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `config` | `Record<string, any>` | Current configuration values |
+| `onChange` | `(key: string, value: any) => void` | Update a single config key |
+
+- `config` — read-only snapshot of the component's current config object
+- `onChange(key, value)` — call to update a config field; triggers preview refresh
+
+### Notes
+
+- `ConfigPanel` is **optional** — bundles without it fall back to JSON Schema auto-generation
+- No manifest changes required — detected at runtime via `window[globalName].ConfigPanel`
+- Uses the same `window.React` and `window.jsxRuntime` globals as the main component
+- Device binding and data source sections are rendered **separately** by the platform; your ConfigPanel only needs to handle component-specific settings
+
 ## Style Guide
 
 See [STYLE_GUIDE.md](./STYLE_GUIDE.md) for the full visual style guide covering:
