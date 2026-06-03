@@ -178,9 +178,17 @@ var NE101CameraPanel = (function () {
     var setCmdLoading = cmdState[1];
 
     // -- Processing pipeline state (must be declared before early return) --
-    var procConfig = config.processing || {};
-    var processingEnabled = procConfig.enabled === true;
-    var extensionId = procConfig.extensionId || '';
+    var processingEnabled = config.processingEnabled === true;
+    var extensionId = config.processingExtensionId || '';
+    var procTemplate = config.processingTemplate || 'object_detection';
+    var procCategories = config.processingCategories || '';
+    var procPhrase = config.processingPhrase || '';
+    var procClassFilter = config.processingClassFilter || '';
+    // Reconstruct ROI from flat config fields
+    var roi = null;
+    if (config.processingRoiX != null && config.processingRoiY != null) {
+      roi = { x: config.processingRoiX, y: config.processingRoiY, w: config.processingRoiW || 0.8, h: config.processingRoiH || 0.8 };
+    }
 
     var extStatusState = React.useState('idle');
     var extStatus = extStatusState[0];
@@ -237,10 +245,11 @@ var NE101CameraPanel = (function () {
 
         // Create transform from template — scope isolated to this device
         if (neomind.createTransform) {
-          var tplConfig = fillTemplate(procConfig.template || 'object_detection', procConfig);
+          var procConfigTpl = { roi: roi, classFilter: procClassFilter };
+          var tplConfig = fillTemplate(procTemplate, procConfigTpl);
           var transformArgs = {};
-          if (procConfig.categories) transformArgs.categories = procConfig.categories;
-          if (procConfig.phrase) transformArgs.phrase = procConfig.phrase;
+          if (procCategories) transformArgs.categories = procCategories;
+          if (procPhrase) transformArgs.phrase = procPhrase;
 
           var transformPayload = Object.assign({}, tplConfig, {
             name: 'ne101-' + device.id + '-' + extensionId,
@@ -267,7 +276,7 @@ var NE101CameraPanel = (function () {
           neomind.deleteTransform(createdId).catch(function () {});
         }
       };
-    }, [device ? device.id : null, processingEnabled, extensionId, procConfig.template]);
+    }, [device ? device.id : null, processingEnabled, extensionId, procTemplate]);
 
     // Client-side processing: when new image arrives and no virtual detections, process directly
     React.useEffect(function () {
@@ -295,7 +304,7 @@ var NE101CameraPanel = (function () {
       setInferenceTime(null);
 
       // Resolve command from template (no fillTemplate needed — only need command, not output mapping)
-      var tplName = procConfig.template || 'object_detection';
+      var tplName = procTemplate;
       var tpl = TEMPLATES[tplName] || TEMPLATES.object_detection;
       var command = tpl.command;
 
@@ -317,8 +326,8 @@ var NE101CameraPanel = (function () {
 
         // Build args for extension
         var callArgs = { image_base64: base64 };
-        if (procConfig.categories) callArgs.categories = procConfig.categories;
-        if (procConfig.phrase) callArgs.phrase = procConfig.phrase;
+        if (procCategories) callArgs.categories = procCategories;
+        if (procPhrase) callArgs.phrase = procPhrase;
 
         neomind.callExtension(extensionId, command, callArgs).then(function (resp) {
           if (cancelled) return;
@@ -637,15 +646,15 @@ var NE101CameraPanel = (function () {
                   style: { background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.1) 40%, rgba(0,0,0,0.45) 100%)' }
                 }),
                 // ROI rectangle overlay
-                processingEnabled && procConfig.roi
+                processingEnabled && roi
                   ? jsxs('div', {
                       key: 'roi-rect',
                       className: 'absolute',
                       style: {
-                        left: (procConfig.roi.x * 100) + '%',
-                        top: (procConfig.roi.y * 100) + '%',
-                        width: (procConfig.roi.w * 100) + '%',
-                        height: (procConfig.roi.h * 100) + '%',
+                        left: (roi.x * 100) + '%',
+                        top: (roi.y * 100) + '%',
+                        width: (roi.w * 100) + '%',
+                        height: (roi.h * 100) + '%',
                         border: '1.5px dashed rgba(255,200,50,0.7)',
                         borderRadius: '2px',
                         pointerEvents: 'none'

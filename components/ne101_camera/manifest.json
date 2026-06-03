@@ -7,7 +7,7 @@
   },
   "icon": "Camera",
   "category": "device",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "author": "CamThink Team",
   "size_constraints": { "min_w": 2, "min_h": 2, "default_w": 3, "default_h": 3, "max_w": 6, "max_h": 6 },
   "has_data_source": false,
@@ -33,58 +33,65 @@
         "default": "",
         "title": "Location Title"
       },
-      "processing": {
-        "type": "object",
-        "title": "Processing Pipeline",
-        "properties": {
-          "enabled": {
-            "type": "boolean",
-            "default": false,
-            "title": "Enable Processing"
-          },
-          "extensionId": {
-            "type": "string",
-            "default": "",
-            "title": "Extension ID",
-            "description": "ID of the installed extension (e.g. locate-anything-v2)"
-          },
-          "template": {
-            "type": "string",
-            "default": "object_detection",
-            "enum": ["object_detection", "object_detection_roi", "grounding", "text_detection"],
-            "title": "Processing Template",
-            "description": "Built-in template that determines the transform pipeline"
-          },
-          "categories": {
-            "type": "string",
-            "default": "person,car",
-            "title": "Detection Categories",
-            "description": "Comma-separated categories for detect mode"
-          },
-          "phrase": {
-            "type": "string",
-            "default": "",
-            "title": "Search Phrase",
-            "description": "Description for grounding / text detection modes"
-          },
-          "roi": {
-            "type": "object",
-            "title": "Region of Interest",
-            "description": "Normalized [0-1] rectangle for ROI-based counting",
-            "properties": {
-              "x": { "type": "number", "default": 0.1, "minimum": 0, "maximum": 1 },
-              "y": { "type": "number", "default": 0.1, "minimum": 0, "maximum": 1 },
-              "w": { "type": "number", "default": 0.8, "minimum": 0, "maximum": 1 },
-              "h": { "type": "number", "default": 0.8, "minimum": 0, "maximum": 1 }
-            }
-          },
-          "classFilter": {
-            "type": "string",
-            "default": "",
-            "title": "Class Filter",
-            "description": "Comma-separated class names to include. Empty = all classes."
-          }
-        }
+      "processingEnabled": {
+        "type": "boolean",
+        "default": false,
+        "title": "Enable Processing"
+      },
+      "processingExtensionId": {
+        "type": "string",
+        "default": "",
+        "title": "Extension ID",
+        "description": "ID of the installed extension (e.g. locate-anything-v2)"
+      },
+      "processingTemplate": {
+        "type": "string",
+        "default": "object_detection",
+        "enum": ["object_detection", "object_detection_roi", "grounding", "text_detection"],
+        "title": "Processing Template",
+        "description": "Built-in template that determines the transform pipeline"
+      },
+      "processingCategories": {
+        "type": "string",
+        "default": "person,car",
+        "title": "Detection Categories",
+        "description": "Comma-separated categories for detect mode"
+      },
+      "processingPhrase": {
+        "type": "string",
+        "default": "",
+        "title": "Search Phrase",
+        "description": "Description for grounding / text detection modes"
+      },
+      "processingClassFilter": {
+        "type": "string",
+        "default": "",
+        "title": "Class Filter",
+        "description": "Comma-separated class names to include. Empty = all classes."
+      },
+      "processingRoiX": {
+        "type": "number",
+        "default": 0.1,
+        "title": "ROI X",
+        "description": "Region of interest X position (0–1 normalized)"
+      },
+      "processingRoiY": {
+        "type": "number",
+        "default": 0.1,
+        "title": "ROI Y",
+        "description": "Region of interest Y position (0–1 normalized)"
+      },
+      "processingRoiW": {
+        "type": "number",
+        "default": 0.8,
+        "title": "ROI Width",
+        "description": "Region of interest width (0–1 normalized)"
+      },
+      "processingRoiH": {
+        "type": "number",
+        "default": 0.8,
+        "title": "ROI Height",
+        "description": "Region of interest height (0–1 normalized)"
       }
     }
   },
@@ -92,15 +99,16 @@
     "showMetrics": true,
     "showCommands": true,
     "location": "",
-    "processing": {
-      "enabled": false,
-      "extensionId": "",
-      "template": "object_detection",
-      "categories": "person,car",
-      "phrase": "",
-      "roi": { "x": 0.1, "y": 0.1, "w": 0.8, "h": 0.8 },
-      "classFilter": ""
-    }
+    "processingEnabled": false,
+    "processingExtensionId": "",
+    "processingTemplate": "object_detection",
+    "processingCategories": "person,car",
+    "processingPhrase": "",
+    "processingClassFilter": "",
+    "processingRoiX": 0.1,
+    "processingRoiY": 0.1,
+    "processingRoiW": 0.8,
+    "processingRoiH": 0.8
   },
   "global_name": "NE101CameraPanel",
   "export_name": "NE101CameraPanel"

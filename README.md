@@ -257,26 +257,29 @@ The NE101 component supports a built-in AI processing pipeline that runs inferen
 
 ```json
 {
-  "processing": {
-    "enabled": true,
-    "extensionId": "locate-anything-v2",
-    "template": "object_detection",
-    "categories": "person,car",
-    "roi": { "x": 0.1, "y": 0.1, "w": 0.8, "h": 0.8 },
-    "classFilter": ""
-  }
+  "processingEnabled": true,
+  "processingExtensionId": "locate-anything-v2",
+  "processingTemplate": "object_detection",
+  "processingCategories": "person,car",
+  "processingPhrase": "",
+  "processingClassFilter": "",
+  "processingRoiX": 0.1,
+  "processingRoiY": 0.1,
+  "processingRoiW": 0.8,
+  "processingRoiH": 0.8
 }
 ```
 
 | Field | Description |
 |-------|-------------|
-| `enabled` | Enable/disable the processing pipeline |
-| `extensionId` | ID of the installed extension to invoke |
-| `template` | Built-in template (see table above) |
-| `categories` | Comma-separated detection categories |
-| `phrase` | Search phrase for grounding/text detection |
-| `roi` | Normalized ROI rectangle (0–1 range) for ROI-based counting |
-| `classFilter` | Comma-separated class names to include (empty = all) |
+| `processingEnabled` | Enable/disable the processing pipeline |
+| `processingExtensionId` | ID of the installed extension to invoke |
+| `processingTemplate` | Built-in template (see table above) |
+| `processingCategories` | Comma-separated detection categories |
+| `processingPhrase` | Search phrase for grounding/text detection |
+| `processingClassFilter` | Comma-separated class names to include (empty = all) |
+| `processingRoiX` / `processingRoiY` | ROI top-left corner position (0–1 normalized) |
+| `processingRoiW` / `processingRoiH` | ROI width and height (0–1 normalized) |
 
 ### Virtual Metrics
 
