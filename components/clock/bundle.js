@@ -113,8 +113,12 @@ var ClockWidget = (function () {
     var greeting = getGreeting(hours);
 
     return jsxs('div', {
-      className: 'flex flex-col h-full w-full select-none bg-card rounded-[10px] border border-glass-border',
-      style: { padding: '16px 18px 14px 18px' },
+      className: 'flex flex-col h-full w-full select-none bg-muted-30 backdrop-blur-xl rounded-[10px] border border-glass-border',
+      style: {
+        padding: '16px 18px 14px 18px',
+        backgroundImage: 'linear-gradient(145deg, oklch(0.65 0.08 260 / 0.1), oklch(0.5 0.06 290 / 0.06))',
+        boxShadow: 'inset 0 1px 0 oklch(1 0 0 / 0.06), 0 4px 20px oklch(0 0 0 / 0.05)'
+      },
       children: [
         // Greeting line
         jsxs('div', {
