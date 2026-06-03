@@ -5,10 +5,10 @@ var NE101CameraPanel = (function () {
 
   // Helpers
   function batteryMeta(level) {
-    if (level == null) return { bar: 'bg-muted', text: 'text-muted-foreground' };
-    if (level > 60) return { bar: 'bg-success', text: 'text-success' };
-    if (level > 20) return { bar: 'bg-warning', text: 'text-warning' };
-    return { bar: 'bg-error', text: 'text-error' };
+    if (level == null) return { bar: 'rgba(128,128,128,0.3)' };
+    if (level > 60) return { bar: 'rgba(34,197,94,0.8)' };
+    if (level > 20) return { bar: 'rgba(234,179,8,0.8)' };
+    return { bar: 'rgba(239,68,68,0.8)' };
   }
 
   function formatValue(val, metric) {
@@ -52,16 +52,23 @@ var NE101CameraPanel = (function () {
     return null;
   }
 
+  // Inline style constants — no dependency on Tailwind color classes
+  var white = { color: '#fff' };
+  var white80 = { color: 'rgba(255,255,255,0.85)' };
+  var white60 = { color: 'rgba(255,255,255,0.6)' };
+  var white50 = { color: 'rgba(255,255,255,0.5)' };
+  var textShadow = { textShadow: '0 1px 3px rgba(0,0,0,0.8)' };
+
   // No device placeholder
   function NoDevice() {
     return jsxs('div', {
       className: 'flex flex-col items-center justify-center h-full w-full p-4 text-center border border-border rounded-lg',
       children: [
-        jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center mb-3', children:
-          jsx('span', { className: 'text-sm font-bold text-white', children: 'CAM' })
+        jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg flex items-center justify-center mb-3', style: { background: 'rgba(255,255,255,0.1)' }, children:
+          jsx('span', { style: Object.assign({}, white, { fontSize: '14px', fontWeight: '700' }), children: 'CAM' })
         }),
-        jsx('p', { key: 'title', className: 'text-sm text-white font-medium', children: 'NE101 Camera' }),
-        jsx('p', { key: 'hint', className: 'text-[10px] text-white/60 mt-1', children: 'Bind a device in config panel' })
+        jsx('p', { key: 'title', style: Object.assign({}, white, { fontSize: '14px', fontWeight: '500' }), children: 'NE101 Camera' }),
+        jsx('p', { key: 'hint', style: Object.assign({}, white60, { fontSize: '10px', marginTop: '4px' }), children: 'Bind a device in config panel' })
       ]
     });
   }
@@ -105,31 +112,27 @@ var NE101CameraPanel = (function () {
     var batteryPct = batteryVal != null ? Math.max(0, Math.min(100, batteryVal)) : 0;
     var hasImage = !!imageSrc;
 
-    // Color scheme: always white text (use inline style for opacity since Tailwind modifiers may not be available)
-    var tc = 'text-white';
-    var tcSubStyle = { color: 'rgba(255,255,255,0.6)' };
-    var tcValStyle = { color: 'rgba(255,255,255,0.85)' };
-    var tcLabelStyle = { color: 'rgba(255,255,255,0.55)' };
-    var bgChip = 'bg-white/20';
-    var bgChipHover = 'bg-white/30';
-    var bgBadge = 'bg-black/40 backdrop-blur-sm';
-    var bgMetric = 'bg-white/10';
+    // Badge/chip background styles
+    var bgChipStyle = { background: 'rgba(255,255,255,0.2)' };
+    var bgBadgeStyle = { background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' };
+    var bgMetricStyle = { background: 'rgba(255,255,255,0.1)' };
 
     // Build overlay badges for top-right
     var topRightBadges = [];
     topRightBadges.push(
       jsxs('div', {
         key: 'status',
-        className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md ' + bgBadge,
+        className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md',
+        style: Object.assign({}, bgBadgeStyle, textShadow),
         children: [
           jsx('div', {
             key: 'dot',
-            className: 'h-1.5 w-1.5 rounded-full ' + (online ? 'bg-success' : 'bg-muted-foreground'),
-            style: online ? { boxShadow: '0 0 4px oklch(0.72 0.19 155)' } : {}
+            className: 'h-1.5 w-1.5 rounded-full',
+            style: { background: online ? 'rgba(34,197,94,1)' : 'rgba(128,128,128,0.6)', boxShadow: online ? '0 0 4px rgba(34,197,94,0.6)' : 'none' }
           }),
           jsx('span', {
             key: 'label',
-            className: 'text-[9px] font-medium text-white',
+            style: Object.assign({}, white, { fontSize: '9px', fontWeight: '500' }),
             children: online ? 'Online' : 'Offline'
           })
         ]
@@ -138,12 +141,13 @@ var NE101CameraPanel = (function () {
     topRightBadges.push(
       jsxs('div', {
         key: 'bat',
-        className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md ' + bgBadge,
+        className: 'flex items-center gap-1 px-1.5 py-0.5 rounded-md',
+        style: Object.assign({}, bgBadgeStyle, textShadow),
         children: [
-          jsx('div', { key: 'bar', className: 'w-6 h-2.5 rounded-sm bg-muted-30 overflow-hidden', children:
-            jsx('div', { className: 'h-full rounded-sm ' + bm.bar, style: { width: batteryPct + '%' } })
+          jsx('div', { key: 'bar', className: 'w-6 h-2.5 rounded-sm overflow-hidden', style: { background: 'rgba(128,128,128,0.3)' }, children:
+            jsx('div', { style: { height: '100%', borderRadius: '2px', background: bm.bar, width: batteryPct + '%' } })
           }),
-          jsx('span', { key: 'pct', className: 'text-[9px] font-mono font-semibold tabular-nums text-white', children: (batteryVal != null ? batteryVal : '--') + '%' })
+          jsx('span', { key: 'pct', style: Object.assign({}, white, { fontSize: '9px', fontFamily: 'monospace', fontWeight: '600' }), children: (batteryVal != null ? batteryVal : '--') + '%' })
         ]
       })
     );
@@ -154,10 +158,10 @@ var NE101CameraPanel = (function () {
     bottomChildren.push(
       jsxs('div', { key: 'info', className: 'flex items-center justify-between', children: [
         jsxs('div', { className: 'flex items-center gap-1.5 min-w-0', children: [
-          jsx('span', { className: 'text-[9px] font-medium px-1 py-0.5 rounded ' + bgChip + ' ' + tc, children: 'NE101' }),
-          jsx('span', { className: 'text-[10px] font-semibold ' + tc + ' truncate', children: devName })
+          jsx('span', { style: Object.assign({}, white, bgChipStyle, { fontSize: '9px', fontWeight: '500', padding: '2px 4px', borderRadius: '4px' }), children: 'NE101' }),
+          jsx('span', { className: 'truncate', style: Object.assign({}, white, textShadow, { fontSize: '10px', fontWeight: '600' }), children: devName })
         ]}),
-        jsx('span', { className: 'text-[9px] flex-shrink-0', style: tcSubStyle, children: timeAgo(device.lastSeen) })
+        jsx('span', { className: 'flex-shrink-0', style: Object.assign({}, white60, textShadow, { fontSize: '9px' }), children: timeAgo(device.lastSeen) })
       ]})
     );
 
@@ -168,10 +172,10 @@ var NE101CameraPanel = (function () {
         var u = unitStr(m).trim();
         return jsxs('span', {
           key: m.name,
-          className: 'text-[9px] font-mono tabular-nums ' + bgMetric + ' px-1.5 py-0.5 rounded',
-          style: tcValStyle,
+          className: 'px-1.5 py-0.5 rounded',
+          style: Object.assign({}, white80, bgMetricStyle, textShadow, { fontSize: '9px', fontFamily: 'monospace' }),
           children: [
-            jsx('span', { className: 'mr-0.5', style: tcLabelStyle, children: (m.display_name || m.name).substring(0, 6) }),
+            jsx('span', { style: Object.assign({}, white50, { marginRight: '2px' }), children: (m.display_name || m.name).substring(0, 6) }),
             displayVal + (u ? ' ' + u : '')
           ]
         });
@@ -186,7 +190,7 @@ var NE101CameraPanel = (function () {
         var isLoading = !!cmdLoading[cmd.name];
         return jsx('button', {
           key: cmd.name,
-          className: 'text-[9px] font-medium px-2 py-1 rounded ' + bgChip + ' ' + tc + ' hover:' + bgChipHover + ' transition-colors disabled:opacity-50',
+          style: Object.assign({}, white, bgChipStyle, textShadow, { fontSize: '9px', fontWeight: '500', padding: '4px 8px', borderRadius: '4px', border: 'none', cursor: isLoading ? 'not-allowed' : 'pointer', opacity: isLoading ? 0.5 : 1 }),
           onClick: function () {
             if (!sendCmd || isLoading) return;
             setCmdLoading(function (prev) { var u = {}; u[cmd.name] = true; return Object.assign({}, prev, u); });
@@ -206,7 +210,8 @@ var NE101CameraPanel = (function () {
     }
 
     return jsxs('div', {
-      className: 'relative h-full w-full overflow-hidden bg-black border border-border rounded-lg',
+      className: 'relative h-full w-full overflow-hidden border border-border rounded-lg',
+      style: { background: '#000' },
       children: [
         // Full-bleed image or placeholder
         hasImage
@@ -230,20 +235,21 @@ var NE101CameraPanel = (function () {
             })
           : jsxs('div', {
               key: 'media',
-              className: 'w-full h-full flex flex-col items-center justify-center bg-muted-30',
+              className: 'w-full h-full flex flex-col items-center justify-center',
+              style: { background: 'rgba(128,128,128,0.15)' },
               children: [
-                jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center mb-2', children:
-                  jsx('span', { className: 'text-xs font-bold text-white', children: 'CAM' })
+                jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg flex items-center justify-center mb-2', style: { background: 'rgba(255,255,255,0.1)' }, children:
+                  jsx('span', { style: Object.assign({}, white, { fontSize: '12px', fontWeight: '700' }), children: 'CAM' })
                 }),
-                jsx('span', { key: 'hint', className: 'text-[10px] text-white/60', children: online ? 'Waiting for capture...' : 'Device offline' })
+                jsx('span', { key: 'hint', style: Object.assign({}, white60, { fontSize: '10px' }), children: online ? 'Waiting for capture...' : 'Device offline' })
               ]
             }),
 
         // Top-right badges (status + battery) — always overlay
         jsxs('div', {
           key: 'overlay-top',
-          className: 'absolute top-2 right-2 flex gap-1',
-          style: { textShadow: '0 1px 3px rgba(0,0,0,0.8)' },
+          className: 'absolute flex gap-1',
+          style: { top: '8px', right: '8px' },
           children: topRightBadges
         }),
 
@@ -253,15 +259,9 @@ var NE101CameraPanel = (function () {
           className: 'absolute bottom-0 left-0 right-0',
           style: { background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.35) 70%, transparent 100%)' },
           children: jsx('div', {
-            className: 'px-2.5 pb-2 pt-8 space-y-1',
-            style: { textShadow: '0 1px 3px rgba(0,0,0,0.8)' },
-            children: bottomChildren.map(function (child) {
-              // When no image, use dark text instead of white
-              if (!hasImage && child && child.props && child.props.children) {
-                return child;
-              }
-              return child;
-            })
+            className: 'space-y-1',
+            style: { padding: '32px 10px 8px 10px' },
+            children: bottomChildren
           })
         })
       ]
