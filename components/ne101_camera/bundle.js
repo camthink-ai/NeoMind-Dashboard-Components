@@ -59,6 +59,10 @@ var NE101CameraPanel = (function () {
   var white50 = { color: 'rgba(255,255,255,0.5)' };
   var textShadow = { textShadow: '0 1px 3px rgba(0,0,0,0.8)' };
 
+  // NeoMind standard muted colors for empty/default states
+  var mutedFg = { color: '#a1a1aa' };
+  var mutedFgSub = { color: 'rgba(161,161,170,0.7)' };
+
   // Location pin SVG icon
   function PinIcon() {
     return jsx('svg', {
@@ -74,11 +78,11 @@ var NE101CameraPanel = (function () {
     return jsxs('div', {
       className: 'flex flex-col items-center justify-center h-full w-full p-4 text-center border border-border rounded-lg',
       children: [
-        jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg flex items-center justify-center mb-3', style: { background: 'rgba(255,255,255,0.1)' }, children:
-          jsx('span', { style: Object.assign({}, white, { fontSize: '14px', fontWeight: '700' }), children: 'CAM' })
+        jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg flex items-center justify-center mb-3', style: { background: 'rgba(161,161,170,0.15)' }, children:
+          jsx('span', { style: Object.assign({}, mutedFg, { fontSize: '14px', fontWeight: '700' }), children: 'CAM' })
         }),
-        jsx('p', { key: 'title', style: Object.assign({}, white, { fontSize: '14px', fontWeight: '500' }), children: 'NE101 Camera' }),
-        jsx('p', { key: 'hint', style: Object.assign({}, white60, { fontSize: '10px', marginTop: '4px' }), children: 'Bind a device in config panel' })
+        jsx('p', { key: 'title', style: Object.assign({}, mutedFg, { fontSize: '14px', fontWeight: '500' }), children: 'NE101 Camera' }),
+        jsx('p', { key: 'hint', style: Object.assign({}, mutedFgSub, { fontSize: '10px', marginTop: '4px' }), children: 'Bind a device in config panel' })
       ]
     });
   }
@@ -250,10 +254,10 @@ var NE101CameraPanel = (function () {
               className: 'w-full h-full flex flex-col items-center justify-center',
               style: { background: 'rgba(128,128,128,0.15)' },
               children: [
-                jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg flex items-center justify-center mb-2', style: { background: 'rgba(255,255,255,0.1)' }, children:
-                  jsx('span', { style: Object.assign({}, white, { fontSize: '12px', fontWeight: '700' }), children: 'CAM' })
+                jsx('div', { key: 'icon', className: 'w-10 h-10 rounded-lg flex items-center justify-center mb-2', style: { background: 'rgba(161,161,170,0.15)' }, children:
+                  jsx('span', { style: Object.assign({}, mutedFg, { fontSize: '12px', fontWeight: '700' }), children: 'CAM' })
                 }),
-                jsx('span', { key: 'hint', style: Object.assign({}, white60, { fontSize: '10px' }), children: online ? 'Waiting for capture...' : 'Device offline' })
+                jsx('span', { key: 'hint', style: Object.assign({}, mutedFgSub, { fontSize: '10px' }), children: online ? 'Waiting for capture...' : 'Device offline' })
               ]
             }),
 
