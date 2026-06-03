@@ -59,6 +59,16 @@ var NE101CameraPanel = (function () {
   var white50 = { color: 'rgba(255,255,255,0.5)' };
   var textShadow = { textShadow: '0 1px 3px rgba(0,0,0,0.8)' };
 
+  // Location pin SVG icon
+  function PinIcon() {
+    return jsx('svg', {
+      width: '12', height: '12', viewBox: '0 0 24 24',
+      fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round',
+      style: { flexShrink: '0' },
+      children: jsx('path', { d: 'M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z' })
+    });
+  }
+
   // No device placeholder
   function NoDevice() {
     return jsxs('div', {
@@ -77,6 +87,7 @@ var NE101CameraPanel = (function () {
   function NE101CameraPanel(props) {
     var config = props.config || {};
     var showCommands = config.showCommands !== false;
+    var location = config.location || '';
 
     var deviceCtx = props.deviceContext;
     var device = deviceCtx && deviceCtx.device;
@@ -252,6 +263,17 @@ var NE101CameraPanel = (function () {
           style: { top: '8px', right: '8px' },
           children: topRightBadges
         }),
+
+        // Top-left location title
+        location ? jsxs('div', {
+          key: 'location',
+          className: 'absolute flex items-center gap-1.5',
+          style: Object.assign({}, bgBadgeStyle, textShadow, { top: '8px', left: '8px', padding: '3px 8px', borderRadius: '6px', maxWidth: '65%' }),
+          children: [
+            jsx('span', { style: Object.assign({}, white60, { display: 'flex', alignItems: 'center' }), children: jsx(PinIcon, {}) }),
+            jsx('span', { className: 'truncate', style: Object.assign({}, white, { fontSize: '11px', fontWeight: '600', letterSpacing: '0.2px' }), children: location })
+          ]
+        }) : null,
 
         // Bottom overlay bar — gradient fade
         jsx('div', {

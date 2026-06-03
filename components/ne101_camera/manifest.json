@@ -18,6 +18,12 @@
   "config_schema": {
     "type": "object",
     "properties": {
+      "location": {
+        "type": "string",
+        "default": "",
+        "title": "Location Title",
+        "description": "Display name for the device location, shown at the top-left of the panel"
+      },
       "showMetrics": {
         "type": "boolean",
         "default": true,
@@ -31,6 +37,7 @@
     }
   },
   "default_config": {
+    "location": "",
     "showMetrics": true,
     "showCommands": true
   },
