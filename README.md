@@ -228,4 +228,92 @@ See [STYLE_GUIDE.md](./STYLE_GUIDE.md) for the full visual style guide covering:
 | ID | Category | Description |
 |----|----------|-------------|
 | `clock` | Display | Real-time clock widget with 12h/24h format |
-| `ne101-camera` | Device | CamThink NE101 camera panel with capture display, battery, and device commands |
+| `ne101_camera` | Device | CamThink NE101 camera panel with capture display, battery, AI processing pipeline, and device commands |
+
+---
+
+## NE101 Camera Panel — Processing Pipeline
+
+The NE101 component supports a built-in AI processing pipeline that runs inference on captured images via NeoMind extensions.
+
+### How It Works
+
+1. **Backend Transform (Layer 1)**: When `processing.enabled` is true, the component creates a Transform automation via `window.neomind.createTransform()`. The backend TransformEngine resolves input mappings (e.g., fetches the image URL, converts to base64), calls the extension, extracts outputs, and writes virtual metrics.
+
+2. **Client-side Fallback (Layer 2)**: If the backend hasn't produced virtual metrics yet (e.g., first image), the component directly calls the extension via `window.neomind.callExtension()` and processes the response locally.
+
+3. **Virtual Metrics**: Both layers produce metrics prefixed with `virtual.` that are stored on the device and displayed in the component overlay.
+
+### Processing Templates
+
+| Template | Extension Command | Virtual Metrics |
+|----------|-------------------|-----------------|
+| `object_detection` | `detect` | `virtual.detections`, `virtual.total_count`, `virtual.count_by_class` |
+| `object_detection_roi` | `detect` | `virtual.detections` (ROI-filtered), `virtual.total_count`, `virtual.count_by_class`, `virtual.roi_count` |
+| `grounding` | `ground` | `virtual.detections` |
+| `text_detection` | `detect_text` | `virtual.detections`, `virtual.texts` |
+
+### Configuration
+
+```json
+{
+  "processing": {
+    "enabled": true,
+    "extensionId": "locate-anything-v2",
+    "template": "object_detection",
+    "categories": "person,car",
+    "roi": { "x": 0.1, "y": 0.1, "w": 0.8, "h": 0.8 },
+    "classFilter": ""
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `enabled` | Enable/disable the processing pipeline |
+| `extensionId` | ID of the installed extension to invoke |
+| `template` | Built-in template (see table above) |
+| `categories` | Comma-separated detection categories |
+| `phrase` | Search phrase for grounding/text detection |
+| `roi` | Normalized ROI rectangle (0–1 range) for ROI-based counting |
+| `classFilter` | Comma-separated class names to include (empty = all) |
+
+### Virtual Metrics
+
+Virtual metrics are stored under `device.currentValues` with the `virtual.` prefix:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `virtual.detections` | JSON array | Bounding boxes with `bbox` (normalized 0–1), `label`, `confidence` |
+| `virtual.total_count` | Number | Total number of detected objects |
+| `virtual.roi_count` | Number | Objects within the configured ROI |
+| `virtual.count_by_class` | JSON object | Per-class count, e.g. `{"person": 2, "car": 1}` |
+| `virtual.texts` | JSON array | Extracted text strings from text detection |
+
+### Visual Overlays
+
+When processing is active, the component renders:
+- **Detection boxes** — Blue bounding boxes with labels and confidence percentages
+- **ROI rectangle** — Yellow dashed rectangle showing the active Region of Interest (for `object_detection_roi` template)
+- **Count badges** — Total count, ROI count, and per-class breakdown in the bottom overlay
+- **Extracted texts** — Preview of detected text content (for `text_detection` template)
+
+### Input/Output Mapping
+
+The templates define how device data maps to extension inputs and how extension responses map to virtual metrics. This mapping is handled by the backend TransformEngine:
+
+**Input mapping** (device → extension):
+```json
+{ "image_base64": { "from": "values.imageUrl", "convert": "url_to_base64" } }
+```
+
+**Output mapping** (extension → virtual metrics):
+```json
+{
+  "virtual.detections": { "from": "boxes", "normalize": true },
+  "virtual.total_count": { "from": "boxes", "transform": "count" },
+  "virtual.count_by_class": { "from": "boxes", "transform": "count_by_class" }
+}
+```
+
+The component does **not** interpret these mappings — they are passed through to `createTransform()` for the backend TransformEngine to process.

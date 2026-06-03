@@ -112,129 +112,71 @@ var ClockWidget = (function () {
 
     var greeting = getGreeting(hours);
 
-    // Style constants
-    var cardBg = {
-      background: 'linear-gradient(145deg, #0f1117 0%, #161923 50%, #0f1117 100%)',
-      borderRadius: '10px',
-      border: '1px solid rgba(255,255,255,0.06)'
-    };
-
-    var greetingStyle = {
-      color: 'rgba(255,255,255,0.45)',
-      fontSize: '11px',
-      fontWeight: '500',
-      letterSpacing: '0.5px',
-      textTransform: 'uppercase'
-    };
-
-    var timeStyle = {
-      color: '#fff',
-      fontSize: '42px',
-      fontWeight: '200',
-      letterSpacing: '-1px',
-      lineHeight: '1',
-      fontVariantNumeric: 'tabular-nums'
-    };
-
-    var colonStyle = {
-      animation: 'clock-blink 2s ease-in-out infinite',
-      color: 'rgba(255,255,255,0.6)'
-    };
-
-    var secondsStyle = {
-      color: 'rgba(255,255,255,0.4)',
-      fontSize: '18px',
-      fontWeight: '300',
-      fontVariantNumeric: 'tabular-nums',
-      marginLeft: '4px',
-      verticalAlign: 'super',
-      lineHeight: '1'
-    };
-
-    var ampmStyle = {
-      color: 'rgba(255,255,255,0.35)',
-      fontSize: '12px',
-      fontWeight: '600',
-      marginLeft: '6px',
-      letterSpacing: '1px'
-    };
-
-    var dividerStyle = {
-      width: '32px',
-      height: '1px',
-      background: 'linear-gradient(90deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05))',
-      margin: '10px 0 8px 0'
-    };
-
-    var weekdayStyle = {
-      color: 'rgba(255,255,255,0.75)',
-      fontSize: '12px',
-      fontWeight: '500',
-      letterSpacing: '0.3px'
-    };
-
-    var dateStyle = {
-      color: 'rgba(255,255,255,0.35)',
-      fontSize: '12px',
-      fontWeight: '400'
-    };
-
-    var metaStyle = {
-      color: 'rgba(255,255,255,0.22)',
-      fontSize: '10px',
-      fontWeight: '400',
-      letterSpacing: '0.3px'
-    };
-
     return jsxs('div', {
-      className: 'flex flex-col h-full w-full select-none',
-      style: Object.assign({}, cardBg, { padding: '16px 18px 14px 18px' }),
+      className: 'flex flex-col h-full w-full select-none bg-card rounded-[10px] border border-glass-border',
+      style: { padding: '16px 18px 14px 18px' },
       children: [
         // Greeting line
         jsxs('div', {
           key: 'greeting',
-          style: { display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' },
+          className: 'flex items-center gap-1.5 mb-3',
           children: [
-            jsx('span', { style: { display: 'flex', alignItems: 'center' }, children: jsx(GreetingIcon, { hours: hours }) }),
-            jsx('span', { style: greetingStyle, children: greeting })
+            jsx('span', { className: 'flex items-center', children: jsx(GreetingIcon, { hours: hours }) }),
+            jsx('span', { className: 'text-muted-foreground text-[11px] font-medium tracking-[0.5px] uppercase', children: greeting })
           ]
         }),
 
         // Time display
         jsxs('div', {
           key: 'time',
-          style: { display: 'flex', alignItems: 'baseline', lineHeight: '1' },
+          className: 'flex items-baseline leading-none',
           children: [
-            jsx('span', { style: timeStyle, children: h }),
-            jsx('span', { style: Object.assign({}, timeStyle, colonStyle), children: ':' }),
-            jsx('span', { style: timeStyle, children: m }),
-            showSeconds ? jsx('span', { style: secondsStyle, children: s }) : null,
-            is12 ? jsx('span', { style: ampmStyle, children: ampm }) : null
+            jsx('span', { className: 'text-foreground text-[42px] font-extralight tracking-tight leading-none font-mono tabular-nums', children: h }),
+            jsx('span', {
+              className: 'text-muted-foreground text-[42px] font-extralight tracking-tight leading-none font-mono tabular-nums',
+              style: { animation: 'clock-blink 2s ease-in-out infinite' },
+              children: ':'
+            }),
+            jsx('span', { className: 'text-foreground text-[42px] font-extralight tracking-tight leading-none font-mono tabular-nums', children: m }),
+            showSeconds ? jsx('span', {
+              className: 'text-muted-foreground text-lg font-light font-mono tabular-nums leading-none',
+              style: { marginLeft: '4px', verticalAlign: 'super' },
+              children: s
+            }) : null,
+            is12 ? jsx('span', {
+              className: 'text-muted-foreground text-xs font-semibold',
+              style: { marginLeft: '6px', letterSpacing: '1px' },
+              children: ampm
+            }) : null
           ]
         }),
 
         // Divider
-        jsx('div', { key: 'divider', style: dividerStyle }),
+        jsx('div', {
+          key: 'divider',
+          className: 'w-8 h-px bg-border',
+          style: { margin: '10px 0 8px 0' }
+        }),
 
         // Date info
         jsxs('div', {
           key: 'date',
-          style: { display: 'flex', alignItems: 'center', gap: '8px' },
+          className: 'flex items-center gap-2',
           children: [
-            jsx('span', { style: weekdayStyle, children: weekday }),
-            jsx('span', { style: { color: 'rgba(255,255,255,0.15)' }, children: '\u00B7' }),
-            jsxs('span', { style: dateStyle, children: [month, ' ', date, ', ', year] })
+            jsx('span', { className: 'text-foreground text-xs font-medium tracking-tight', children: weekday }),
+            jsx('span', { className: 'text-muted-foreground text-xs', children: '\u00B7' }),
+            jsxs('span', { className: 'text-muted-foreground text-xs font-normal', children: [month, ' ', date, ', ', year] })
           ]
         }),
 
         // Meta line: week + timezone
         jsxs('div', {
           key: 'meta',
-          style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' },
+          className: 'flex items-center gap-2 mt-1',
           children: [
-            jsxs('span', { style: metaStyle, children: ['W', weekNum] }),
-            jsx('span', { style: { color: 'rgba(255,255,255,0.1)' }, children: '\u00B7' }),
-            jsx('span', { style: metaStyle, children: tzStr })
+            jsxs('span', { className: 'text-muted-foreground text-[10px] font-normal tracking-tight', children: ['W', weekNum] }),
+            jsx('span', { className: 'text-muted-foreground text-[10px]', children: '\u00B7' }),
+            jsx('span', { className: 'text-muted-foreground text-[10px] font-normal tracking-tight', children: tzStr })
           ]
         })
       ]
