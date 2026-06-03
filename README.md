@@ -213,61 +213,70 @@ props.fetchData({ timeRange: 24, limit: 200 }).then(function(result) {
 
 ## Custom Config Panel
 
-Components can export an optional `ConfigPanel` for rich configuration UI. When detected, NeoMind will use it instead of the auto-generated JSON Schema form.
+Components can export optional config panels for rich configuration UI. When detected, NeoMind uses them instead of the auto-generated JSON Schema form.
 
-### Bundle Export
+### Bundle Exports
+
+| Export | Config Tab | Description |
+|--------|-----------|-------------|
+| `ConfigPanel` | Display | Basic component settings |
+| `AdvancedPanel` | Style | Advanced/complex settings |
+
+Both are optional — export one or both. Bundles without them fall back to JSON Schema auto-generation.
 
 ```javascript
 var MyComponent = (function () {
   var React = window.React;
   var jsx = window.jsxRuntime.jsx;
+  var jsxs = window.jsxRuntime.jsxs;
 
+  // Display tab — basic settings
   function ConfigPanel(props) {
     var config = props.config;
     var onChange = props.onChange;
+    return jsxs('div', { className: 'space-y-3', children: [
+      /* Toggle switches, inputs, selects using Tailwind classes */
+    ]});
+  }
 
-    return jsx('div', { className: 'space-y-3', children: [
-      jsx('label', { className: 'flex items-center gap-2', children: [
-        jsx('input', {
-          type: 'checkbox',
-          checked: config.enabled || false,
-          onChange: function (e) { onChange('enabled', e.target.checked); }
-        }),
-        jsx('span', { children: 'Enabled' })
-      ]}),
-      jsx('div', { children: [
-        jsx('label', { children: 'Threshold' }),
-        jsx('input', {
-          type: 'number',
-          value: config.threshold || 0,
-          onChange: function (e) { onChange('threshold', Number(e.target.value)); }
-        })
-      ]})
+  // Style tab — advanced settings
+  function AdvancedPanel(props) {
+    var config = props.config;
+    var onChange = props.onChange;
+    return jsxs('div', { className: 'space-y-3', children: [
+      /* Complex config: visual editors, multi-field groups, etc. */
     ]});
   }
 
   function Component(props) { /* ... */ }
 
-  return { default: Component, MyComponent: Component, ConfigPanel: ConfigPanel };
+  return { default: Component, MyComponent: Component, ConfigPanel: ConfigPanel, AdvancedPanel: AdvancedPanel };
 })();
 ```
 
-### ConfigPanel Props
+### Panel Props
+
+Both panels receive identical props:
 
 | Prop | Type | Description |
 |------|------|-------------|
 | `config` | `Record<string, any>` | Current configuration values |
 | `onChange` | `(key: string, value: any) => void` | Update a single config key |
 
-- `config` — read-only snapshot of the component's current config object
-- `onChange(key, value)` — call to update a config field; triggers preview refresh
+### UI Guidelines
+
+- Use **Tailwind CSS classes** to match the platform's design system
+- Container: `className="space-y-3"`
+- Labels: `className="text-sm font-medium"`
+- Inputs: `className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"`
+- Descriptions: `className="text-xs text-muted-foreground"`
+- Toggle switches can be built with `role="switch"` buttons + Tailwind
 
 ### Notes
 
-- `ConfigPanel` is **optional** — bundles without it fall back to JSON Schema auto-generation
-- No manifest changes required — detected at runtime via `window[globalName].ConfigPanel`
+- No manifest changes required — detected at runtime via `window[globalName].ConfigPanel` / `window[globalName].AdvancedPanel`
 - Uses the same `window.React` and `window.jsxRuntime` globals as the main component
-- Device binding and data source sections are rendered **separately** by the platform; your ConfigPanel only needs to handle component-specific settings
+- Device binding and data source sections are rendered **separately** by the platform
 
 ## Style Guide
 

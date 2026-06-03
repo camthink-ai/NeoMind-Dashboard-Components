@@ -757,82 +757,172 @@ var NE101CameraPanel = (function () {
   }
 
   // ---------------------------------------------------------------------------
-  // ConfigPanel — custom configuration UI for NeoMind config dialog
+  // ConfigPanel — Display tab: basic component settings
   // ---------------------------------------------------------------------------
   function ConfigPanel(props) {
     var config = props.config || {};
     var onChange = props.onChange;
 
-    var processingEnabled = config.processingEnabled === true;
-    var template = config.processingTemplate || 'object_detection';
+    // Toggle switch helper (shadcn Switch look-alike via Tailwind)
+    function toggle(key, label, value) {
+      return jsxs('div', { className: 'flex items-center justify-between', children: [
+        jsx('span', { className: 'text-sm font-medium', children: label }),
+        jsx('button', {
+          role: 'switch',
+          'aria-checked': String(value),
+          onClick: function () { onChange(key, !value); },
+          className: 'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ' + (value ? 'bg-primary' : 'bg-input'),
+          children: jsx('span', {
+            className: 'pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ' + (value ? 'translate-x-4' : 'translate-x-0')
+          })
+        })
+      ]});
+    }
 
-    // Section style helpers
-    var sectionStyle = { marginBottom: '12px' };
-    var labelStyle = { display: 'block', fontSize: '12px', fontWeight: '500', color: '#e4e4e7', marginBottom: '4px' };
-    var inputStyle = { width: '100%', height: '32px', padding: '4px 8px', fontSize: '12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#e4e4e7', outline: 'none', boxSizing: 'border-box' };
-    var selectStyle = Object.assign({}, inputStyle);
-    var checkRowStyle = { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' };
-    var checkboxStyle = { width: '16px', height: '16px', accentColor: '#3b82f6' };
-    var dividerStyle = { border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '12px 0' };
-
-    // Build children array
-    var children = [];
-
-    // -- Basic settings --
-    children.push(
-      jsxs('div', { key: 'basic', style: { fontSize: '11px', fontWeight: '600', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }, children: ['Display'] })
-    );
-
-    children.push(
-      jsxs('label', { key: 'showMetrics', style: checkRowStyle, children: [
-        jsx('input', { type: 'checkbox', style: checkboxStyle, checked: config.showMetrics !== false, onChange: function (e) { onChange('showMetrics', e.target.checked); } }),
-        jsx('span', { style: { fontSize: '12px', color: '#e4e4e7' }, children: 'Show Metrics Panel' })
-      ]})
-    );
-
-    children.push(
-      jsxs('label', { key: 'showCommands', style: checkRowStyle, children: [
-        jsx('input', { type: 'checkbox', style: checkboxStyle, checked: config.showCommands !== false, onChange: function (e) { onChange('showCommands', e.target.checked); } }),
-        jsx('span', { style: { fontSize: '12px', color: '#e4e4e7' }, children: 'Show Command Buttons' })
-      ]})
-    );
-
-    children.push(
-      jsxs('div', { key: 'location', style: sectionStyle, children: [
-        jsx('label', { style: labelStyle, children: 'Location Title' }),
+    return jsxs('div', { className: 'space-y-3', children: [
+      jsx('div', { key: 'sm', children: toggle('showMetrics', 'Show Metrics Panel', config.showMetrics !== false) }),
+      jsx('div', { key: 'sc', children: toggle('showCommands', 'Show Command Buttons', config.showCommands !== false) }),
+      jsxs('div', { key: 'loc', className: 'space-y-2', children: [
+        jsx('label', { className: 'text-sm font-medium', children: 'Location Title' }),
         jsx('input', {
-          style: inputStyle,
+          className: 'w-full h-9 px-3 rounded-md border border-input bg-background text-sm',
           value: config.location || '',
           placeholder: 'e.g. Front Door',
           onChange: function (e) { onChange('location', e.target.value); }
         })
       ]})
-    );
+    ]});
+  }
 
-    // -- Processing section --
-    children.push(jsx('hr', { key: 'div1', style: dividerStyle }));
-    children.push(
-      jsxs('div', { key: 'proc-title', style: { fontSize: '11px', fontWeight: '600', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }, children: ['AI Processing'] })
-    );
+  // ---------------------------------------------------------------------------
+  // AdvancedPanel — Style tab: AI processing & ROI visual editor
+  // ---------------------------------------------------------------------------
+  function AdvancedPanel(props) {
+    var config = props.config || {};
+    var onChange = props.onChange;
 
-    children.push(
-      jsxs('label', { key: 'procToggle', style: checkRowStyle, children: [
-        jsx('input', { type: 'checkbox', style: checkboxStyle, checked: processingEnabled, onChange: function (e) { onChange('processingEnabled', e.target.checked); } }),
-        jsx('span', { style: { fontSize: '12px', color: '#e4e4e7' }, children: 'Enable Processing' })
-      ]})
-    );
+    var enabled = config.processingEnabled === true;
+    var template = config.processingTemplate || 'object_detection';
+    var showRoi = enabled && template === 'object_detection_roi';
 
-    if (processingEnabled) {
+    // ROI editor state
+    var roiRef = React.useRef(null);
+    var dragState = React.useRef(null);
+
+    var roiX = config.processingRoiX != null ? config.processingRoiX : 0.1;
+    var roiY = config.processingRoiY != null ? config.processingRoiY : 0.1;
+    var roiW = config.processingRoiW != null ? config.processingRoiW : 0.8;
+    var roiH = config.processingRoiH != null ? config.processingRoiH : 0.8;
+
+    // ROI drag handlers
+    function onRoiPointerDown(e) {
+      var rect = roiRef.current.getBoundingClientRect();
+      var nx = (e.clientX - rect.left) / rect.width;
+      var ny = (e.clientY - rect.top) / rect.height;
+      // Detect hit zone: corner handles (12px) → resize, inside rect → move
+      var handleSize = 14 / rect.width; // normalized handle size
+      var nearLeft = Math.abs(nx - roiX) < handleSize;
+      var nearRight = Math.abs(nx - (roiX + roiW)) < handleSize;
+      var nearTop = Math.abs(ny - roiY) < handleSize;
+      var nearBottom = Math.abs(ny - (roiY + roiH)) < handleSize;
+      var inside = nx >= roiX && nx <= roiX + roiW && ny >= roiY && ny <= roiY + roiH;
+
+      var mode = null;
+      if (nearRight && nearBottom) mode = 'se';
+      else if (nearLeft && nearBottom) mode = 'sw';
+      else if (nearRight && nearTop) mode = 'ne';
+      else if (nearLeft && nearTop) mode = 'nw';
+      else if (inside) mode = 'move';
+
+      if (!mode) return;
+      e.preventDefault();
+      dragState.current = { mode: mode, startX: nx, startY: ny, origX: roiX, origY: roiY, origW: roiW, origH: roiH };
+
+      function onMove(ev) {
+        var ds = dragState.current;
+        if (!ds) return;
+        var r = roiRef.current.getBoundingClientRect();
+        var cx = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+        var cy = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height));
+        var dx = cx - ds.startX;
+        var dy = cy - ds.startY;
+
+        var nx2 = ds.origX, ny2 = ds.origY, nw = ds.origW, nh = ds.origH;
+        if (ds.mode === 'move') { nx2 = ds.origX + dx; ny2 = ds.origY + dy; }
+        else if (ds.mode === 'se') { nw = ds.origW + dx; nh = ds.origH + dy; }
+        else if (ds.mode === 'sw') { nx2 = ds.origX + dx; nw = ds.origW - dx; nh = ds.origH + dy; }
+        else if (ds.mode === 'ne') { nw = ds.origW + dx; ny2 = ds.origY + dy; nh = ds.origH - dy; }
+        else if (ds.mode === 'nw') { nx2 = ds.origX + dx; ny2 = ds.origY + dy; nw = ds.origW - dx; nh = ds.origH - dy; }
+
+        // Clamp
+        nw = Math.max(0.05, Math.min(1 - nx2, nw));
+        nh = Math.max(0.05, Math.min(1 - ny2, nh));
+        nx2 = Math.max(0, Math.min(1 - nw, nx2));
+        ny2 = Math.max(0, Math.min(1 - nh, ny2));
+
+        onChange('processingRoiX', Math.round(nx2 * 100) / 100);
+        onChange('processingRoiY', Math.round(ny2 * 100) / 100);
+        onChange('processingRoiW', Math.round(nw * 100) / 100);
+        onChange('processingRoiH', Math.round(nh * 100) / 100);
+      }
+      function onUp() {
+        dragState.current = null;
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+      }
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    }
+
+    // Slider helper (range input styled with Tailwind)
+    function slider(sKey, label, value, min, max, step) {
+      return jsxs('div', { key: sKey, className: 'space-y-1', children: [
+        jsxs('div', { className: 'flex items-center justify-between', children: [
+          jsx('span', { className: 'text-xs text-muted-foreground', children: label }),
+          jsx('span', { className: 'text-xs font-mono text-muted-foreground', children: value.toFixed(2) })
+        ]}),
+        jsx('input', {
+          type: 'range', min: min, max: max, step: step,
+          value: value,
+          onChange: function (e) { onChange(key, Number(e.target.value)); },
+          className: 'w-full h-1.5 rounded-full appearance-none bg-muted-50 accent-primary cursor-pointer'
+        })
+      ]});
+    }
+
+    // Toggle switch helper
+    function toggle(key, label, value) {
+      return jsxs('div', { className: 'flex items-center justify-between', children: [
+        jsx('span', { className: 'text-sm font-medium', children: label }),
+        jsx('button', {
+          role: 'switch',
+          'aria-checked': String(value),
+          onClick: function () { onChange(key, !value); },
+          className: 'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ' + (value ? 'bg-primary' : 'bg-input'),
+          children: jsx('span', {
+            className: 'pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ' + (value ? 'translate-x-4' : 'translate-x-0')
+          })
+        })
+      ]});
+    }
+
+    var children = [];
+
+    // Processing toggle
+    children.push(jsx('div', { key: 'toggle', children: toggle('processingEnabled', 'Enable AI Processing', enabled) }));
+
+    if (enabled) {
       // Extension ID
       children.push(
-        jsxs('div', { key: 'extId', style: sectionStyle, children: [
-          jsx('label', { style: labelStyle, children: 'Extension ID' }),
+        jsxs('div', { key: 'ext', className: 'space-y-2', children: [
+          jsx('label', { className: 'text-sm font-medium', children: 'Extension ID' }),
           jsx('input', {
-            style: inputStyle,
+            className: 'w-full h-9 px-3 rounded-md border border-input bg-background text-sm',
             value: config.processingExtensionId || '',
             placeholder: 'e.g. locate-anything-v2',
             onChange: function (e) { onChange('processingExtensionId', e.target.value); }
-          })
+          }),
+          jsx('p', { className: 'text-xs text-muted-foreground', children: 'Installed extension to invoke for inference' })
         ]})
       );
 
@@ -844,10 +934,10 @@ var NE101CameraPanel = (function () {
         { value: 'text_detection', label: 'Text Detection' }
       ];
       children.push(
-        jsxs('div', { key: 'template', style: sectionStyle, children: [
-          jsx('label', { style: labelStyle, children: 'Processing Template' }),
+        jsxs('div', { key: 'tpl', className: 'space-y-2', children: [
+          jsx('label', { className: 'text-sm font-medium', children: 'Processing Template' }),
           jsx('select', {
-            style: selectStyle,
+            className: 'w-full h-9 px-3 rounded-md border border-input bg-background text-sm',
             value: template,
             onChange: function (e) { onChange('processingTemplate', e.target.value); },
             children: templates.map(function (t) {
@@ -860,10 +950,10 @@ var NE101CameraPanel = (function () {
       // Template-specific fields
       if (template === 'object_detection' || template === 'object_detection_roi') {
         children.push(
-          jsxs('div', { key: 'categories', style: sectionStyle, children: [
-            jsx('label', { style: labelStyle, children: 'Detection Categories' }),
+          jsxs('div', { key: 'cat', className: 'space-y-2', children: [
+            jsx('label', { className: 'text-sm font-medium', children: 'Detection Categories' }),
             jsx('input', {
-              style: inputStyle,
+              className: 'w-full h-9 px-3 rounded-md border border-input bg-background text-sm',
               value: config.processingCategories || '',
               placeholder: 'person, car, dog',
               onChange: function (e) { onChange('processingCategories', e.target.value); }
@@ -874,10 +964,10 @@ var NE101CameraPanel = (function () {
 
       if (template === 'grounding' || template === 'text_detection') {
         children.push(
-          jsxs('div', { key: 'phrase', style: sectionStyle, children: [
-            jsx('label', { style: labelStyle, children: 'Search Phrase' }),
+          jsxs('div', { key: 'phrase', className: 'space-y-2', children: [
+            jsx('label', { className: 'text-sm font-medium', children: 'Search Phrase' }),
             jsx('input', {
-              style: inputStyle,
+              className: 'w-full h-9 px-3 rounded-md border border-input bg-background text-sm',
               value: config.processingPhrase || '',
               placeholder: 'Describe what to find',
               onChange: function (e) { onChange('processingPhrase', e.target.value); }
@@ -888,53 +978,77 @@ var NE101CameraPanel = (function () {
 
       // Class filter
       children.push(
-        jsxs('div', { key: 'classFilter', style: sectionStyle, children: [
-          jsx('label', { style: labelStyle, children: 'Class Filter' }),
+        jsxs('div', { key: 'cf', className: 'space-y-2', children: [
+          jsx('label', { className: 'text-sm font-medium', children: 'Class Filter' }),
           jsx('input', {
-            style: inputStyle,
+            className: 'w-full h-9 px-3 rounded-md border border-input bg-background text-sm',
             value: config.processingClassFilter || '',
             placeholder: 'Empty = all classes',
             onChange: function (e) { onChange('processingClassFilter', e.target.value); }
           }),
-          jsx('span', { style: { fontSize: '10px', color: '#71717a', marginTop: '2px', display: 'block' }, children: 'Comma-separated class names to include' })
+          jsx('p', { className: 'text-xs text-muted-foreground', children: 'Comma-separated class names to include' })
         ]})
       );
 
-      // ROI fields (only for object_detection_roi)
-      if (template === 'object_detection_roi') {
-        children.push(jsx('hr', { key: 'div2', style: dividerStyle }));
+      // ROI visual editor (only for object_detection_roi template)
+      if (showRoi) {
         children.push(
-          jsxs('div', { key: 'roi-title', style: { fontSize: '11px', fontWeight: '600', color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }, children: ['Region of Interest'] })
+          jsxs('div', { key: 'roi', className: 'space-y-2 pt-3 border-t', children: [
+            jsx('label', { className: 'text-sm font-medium', children: 'Region of Interest' }),
+            jsx('p', { className: 'text-xs text-muted-foreground', children: 'Drag the rectangle to adjust. Use corners to resize.' }),
+            // Visual ROI editor
+            jsxs('div', {
+              ref: roiRef,
+              className: 'relative w-full rounded-md overflow-hidden cursor-crosshair',
+              style: { aspectRatio: '4/3', background: 'linear-gradient(135deg, #18181b 0%, #27272a 100%)' },
+              onPointerDown: onRoiPointerDown,
+              children: [
+                // Grid pattern
+                jsx('div', { key: 'grid', className: 'absolute inset-0', style: { backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '10% 10%' } }),
+                // ROI rectangle
+                jsxs('div', {
+                  key: 'rect',
+                  className: 'absolute border-2 border-dashed rounded-sm',
+                  style: {
+                    left: (roiX * 100) + '%',
+                    top: (roiY * 100) + '%',
+                    width: (roiW * 100) + '%',
+                    height: (roiH * 100) + '%',
+                    borderColor: 'rgba(250,204,21,0.8)',
+                    backgroundColor: 'rgba(250,204,21,0.08)',
+                    cursor: 'move'
+                  },
+                  children: [
+                    // Label
+                    jsx('span', {
+                      key: 'lbl',
+                      className: 'absolute -top-4 left-0 text-[9px] font-bold font-mono px-1 rounded',
+                      style: { background: 'rgba(250,204,21,0.85)', color: '#000' },
+                      children: 'ROI'
+                    }),
+                    // Corner handles
+                    jsx('div', { key: 'nw', className: 'absolute -top-1 -left-1 w-2.5 h-2.5 bg-yellow-400 rounded-full', style: { cursor: 'nw-resize' } }),
+                    jsx('div', { key: 'ne', className: 'absolute -top-1 -right-1 w-2.5 h-2.5 bg-yellow-400 rounded-full', style: { cursor: 'ne-resize' } }),
+                    jsx('div', { key: 'sw', className: 'absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-yellow-400 rounded-full', style: { cursor: 'sw-resize' } }),
+                    jsx('div', { key: 'se', className: 'absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-yellow-400 rounded-full', style: { cursor: 'se-resize' } })
+                  ]
+                })
+              ]
+            }),
+            // Fine-tuning sliders
+            jsx('div', { key: 'sliders', className: 'grid grid-cols-2 gap-x-4 gap-y-2 pt-1', children: [
+              slider('processingRoiX', 'X', roiX, 0, 1, 0.01),
+              slider('processingRoiY', 'Y', roiY, 0, 1, 0.01),
+              slider('processingRoiW', 'Width', roiW, 0.05, 1, 0.01),
+              slider('processingRoiH', 'Height', roiH, 0.05, 1, 0.01)
+            ]})
+          ]})
         );
-
-        var roiFields = [
-          { key: 'processingRoiX', label: 'X Position', step: 0.01 },
-          { key: 'processingRoiY', label: 'Y Position', step: 0.01 },
-          { key: 'processingRoiW', label: 'Width', step: 0.01 },
-          { key: 'processingRoiH', label: 'Height', step: 0.01 }
-        ];
-        for (var ri = 0; ri < roiFields.length; ri++) {
-          (function (rf) {
-            children.push(
-              jsxs('div', { key: rf.key, style: Object.assign({}, sectionStyle, { display: 'flex', alignItems: 'center', gap: '8px' }), children: [
-                jsx('label', { style: Object.assign({}, labelStyle, { marginBottom: '0', minWidth: '70px' }), children: rf.label }),
-                jsx('input', {
-                  style: Object.assign({}, inputStyle, { width: '80px' }),
-                  type: 'number',
-                  min: 0, max: 1, step: rf.step,
-                  value: config[rf.key] != null ? config[rf.key] : 0.1,
-                  onChange: function (e) { onChange(rf.key, Number(e.target.value)); }
-                }),
-                jsx('span', { style: { fontSize: '10px', color: '#71717a' }, children: '0–1' })
-              ]})
-            );
-          })(roiFields[ri]);
-        }
       }
     }
 
-    return jsx('div', { className: 'space-y-0', children: children });
+    return jsx('div', { className: 'space-y-3', children: children });
   }
 
-  return { default: NE101CameraPanel, NE101CameraPanel: NE101CameraPanel, ConfigPanel: ConfigPanel };
+  return { default: NE101CameraPanel, NE101CameraPanel: NE101CameraPanel, ConfigPanel: ConfigPanel, AdvancedPanel: AdvancedPanel };
 })();
