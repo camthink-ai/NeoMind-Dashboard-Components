@@ -8,9 +8,7 @@ var ClockWidget = (function () {
     var styleEl = document.createElement('style');
     styleEl.id = 'clock-widget-styles';
     styleEl.textContent = [
-      '@keyframes clock-blink { 0%,100%{opacity:1} 50%{opacity:0.3} }',
-      '@keyframes clock-bar { from{width:0} to{width:var(--day-pct)} }',
-      '@keyframes clock-fade { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }'
+      '@keyframes clock-blink { 0%,100%{opacity:1} 50%{opacity:0.3} }'
     ].join('\n');
     document.head.appendChild(styleEl);
   }
@@ -22,10 +20,35 @@ var ClockWidget = (function () {
     return 'Good Night';
   }
 
-  function getGreetingIcon(h) {
-    if (h >= 6 && h < 18) return '\u2600'; // ☀
-    if (h >= 18 && h < 21) return '\u263D'; // ☽
-    return '\u263E'; // ☾
+  function SunIcon() {
+    return jsx('svg', {
+      width: '14', height: '14', viewBox: '0 0 24 24',
+      fill: 'none', stroke: 'rgba(250,204,21,0.7)', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round',
+      children: jsxs('g', { children: [
+        jsx('circle', { cx: '12', cy: '12', r: '4' }),
+        jsx('path', { d: 'M12 2v2' }),
+        jsx('path', { d: 'M12 20v2' }),
+        jsx('path', { d: 'm4.93 4.93 1.41 1.41' }),
+        jsx('path', { d: 'm17.66 17.66 1.41 1.41' }),
+        jsx('path', { d: 'M2 12h2' }),
+        jsx('path', { d: 'M20 12h2' }),
+        jsx('path', { d: 'm6.34 17.66-1.41 1.41' }),
+        jsx('path', { d: 'm19.07 4.93-1.41 1.41' })
+      ] })
+    });
+  }
+
+  function MoonIcon() {
+    return jsx('svg', {
+      width: '14', height: '14', viewBox: '0 0 24 24',
+      fill: 'none', stroke: 'rgba(147,197,253,0.7)', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round',
+      children: jsx('path', { d: 'M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z' })
+    });
+  }
+
+  function GreetingIcon(h) {
+    var isDay = h >= 6 && h < 18;
+    return isDay ? jsx(SunIcon, {}) : jsx(MoonIcon, {});
   }
 
   function getWeekNumber(d) {
@@ -80,9 +103,6 @@ var ClockWidget = (function () {
     var year = time.getFullYear();
     var weekNum = getWeekNumber(time);
 
-    // Day progress
-    var dayProgress = ((hours * 3600 + minutes * 60 + seconds) / 86400 * 100).toFixed(1);
-
     // Timezone
     var tzOffset = -time.getTimezoneOffset();
     var tzSign = tzOffset >= 0 ? '+' : '-';
@@ -91,7 +111,6 @@ var ClockWidget = (function () {
     var tzStr = 'UTC' + tzSign + tzHours + (tzMins ? ':' + pad2(tzMins) : '');
 
     var greeting = getGreeting(hours);
-    var greetingIcon = getGreetingIcon(hours);
 
     // Style constants
     var cardBg = {
@@ -167,35 +186,16 @@ var ClockWidget = (function () {
       letterSpacing: '0.3px'
     };
 
-    var barTrackStyle = {
-      position: 'absolute',
-      bottom: '0',
-      left: '0',
-      right: '0',
-      height: '2px',
-      background: 'rgba(255,255,255,0.04)',
-      borderRadius: '0 0 10px 10px',
-      overflow: 'hidden'
-    };
-
-    var barFillStyle = {
-      height: '100%',
-      width: dayProgress + '%',
-      background: 'linear-gradient(90deg, rgba(99,130,255,0.6), rgba(160,120,255,0.4))',
-      borderRadius: '0 0 10px 10px',
-      transition: 'width 1s linear'
-    };
-
     return jsxs('div', {
       className: 'flex flex-col h-full w-full select-none',
-      style: Object.assign({}, cardBg, { padding: '16px 18px 14px 18px', position: 'relative', overflow: 'hidden' }),
+      style: Object.assign({}, cardBg, { padding: '16px 18px 14px 18px' }),
       children: [
         // Greeting line
         jsxs('div', {
           key: 'greeting',
           style: { display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' },
           children: [
-            jsx('span', { style: { fontSize: '13px' }, children: greetingIcon }),
+            jsx('span', { style: { display: 'flex', alignItems: 'center' }, children: jsx(GreetingIcon, { hours: hours }) }),
             jsx('span', { style: greetingStyle, children: greeting })
           ]
         }),
@@ -236,13 +236,6 @@ var ClockWidget = (function () {
             jsx('span', { style: { color: 'rgba(255,255,255,0.1)' }, children: '\u00B7' }),
             jsx('span', { style: metaStyle, children: tzStr })
           ]
-        }),
-
-        // Day progress bar
-        jsx('div', {
-          key: 'bar',
-          style: barTrackStyle,
-          children: jsx('div', { style: barFillStyle })
         })
       ]
     });
