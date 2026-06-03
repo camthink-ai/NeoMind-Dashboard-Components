@@ -13,7 +13,7 @@
   "has_data_source": false,
   "has_device_binding": true,
   "device_type_filter": ["ne101_camera"],
-  "has_display_config": false,
+  "has_display_config": true,
   "has_actions": false,
   "config_schema": {
     "type": "object",

@@ -166,7 +166,7 @@ var NE101CameraPanel = (function () {
     var config = props.config || {};
     var showCommands = config.showCommands !== false;
     // Read location title from multiple possible sources
-    var location = config.location || config.title || config.displayTitle || props.title || '';
+    var location = config.location || '';
 
     var deviceCtx = props.deviceContext;
     var device = deviceCtx && deviceCtx.device;
