@@ -357,28 +357,11 @@ var NE101CameraPanel = (function () {
 
     var lastProcessedRef = React.useRef('');
 
-    // Fetch fresh device telemetry from backend API (same mechanism as built-in useDataSource).
-    // WS events may not include large base64 images, so we poll the REST API periodically.
-    var freshValsState = React.useState(null);
-    var freshVals = freshValsState[0];
-    var setFreshVals = freshValsState[1];
-    React.useEffect(function () {
-      if (!device) return;
-      var neomind = window.neomind;
-      if (!neomind || typeof neomind.fetchDeviceValues !== 'function') return;
-
-      // Fetch immediately on mount
-      neomind.fetchDeviceValues(device.id).then(function (v) { if (v) setFreshVals(v); });
-
-      // Then poll every 5 seconds (matching useDataSource refresh behavior)
-      var timer = setInterval(function () {
-        neomind.fetchDeviceValues(device.id).then(function (v) { if (v) setFreshVals(v); }).catch(function () {});
-      }, 5000);
-      return function () { clearInterval(timer); };
-    }, [device ? device.id : null]);
-
-    // Merge: fresh API values take priority over stale WS/deviceContext values
-    var _vals = device ? Object.assign({}, device.currentValues || {}, freshVals || {}) : {};
+    // Device telemetry comes from the platform's WS infrastructure via props.
+    // ComponentRenderer processes WS DeviceMetric events → store.updateDeviceMetric()
+    // → boundDeviceTelemetry selector → deviceContext.currentValues → props.
+    // No REST polling needed — the platform handles real-time updates.
+    var _vals = device ? (device.currentValues || {}) : {};
 
     // Early-extract imageSrc — device may send URL or base64
     var rawImageSrc = getFirst(_vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);

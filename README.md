@@ -116,6 +116,37 @@ When a device is bound, the component receives these additional props:
 }
 ```
 
+### Real-time Data Updates (WebSocket)
+
+**`device.currentValues` is updated in real-time by the platform.** Do NOT poll REST APIs or use `setInterval` to fetch device data.
+
+The platform's update flow:
+
+```
+WS DeviceMetric event
+  → ComponentRenderer processes event
+  → store.updateDeviceMetric(deviceId, key, value)
+  → deviceContext.currentValues updated
+  → Component re-renders with new props
+```
+
+Community components receive real-time updates automatically through this mechanism — the same WebSocket infrastructure used by built-in components. Simply read `device.currentValues` in your render logic and the component will re-render whenever new telemetry arrives.
+
+```javascript
+// ✅ Correct — use device.currentValues directly (auto-updated via WS)
+function Component(props) {
+  var device = props.deviceContext && props.deviceContext.device;
+  var values = device ? (device.currentValues || {}) : {};
+  var battery = values['values.battery'];
+  // ...
+}
+
+// ❌ Wrong — do NOT poll REST APIs for real-time data
+var timer = setInterval(function () {
+  neomind.fetchDeviceValues(device.id).then(function (v) { ... });
+}, 5000);
+```
+
 ### Example: Rendering Device Metrics
 
 ```javascript
@@ -383,8 +414,10 @@ The templates define how device data maps to extension inputs and how extension 
 
 **Input mapping** (device → extension):
 ```json
-{ "image_base64": { "from": "values.imageUrl", "convert": "url_to_base64" } }
+{ "image_base64": { "from": "values.image", "convert": "url_to_base64" } }
 ```
+
+> **Note**: The device may send images as either base64 strings or URLs. The backend TransformEngine auto-detects base64 and passes it through without conversion.
 
 **Output mapping** (extension → virtual metrics):
 ```json
@@ -418,6 +451,9 @@ if (!neomind) {
 | `deleteTransform(id)` | `Promise<void>` | Delete a transform by ID |
 | `listTransforms(filter?)` | `Promise<Transform[]>` | List transforms, optionally filtered |
 | `writeMetric(deviceId, metric, value)` | `Promise<void>` | Write a virtual metric value for a device |
+| `fetchDeviceValues(deviceId)` | `Promise<object \| null>` | One-time fetch of all device telemetry values |
+
+> **Warning**: `fetchDeviceValues` is for **one-time** data retrieval only (e.g., initial load). Do NOT use it in a polling loop (`setInterval`). Real-time updates come automatically via `device.currentValues` through the platform's WebSocket infrastructure.
 
 ### Extension Object
 
@@ -448,5 +484,6 @@ if (!neomind) {
 
 - **Always check** `window.neomind` exists before calling methods
 - **Wrap calls** in try/catch — methods may fail if extension is unavailable
-- **Clean up transforms** on component unmount (use `useEffect` cleanup)
+- **Never poll REST APIs** — `device.currentValues` in props is updated in real-time via WebSocket
+- **Clean up transforms** only on component deletion, not on page navigation or unmount
 - **Never block rendering** — use async patterns and show loading/fallback states
