@@ -374,6 +374,8 @@ var NE101CameraPanel = (function () {
     }
 
     // Extension check + transform lifecycle (async, non-blocking)
+    // Transforms are persistent backend automations — created once, NOT deleted on unmount.
+    // On mount: check if transform already exists for this device+extension, create if not.
     React.useEffect(function () {
       if (!processingEnabled || !extensionId || !device) return;
 
@@ -385,7 +387,7 @@ var NE101CameraPanel = (function () {
 
       setExtStatus('checking');
       var cancelled = false;
-      var createdId = null;
+      var transformName = 'ne101-' + device.id + '-' + extensionId;
 
       neomind.listExtensions().then(function (exts) {
         if (cancelled) return;
@@ -399,39 +401,61 @@ var NE101CameraPanel = (function () {
         if (stateLower.indexOf('stopped') >= 0 || stateLower.indexOf('failed') >= 0 || stateLower.indexOf('error') >= 0) { setExtStatus('offline'); return; }
         setExtStatus('active');
 
-        // Create transform from template — scope isolated to this device
+        // Check if transform already exists — avoid duplicates
+        if (neomind.listTransforms) {
+          return neomind.listTransforms({ scope: device.id }).then(function (transforms) {
+            if (cancelled) return;
+            var tList = Array.isArray(transforms) ? transforms : [];
+            for (var ti = 0; ti < tList.length; ti++) {
+              if (tList[ti].name === transformName) {
+                // Already exists — reuse it
+                setTransformId(tList[ti].id);
+                return null; // skip creation
+              }
+            }
+            // Not found — create new transform
+            if (!neomind.createTransform) return null;
+            var procConfigTpl = { roi: roi, roiAction: roiAction, classFilter: procClassFilter };
+            var tplConfig = fillTemplate(procTemplate, extensionId, procConfigTpl);
+            var transformArgs = {};
+            if (procCategories) transformArgs.categories = procCategories;
+            if (procPhrase) transformArgs.phrase = procPhrase;
+            var transformPayload = Object.assign({}, tplConfig, {
+              name: transformName,
+              scope: device.id,
+              extension_id: extensionId,
+              args: Object.keys(transformArgs).length > 0 ? transformArgs : undefined,
+              rule: { device_id: device.id, device_type: 'ne101_camera' }
+            });
+            return neomind.createTransform(transformPayload);
+          });
+        }
+        // Fallback: no listTransforms, create directly
         if (neomind.createTransform) {
           var procConfigTpl = { roi: roi, roiAction: roiAction, classFilter: procClassFilter };
           var tplConfig = fillTemplate(procTemplate, extensionId, procConfigTpl);
           var transformArgs = {};
           if (procCategories) transformArgs.categories = procCategories;
           if (procPhrase) transformArgs.phrase = procPhrase;
-
           var transformPayload = Object.assign({}, tplConfig, {
-            name: 'ne101-' + device.id + '-' + extensionId,
+            name: transformName,
             scope: device.id,
             extension_id: extensionId,
             args: Object.keys(transformArgs).length > 0 ? transformArgs : undefined,
             rule: { device_id: device.id, device_type: 'ne101_camera' }
           });
-
           return neomind.createTransform(transformPayload);
         }
+        return null;
       }).then(function (result) {
         if (cancelled || !result) return;
-        createdId = result.id;
         setTransformId(result.id);
       }).catch(function () {
         if (!cancelled) setExtStatus('error');
       });
 
-      // Cleanup: delete transform on unmount / re-render
-      return function () {
-        cancelled = true;
-        if (createdId && neomind && neomind.deleteTransform) {
-          neomind.deleteTransform(createdId).catch(function () {});
-        }
-      };
+      // No cleanup — transforms persist across component lifecycle
+      return function () { cancelled = true; };
     }, [device ? device.id : null, processingEnabled, extensionId, procTemplate, roiEnabled, roiAction]);
 
     // Reset lastProcessedRef when extension becomes active (fixes race condition)
