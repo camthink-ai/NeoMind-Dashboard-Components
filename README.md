@@ -316,9 +316,10 @@ The NE101 component supports a built-in AI processing pipeline that runs inferen
 | Template | Extension Command | Virtual Metrics |
 |----------|-------------------|-----------------|
 | `object_detection` | `detect` | `virtual.detections`, `virtual.total_count`, `virtual.count_by_class` |
-| `object_detection_roi` | `detect` | `virtual.detections` (ROI-filtered), `virtual.total_count`, `virtual.count_by_class`, `virtual.roi_count` |
 | `grounding` | `ground` | `virtual.detections` |
 | `text_detection` | `detect_text` | `virtual.detections`, `virtual.texts` |
+
+ROI is a **standalone feature** enabled via `processingRoiEnabled`. When active, it adds `virtual.roi_count` and optionally modifies `virtual.detections` based on the `processingRoiAction` setting.
 
 ### Configuration
 
@@ -330,6 +331,8 @@ The NE101 component supports a built-in AI processing pipeline that runs inferen
   "processingCategories": "person,car",
   "processingPhrase": "",
   "processingClassFilter": "",
+  "processingRoiEnabled": true,
+  "processingRoiAction": "count",
   "processingRoiX": 0.1,
   "processingRoiY": 0.1,
   "processingRoiW": 0.8,
@@ -341,10 +344,12 @@ The NE101 component supports a built-in AI processing pipeline that runs inferen
 |-------|-------------|
 | `processingEnabled` | Enable/disable the processing pipeline |
 | `processingExtensionId` | ID of the installed extension to invoke |
-| `processingTemplate` | Built-in template (see table above) |
+| `processingTemplate` | Built-in template (`object_detection`, `grounding`, `text_detection`) |
 | `processingCategories` | Comma-separated detection categories |
 | `processingPhrase` | Search phrase for grounding/text detection |
 | `processingClassFilter` | Comma-separated class names to include (empty = all) |
+| `processingRoiEnabled` | Enable Region of Interest (independent of template) |
+| `processingRoiAction` | ROI post-processing: `count`, `count_by_class`, or `filter` |
 | `processingRoiX` / `processingRoiY` | ROI top-left corner position (0–1 normalized) |
 | `processingRoiW` / `processingRoiH` | ROI width and height (0–1 normalized) |
 
@@ -364,7 +369,7 @@ Virtual metrics are stored under `device.currentValues` with the `virtual.` pref
 
 When processing is active, the component renders:
 - **Detection boxes** — Blue bounding boxes with labels and confidence percentages
-- **ROI rectangle** — Yellow dashed rectangle showing the active Region of Interest (for `object_detection_roi` template)
+- **ROI rectangle** — Yellow dashed rectangle showing the active Region of Interest (when ROI is enabled)
 - **Count badges** — Total count, ROI count, and per-class breakdown in the bottom overlay
 - **Extracted texts** — Preview of detected text content (for `text_detection` template)
 

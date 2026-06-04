@@ -7,7 +7,7 @@
   },
   "icon": "Camera",
   "category": "device",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "author": "CamThink Team",
   "size_constraints": { "min_w": 2, "min_h": 2, "default_w": 3, "default_h": 3, "max_w": 6, "max_h": 6 },
   "has_data_source": false,
@@ -47,8 +47,8 @@
       "processingTemplate": {
         "type": "string",
         "default": "object_detection",
-        "enum": ["object_detection", "object_detection_roi", "grounding", "text_detection"],
-        "enumTitles": ["Object Detection", "Object Detection (ROI)", "Grounding", "Text Detection"],
+        "enum": ["object_detection", "grounding", "text_detection"],
+        "enumTitles": ["Object Detection", "Grounding", "Text Detection"],
         "title": "Processing Template",
         "description": "Built-in template that determines the transform pipeline"
       },
@@ -69,6 +69,19 @@
         "default": "",
         "title": "Class Filter",
         "description": "Comma-separated class names to include. Empty = all classes."
+      },
+      "processingRoiEnabled": {
+        "type": "boolean",
+        "default": false,
+        "title": "Enable ROI"
+      },
+      "processingRoiAction": {
+        "type": "string",
+        "default": "count",
+        "enum": ["count", "count_by_class", "filter"],
+        "enumTitles": ["Count", "Count by Class", "Filter"],
+        "title": "ROI Action",
+        "description": "Post-processing action for detections within the ROI"
       },
       "processingRoiX": {
         "type": "number",
@@ -100,6 +113,7 @@
         "showMetrics", "showCommands", "location",
         "processingEnabled", "processingExtensionId", "processingTemplate",
         "processingCategories", "processingPhrase", "processingClassFilter",
+        "processingRoiEnabled", "processingRoiAction",
         "processingRoiX", "processingRoiY", "processingRoiW", "processingRoiH"
       ],
       "visibility_rules": [
@@ -107,7 +121,7 @@
           "field": "processingEnabled",
           "condition": "equals",
           "value": true,
-          "then_show": ["processingExtensionId", "processingTemplate", "processingClassFilter"]
+          "then_show": ["processingExtensionId", "processingTemplate", "processingClassFilter", "processingRoiEnabled"]
         },
         {
           "field": "processingTemplate",
@@ -116,10 +130,10 @@
           "then_show": ["processingCategories"]
         },
         {
-          "field": "processingTemplate",
+          "field": "processingRoiEnabled",
           "condition": "equals",
-          "value": "object_detection_roi",
-          "then_show": ["processingCategories", "processingRoiX", "processingRoiY", "processingRoiW", "processingRoiH"]
+          "value": true,
+          "then_show": ["processingRoiAction", "processingRoiX", "processingRoiY", "processingRoiW", "processingRoiH"]
         },
         {
           "field": "processingTemplate",
@@ -146,6 +160,8 @@
     "processingCategories": "person,car",
     "processingPhrase": "",
     "processingClassFilter": "",
+    "processingRoiEnabled": false,
+    "processingRoiAction": "count",
     "processingRoiX": 0.1,
     "processingRoiY": 0.1,
     "processingRoiW": 0.8,
