@@ -82,7 +82,9 @@ var NE101CameraPanel = (function () {
     'locate-anything-v2': [
       { id: 'object_detection', command: 'detect', label: 'Object Detection', desc: 'Detect objects by category', icon: '\u{1F50D}', args: ['categories'] },
       { id: 'grounding', command: 'ground', label: 'Grounding', desc: 'Find objects by description', icon: '\u{1F3AF}', args: ['phrase'] },
-      { id: 'text_detection', command: 'detect_text', label: 'Text Detection', desc: 'Extract text from image', icon: '\u{1F4DD}', args: [] }
+      { id: 'text_detection', command: 'detect_text', label: 'Text Detection', desc: 'Extract text from image', icon: '\u{1F4DD}', args: [] },
+      { id: 'ground_gui', command: 'ground_gui', label: 'UI Grounding', desc: 'Locate UI elements by description', icon: '\u{1F5A5}', args: ['phrase'] },
+      { id: 'point', command: 'point', label: 'Point', desc: 'Point to specific objects', icon: '\u{1F446}', args: ['phrase'] }
     ],
     'image-analyzer-v2': [
       { id: 'object_detection', command: 'analyze_image', label: 'Object Detection', desc: 'YOLOv8 object detection', icon: '\u{1F50D}', args: [] }
@@ -111,6 +113,12 @@ var NE101CameraPanel = (function () {
     text_detection: {
       'virtual.detections': { from: 'boxes', normalize: true },
       'virtual.texts': { from: 'answer', transform: 'extract_texts' }
+    },
+    ground_gui: {
+      'virtual.detections': { from: 'boxes', normalize: true }
+    },
+    point: {
+      'virtual.points': { from: 'points' }
     }
   };
 
