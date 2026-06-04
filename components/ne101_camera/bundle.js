@@ -1202,9 +1202,12 @@ var NE101CameraPanel = (function () {
   function AdvancedPanel(props) {
     var config = props.config || {};
     var onChange = props.onChange;
+    console.log('[NE101 AdvancedPanel] render, config=', JSON.stringify(config).substring(0, 300));
+    console.log('[NE101 AdvancedPanel] onChange exists=', typeof onChange);
 
     // Helper: update a single config key via props.onChange (standard pattern)
     function update(key, value) {
+      console.log('[NE101 AdvancedPanel] update', key, value);
       if (onChange) onChange(key, value);
     }
 
