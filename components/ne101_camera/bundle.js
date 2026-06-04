@@ -357,26 +357,30 @@ var NE101CameraPanel = (function () {
 
     var lastProcessedRef = React.useRef('');
 
-    // Periodic refresh tick — forces re-render to pick up latest device telemetry.
-    // Device images (base64) may not trigger WS-based re-renders due to:
-    // 1. Large payload not included in WS events (only small metrics like ts/battery)
-    // 2. Event type mismatch in the platform's DeviceMetric filter
-    // The platform's boundDeviceTelemetry useStore subscription IS reactive,
-    // but only updates when the store actually changes — which may happen via
-    // a background fetch rather than WS. This tick ensures we catch those updates.
-    var tickState = React.useState(0);
-    var refreshTick = tickState[0];
-    var setRefreshTick = tickState[1];
+    // Fetch fresh device telemetry from backend API (same mechanism as built-in useDataSource).
+    // WS events may not include large base64 images, so we poll the REST API periodically.
+    var freshValsState = React.useState(null);
+    var freshVals = freshValsState[0];
+    var setFreshVals = freshValsState[1];
     React.useEffect(function () {
       if (!device) return;
+      var neomind = window.neomind;
+      if (!neomind || typeof neomind.fetchDeviceValues !== 'function') return;
+
+      // Fetch immediately on mount
+      neomind.fetchDeviceValues(device.id).then(function (v) { if (v) setFreshVals(v); });
+
+      // Then poll every 5 seconds (matching useDataSource refresh behavior)
       var timer = setInterval(function () {
-        setRefreshTick(function (t) { return t + 1; });
-      }, 3000);
+        neomind.fetchDeviceValues(device.id).then(function (v) { if (v) setFreshVals(v); }).catch(function () {});
+      }, 5000);
       return function () { clearInterval(timer); };
     }, [device ? device.id : null]);
 
+    // Merge: fresh API values take priority over stale WS/deviceContext values
+    var _vals = device ? Object.assign({}, device.currentValues || {}, freshVals || {}) : {};
+
     // Early-extract imageSrc — device may send URL or base64
-    var _vals = device ? (device.currentValues || {}) : {};
     var rawImageSrc = getFirst(_vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
     var isBase64Image = rawImageSrc && (rawImageSrc.indexOf('data:image') === 0 || !rawImageSrc.match(/^https?:\/\//));
     // For URL images: append ts-based cache buster; for base64: use as-is (ts change triggers re-render via new imageSrc ref)
@@ -565,7 +569,7 @@ var NE101CameraPanel = (function () {
       img.src = imageSrc;
 
       return function () { cancelled = true; };
-    }, [imageSrc, processingEnabled, extensionId, extStatus, refreshTick]);
+    }, [imageSrc, processingEnabled, extensionId, extStatus]);
 
     if (!device) return jsx(NoDevice, {});
 
