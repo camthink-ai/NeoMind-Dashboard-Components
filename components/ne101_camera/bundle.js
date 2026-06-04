@@ -80,21 +80,21 @@ var NE101CameraPanel = (function () {
 
   var EXT_MODES = {
     'locate-anything-v2': [
-      { id: 'object_detection', command: 'detect', label: 'Object Detection', desc: 'Detect objects by category', icon: '\u{1F50D}' },
-      { id: 'grounding', command: 'ground', label: 'Grounding', desc: 'Find objects by description', icon: '\u{1F3AF}' },
-      { id: 'text_detection', command: 'detect_text', label: 'Text Detection', desc: 'Extract text from image', icon: '\u{1F4DD}' }
+      { id: 'object_detection', command: 'detect', label: 'Object Detection', desc: 'Detect objects by category', icon: '\u{1F50D}', args: ['categories'] },
+      { id: 'grounding', command: 'ground', label: 'Grounding', desc: 'Find objects by description', icon: '\u{1F3AF}', args: ['phrase'] },
+      { id: 'text_detection', command: 'detect_text', label: 'Text Detection', desc: 'Extract text from image', icon: '\u{1F4DD}', args: [] }
     ],
     'image-analyzer-v2': [
-      { id: 'object_detection', command: 'analyze_image', label: 'Object Detection', desc: 'YOLOv8 object detection', icon: '\u{1F50D}' }
+      { id: 'object_detection', command: 'analyze_image', label: 'Object Detection', desc: 'YOLOv8 object detection', icon: '\u{1F50D}', args: [] }
     ],
     'yolo-device-inference': [
-      { id: 'object_detection', command: 'recognize_image', label: 'Object Detection', desc: 'YOLOv8 device inference', icon: '\u{1F50D}' }
+      { id: 'object_detection', command: 'recognize_image', label: 'Object Detection', desc: 'YOLOv8 device inference', icon: '\u{1F50D}', args: [] }
     ],
     'face-recognition': [
-      { id: 'object_detection', command: 'recognize_face', label: 'Face Detection', desc: 'Detect and recognize faces', icon: '\u{1F50D}' }
+      { id: 'object_detection', command: 'recognize_face', label: 'Face Detection', desc: 'Detect and recognize faces', icon: '\u{1F50D}', args: [] }
     ],
     'ocr-device-inference': [
-      { id: 'text_detection', command: 'recognize_image', label: 'Text Detection', desc: 'OCR text recognition', icon: '\u{1F4DD}' }
+      { id: 'text_detection', command: 'recognize_image', label: 'Text Detection', desc: 'OCR text recognition', icon: '\u{1F4DD}', args: [] }
     ]
   };
 
@@ -1072,8 +1072,13 @@ var NE101CameraPanel = (function () {
         );
       }
 
-      // Mode-specific fields
-      if (validTemplate === 'object_detection') {
+      // Mode-specific fields (only show if the mode supports them)
+      var currentMode = null;
+      for (var cmi = 0; cmi < availableModes.length; cmi++) {
+        if (availableModes[cmi].id === validTemplate) { currentMode = availableModes[cmi]; break; }
+      }
+      var modeArgs = currentMode ? (currentMode.args || []) : [];
+      if (modeArgs.indexOf('categories') >= 0) {
         items.push(
           jsxs('div', { key: 'cat', className: FIELD_CLS, children: [
             jsx('label', { className: LABEL_CLS, children: 'Detection Categories' }),
@@ -1081,7 +1086,7 @@ var NE101CameraPanel = (function () {
           ]})
         );
       }
-      if (validTemplate === 'grounding' || validTemplate === 'text_detection') {
+      if (modeArgs.indexOf('phrase') >= 0) {
         items.push(
           jsxs('div', { key: 'phrase', className: FIELD_CLS, children: [
             jsx('label', { className: LABEL_CLS, children: 'Search Phrase' }),
