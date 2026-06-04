@@ -319,6 +319,12 @@ var NE101CameraPanel = (function () {
     // -- Processing pipeline state (must be declared before early return) --
     var processingEnabled = config.processingEnabled === true;
     var extensionId = config.processingExtensionId || '';
+    console.log('[NE101] Config:', JSON.stringify({
+      processingEnabled: processingEnabled,
+      extensionId: extensionId,
+      template: config.processingTemplate,
+      hasDevice: !!device
+    }));
     // Backward compat: object_detection_roi → object_detection + roiEnabled
     var rawTemplate = config.processingTemplate || 'object_detection';
     var procTemplate = rawTemplate === 'object_detection_roi' ? 'object_detection' : rawTemplate;
