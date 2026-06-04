@@ -74,43 +74,75 @@ var NE101CameraPanel = (function () {
   }
 
   // ---------------------------------------------------------------------------
-  // Processing Templates — built-in transform config presets
+  // Extension profiles — which AI modes each extension supports
   // ---------------------------------------------------------------------------
-  var TEMPLATES = {
+  var AI_EXT_IDS = ['locate-anything-v2', 'image-analyzer-v2', 'yolo-device-inference', 'face-recognition', 'ocr-device-inference'];
+
+  var EXT_MODES = {
+    'locate-anything-v2': [
+      { id: 'object_detection', command: 'detect', label: 'Object Detection', desc: 'Detect objects by category', icon: '\u{1F50D}' },
+      { id: 'grounding', command: 'ground', label: 'Grounding', desc: 'Find objects by description', icon: '\u{1F3AF}' },
+      { id: 'text_detection', command: 'detect_text', label: 'Text Detection', desc: 'Extract text from image', icon: '\u{1F4DD}' }
+    ],
+    'image-analyzer-v2': [
+      { id: 'object_detection', command: 'analyze_image', label: 'Object Detection', desc: 'YOLOv8 object detection', icon: '\u{1F50D}' }
+    ],
+    'yolo-device-inference': [
+      { id: 'object_detection', command: 'recognize_image', label: 'Object Detection', desc: 'YOLOv8 device inference', icon: '\u{1F50D}' }
+    ],
+    'face-recognition': [
+      { id: 'object_detection', command: 'recognize_face', label: 'Face Detection', desc: 'Detect and recognize faces', icon: '\u{1F50D}' }
+    ],
+    'ocr-device-inference': [
+      { id: 'text_detection', command: 'recognize_image', label: 'Text Detection', desc: 'OCR text recognition', icon: '\u{1F4DD}' }
+    ]
+  };
+
+  // Output mapping per template type (independent of extension)
+  var TPL_OUTPUTS = {
     object_detection: {
-      command: 'detect',
-      input: { image_base64: { from: 'values.imageUrl', convert: 'url_to_base64' } },
-      output: {
-        'virtual.detections': { from: 'boxes', normalize: true },
-        'virtual.total_count': { from: 'boxes', transform: 'count' },
-        'virtual.count_by_class': { from: 'boxes', transform: 'count_by_class' }
-      }
+      'virtual.detections': { from: 'boxes', normalize: true },
+      'virtual.total_count': { from: 'boxes', transform: 'count' },
+      'virtual.count_by_class': { from: 'boxes', transform: 'count_by_class' }
     },
     grounding: {
-      command: 'ground',
-      input: { image_base64: { from: 'values.imageUrl', convert: 'url_to_base64' } },
-      output: {
-        'virtual.detections': { from: 'boxes', normalize: true }
-      }
+      'virtual.detections': { from: 'boxes', normalize: true }
     },
     text_detection: {
-      command: 'detect_text',
-      input: { image_base64: { from: 'values.imageUrl', convert: 'url_to_base64' } },
-      output: {
-        'virtual.detections': { from: 'boxes', normalize: true },
-        'virtual.texts': { from: 'answer', transform: 'extract_texts' }
-      }
+      'virtual.detections': { from: 'boxes', normalize: true },
+      'virtual.texts': { from: 'answer', transform: 'extract_texts' }
     }
   };
 
+  var TPL_INPUT = { image_base64: { from: 'values.imageUrl', convert: 'url_to_base64' } };
+
+  /** Get the command for an extension + template combination */
+  function getExtCommand(extensionId, templateName) {
+    var modes = EXT_MODES[extensionId];
+    if (modes) {
+      for (var i = 0; i < modes.length; i++) {
+        if (modes[i].id === templateName) return modes[i].command;
+      }
+    }
+    return 'detect';
+  }
+
+  /** Get available modes for an extension */
+  function getExtModes(extensionId) {
+    return EXT_MODES[extensionId] || [{ id: 'object_detection', command: 'detect', label: 'Object Detection', desc: 'Generic detection', icon: '\u{1F50D}' }];
+  }
+
   /**
-   * Fill a template with runtime params from procConfig.
-   * Deep-clones the template so each device gets its own copy.
-   * ROI and ROI action are now injected dynamically based on config.
+   * Build a transform config from template + extension + procConfig.
    */
-  function fillTemplate(templateName, procConfig) {
-    var tpl = TEMPLATES[templateName] || TEMPLATES.object_detection;
-    var config = JSON.parse(JSON.stringify(tpl));
+  function fillTemplate(templateName, extensionId, procConfig) {
+    var command = getExtCommand(extensionId, templateName);
+    var output = TPL_OUTPUTS[templateName] || TPL_OUTPUTS.object_detection;
+    var config = {
+      command: command,
+      input: JSON.parse(JSON.stringify(TPL_INPUT)),
+      output: JSON.parse(JSON.stringify(output))
+    };
 
     // Inject classFilter into count_by_class transforms
     var cf = procConfig.classFilter;
@@ -127,16 +159,12 @@ var NE101CameraPanel = (function () {
     var roi = procConfig.roi;
     var roiAction = procConfig.roiAction || 'count';
     if (roi && config.output) {
-      // Add ROI count metric
       config.output['virtual.roi_count'] = { from: 'boxes', transform: 'count_in_roi', roi: roi };
-
-      // Apply ROI action to detections output
       if (roiAction === 'filter') {
         config.output['virtual.detections'] = { from: 'boxes', transform: 'filter_roi', roi: roi };
       } else if (roiAction === 'count_by_class') {
         config.output['virtual.roi_count_by_class'] = { from: 'boxes', transform: 'count_by_class_in_roi', roi: roi };
       }
-      // 'count' action only adds virtual.roi_count (already added above)
     }
 
     return config;
@@ -246,7 +274,7 @@ var NE101CameraPanel = (function () {
         // Create transform from template — scope isolated to this device
         if (neomind.createTransform) {
           var procConfigTpl = { roi: roi, roiAction: roiAction, classFilter: procClassFilter };
-          var tplConfig = fillTemplate(procTemplate, procConfigTpl);
+          var tplConfig = fillTemplate(procTemplate, extensionId, procConfigTpl);
           var transformArgs = {};
           if (procCategories) transformArgs.categories = procCategories;
           if (procPhrase) transformArgs.phrase = procPhrase;
@@ -303,10 +331,8 @@ var NE101CameraPanel = (function () {
       setLocalDetections([]);
       setInferenceTime(null);
 
-      // Resolve command from template (no fillTemplate needed — only need command, not output mapping)
-      var tplName = procTemplate;
-      var tpl = TEMPLATES[tplName] || TEMPLATES.object_detection;
-      var command = tpl.command;
+      // Resolve command from extension + template
+      var command = getExtCommand(extensionId, procTemplate);
 
       var cancelled = false;
 
@@ -793,14 +819,6 @@ var NE101CameraPanel = (function () {
     var onChange = props.onChange;
 
     return jsxs('div', { className: 'space-y-3', children: [
-      jsxs('div', { key: 'sm', className: 'flex items-center justify-between', children: [
-        jsx('label', { className: LABEL_CLS + ' cursor-pointer', children: 'Show Metrics Panel' }),
-        SwitchControl(config.showMetrics !== false, function () { onChange('showMetrics', config.showMetrics === false); })
-      ]}),
-      jsxs('div', { key: 'sc', className: 'flex items-center justify-between', children: [
-        jsx('label', { className: LABEL_CLS + ' cursor-pointer', children: 'Show Command Buttons' }),
-        SwitchControl(config.showCommands !== false, function () { onChange('showCommands', config.showCommands === false); })
-      ]}),
       jsxs('div', { key: 'loc', className: FIELD_CLS, children: [
         jsx('label', { className: LABEL_CLS, children: 'Display Title' }),
         jsx('input', {
@@ -813,21 +831,94 @@ var NE101CameraPanel = (function () {
     ]});
   }
 
+
   // ---------------------------------------------------------------------------
-  // AdvancedPanel — Advanced tab: AI processing, template cards, ROI editor
+  // AdvancedPanel — Advanced tab: AI processing, extension-aware templates, ROI
   // ---------------------------------------------------------------------------
-  // Template definitions (ROI is independent of template)
-  var TEMPLATES = [
-    { id: 'object_detection', label: 'Object Detection', desc: 'Detect objects by category', icon: '\u{1F50D}' },
-    { id: 'grounding', label: 'Grounding', desc: 'Find objects by description', icon: '\u{1F3AF}' },
-    { id: 'text_detection', label: 'Text Detection', desc: 'Extract text from image', icon: '\u{1F4DD}' }
-  ];
 
   var ROI_ACTIONS = [
     { id: 'count', label: 'Count', desc: 'Count objects in ROI' },
     { id: 'count_by_class', label: 'Count by Class', desc: 'Per-class count in ROI' },
     { id: 'filter', label: 'Filter', desc: 'Only show detections in ROI' }
   ];
+
+  // shadcn-style dropdown (replaces native <select>)
+  function ExtDropdown(props) {
+    var exts = props.extensions;
+    var value = props.value;
+    var onChangeFn = props.onChange;
+    var loading = props.loading;
+
+    var openSt = React.useState(false);
+    var open = openSt[0];
+    var setOpen = openSt[1];
+    var wrapRef = React.useRef(null);
+
+    React.useEffect(function () {
+      if (!open) return;
+      function handler(e) {
+        if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+      }
+      document.addEventListener('mousedown', handler);
+      return function () { document.removeEventListener('mousedown', handler); }
+    }, [open]);
+
+    if (loading) {
+      return jsx('div', { className: INPUT_CLS + ' flex items-center text-muted-foreground', children: 'Loading extensions...' });
+    }
+
+    var selExt = null;
+    for (var i = 0; i < exts.length; i++) {
+      if (exts[i].id === value) { selExt = exts[i]; break; }
+    }
+
+    var optItems = [];
+    for (var j = 0; j < exts.length; j++) {
+      (function (ext) {
+        var stateCls = ext.state === 'running' ? 'bg-green-500' : 'bg-zinc-400';
+        optItems.push(
+          jsx('button', {
+            key: ext.id,
+            type: 'button',
+            className: 'relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-2 pr-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground' + (ext.id === value ? ' bg-accent text-accent-foreground' : ''),
+            onClick: function () { onChangeFn(ext.id); setOpen(false); },
+            children: jsxs('div', { className: 'flex items-center gap-2 w-full', children: [
+              jsx('div', { className: 'h-1.5 w-1.5 rounded-full shrink-0 ' + stateCls }),
+              jsxs('div', { className: 'flex flex-col items-start min-w-0', children: [
+                jsx('span', { className: 'truncate', children: ext.name }),
+                jsx('span', { className: 'text-xs text-muted-foreground truncate', children: ext.id })
+              ]})
+            ]})
+          })
+        );
+      })(exts[j]);
+    }
+
+    var triggerLabel = selExt
+      ? jsxs('span', { className: 'flex items-center gap-2 truncate', children: [
+          jsx('div', { className: 'h-1.5 w-1.5 rounded-full shrink-0 ' + (selExt.state === 'running' ? 'bg-green-500' : 'bg-zinc-400') }),
+          jsx('span', { children: selExt.name })
+        ]})
+      : jsx('span', { className: 'text-muted-foreground', children: 'Select extension...' });
+
+    return jsxs('div', { ref: wrapRef, className: 'relative', children: [
+      jsx('button', {
+        type: 'button',
+        className: INPUT_CLS + ' flex items-center justify-between cursor-pointer',
+        onClick: function () { setOpen(!open); },
+        children: jsxs('span', { className: 'flex items-center gap-2 w-full', children: [
+          jsx('span', { className: 'truncate flex-1 text-left', children: triggerLabel }),
+          jsx('svg', { width: '14', height: '14', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round', className: 'ml-2 shrink-0 opacity-50', children: jsx('path', { d: 'm6 9 6 6 6-6' }) })
+        ]})
+      }),
+      open && optItems.length > 0
+        ? jsx('div', {
+            className: 'absolute z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md',
+            children: jsx('div', { className: 'p-1 max-h-48 overflow-y-auto', children: optItems })
+          })
+        : null
+    ]});
+  }
 
   function AdvancedPanel(props) {
     var config = props.config || {};
@@ -838,8 +929,8 @@ var NE101CameraPanel = (function () {
     var rawTemplate = config.processingTemplate || 'object_detection';
     var template = rawTemplate === 'object_detection_roi' ? 'object_detection' : rawTemplate;
     var roiEnabled = config.processingRoiEnabled === true || rawTemplate === 'object_detection_roi';
-
     var roiAction = config.processingRoiAction || 'count';
+    var selectedExtId = config.processingExtensionId || '';
 
     // ROI editor state
     var roiRef = React.useRef(null);
@@ -849,9 +940,8 @@ var NE101CameraPanel = (function () {
     var roiW = config.processingRoiW != null ? config.processingRoiW : 0.8;
     var roiH = config.processingRoiH != null ? config.processingRoiH : 0.8;
 
-    // Extension list (auto-fetched from API)
+    // Extension list (auto-fetched, filtered to AI extensions only)
     var extState = React.useState({ list: [], loading: false, error: null });
-    var extensions = extState[0].list;
     var extLoading = extState[0].loading;
 
     React.useEffect(function () {
@@ -861,11 +951,30 @@ var NE101CameraPanel = (function () {
       extState[1]({ list: [], loading: true, error: null });
       neomind.listExtensions().then(function (exts) {
         var arr = Array.isArray(exts) ? exts : [];
-        extState[1]({ list: arr, loading: false, error: null });
+        // Filter to AI extensions only
+        var filtered = [];
+        for (var i = 0; i < arr.length; i++) {
+          if (AI_EXT_IDS.indexOf(arr[i].id) >= 0) filtered.push(arr[i]);
+        }
+        extState[1]({ list: filtered, loading: false, error: null });
       }).catch(function () {
         extState[1]({ list: [], loading: false, error: 'Failed to load extensions' });
       });
     }, [enabled]);
+
+    var extensions = extState[0].list;
+
+    // Available modes for the selected extension
+    var availableModes = selectedExtId ? getExtModes(selectedExtId) : [];
+    // If current template is not in available modes, auto-switch to first available
+    var validTemplate = template;
+    if (availableModes.length > 0) {
+      var found = false;
+      for (var mi = 0; mi < availableModes.length; mi++) {
+        if (availableModes[mi].id === template) { found = true; break; }
+      }
+      if (!found) validTemplate = availableModes[0].id;
+    }
 
     // ROI drag handler
     function handleRoiMouseDown(e) {
@@ -920,59 +1029,51 @@ var NE101CameraPanel = (function () {
     );
 
     if (enabled) {
-      // Extension selector (auto-populated)
-      var extItems = [];
-      extItems.push(jsx('option', { key: '_none', value: '', children: 'Select extension...' }));
-      for (var ei = 0; ei < extensions.length; ei++) {
-        (function (ext) {
-          var stateLabel = ext.state && ext.state !== 'running' ? ' (' + ext.state + ')' : '';
-          extItems.push(jsx('option', { key: ext.id, value: ext.id, children: ext.name + stateLabel }));
-        })(extensions[ei]);
-      }
+      // Extension selector — custom dropdown, AI extensions only
       items.push(
         jsxs('div', { key: 'ext', className: FIELD_CLS, children: [
-          jsx('label', { className: LABEL_CLS, children: 'Extension' }),
-          extLoading
-            ? jsx('div', { className: INPUT_CLS + ' flex items-center text-muted-foreground', children: 'Loading extensions...' })
-            : jsx('select', {
-                className: INPUT_CLS,
-                value: config.processingExtensionId || '',
-                onChange: function (e) { onChange('processingExtensionId', e.target.value); },
-                children: extItems
-              }),
+          jsx('label', { className: LABEL_CLS, children: 'AI Extension' }),
+          jsx(ExtDropdown, {
+            extensions: extensions,
+            value: selectedExtId,
+            onChange: function (id) { onChange('processingExtensionId', id); },
+            loading: extLoading
+          }),
           extensions.length === 0 && !extLoading
-            ? jsx('p', { className: DESC_CLS, children: 'No extensions installed' })
+            ? jsx('p', { className: DESC_CLS, children: 'No AI extensions installed' })
             : null
         ]})
       );
 
-      // Template cards
-      var tplCards = TEMPLATES.map(function (t) {
-        var selected = template === t.id;
-        return jsx('button', {
-          key: t.id,
-          type: 'button',
-          onClick: function () { onChange('processingTemplate', t.id); },
-          className: 'flex flex-col items-start gap-1 p-3 rounded-lg border text-left transition-colors ' +
-            (selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-muted-foreground/30'),
-          children: jsxs('div', { className: 'flex items-center gap-2', children: [
-            jsx('span', { className: 'text-base', children: t.icon }),
-            jsxs('div', { className: 'flex flex-col', children: [
-              jsx('span', { className: 'text-sm font-medium ' + (selected ? 'text-primary' : ''), children: t.label }),
-              jsx('span', { className: 'text-xs text-muted-foreground', children: t.desc })
+      // Mode cards — only show modes available for the selected extension
+      if (availableModes.length > 0) {
+        var tplCards = availableModes.map(function (m) {
+          var selected = validTemplate === m.id;
+          return jsx('button', {
+            key: m.id,
+            type: 'button',
+            onClick: function () { onChange('processingTemplate', m.id); },
+            className: 'flex flex-col items-start gap-1 p-3 rounded-lg border text-left transition-colors ' +
+              (selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-muted-foreground/30'),
+            children: jsxs('div', { className: 'flex items-center gap-2', children: [
+              jsx('span', { className: 'text-base', children: m.icon }),
+              jsxs('div', { className: 'flex flex-col', children: [
+                jsx('span', { className: 'text-sm font-medium ' + (selected ? 'text-primary' : ''), children: m.label }),
+                jsx('span', { className: 'text-xs text-muted-foreground', children: m.desc })
+              ]})
             ]})
-          ]})
+          });
         });
-      });
-      items.push(
-        jsxs('div', { key: 'tpl', className: FIELD_CLS, children: [
-          jsx('label', { className: LABEL_CLS, children: 'Processing Template' }),
-          jsx('div', { className: 'grid grid-cols-1 gap-2', children: tplCards })
-        ]})
-      );
+        items.push(
+          jsxs('div', { key: 'tpl', className: FIELD_CLS, children: [
+            jsx('label', { className: LABEL_CLS, children: 'Working Mode' }),
+            jsx('div', { className: 'grid grid-cols-1 gap-2', children: tplCards })
+          ]})
+        );
+      }
 
-      // Template-specific fields
-      if (template === 'object_detection') {
+      // Mode-specific fields
+      if (validTemplate === 'object_detection') {
         items.push(
           jsxs('div', { key: 'cat', className: FIELD_CLS, children: [
             jsx('label', { className: LABEL_CLS, children: 'Detection Categories' }),
@@ -980,7 +1081,7 @@ var NE101CameraPanel = (function () {
           ]})
         );
       }
-      if (template === 'grounding' || template === 'text_detection') {
+      if (validTemplate === 'grounding' || validTemplate === 'text_detection') {
         items.push(
           jsxs('div', { key: 'phrase', className: FIELD_CLS, children: [
             jsx('label', { className: LABEL_CLS, children: 'Search Phrase' }),
@@ -1007,7 +1108,7 @@ var NE101CameraPanel = (function () {
       );
 
       if (roiEnabled) {
-        // ROI action selector (card chips)
+        // ROI action selector
         var actionChips = ROI_ACTIONS.map(function (a) {
           var selected = roiAction === a.id;
           return jsx('button', {
@@ -1076,6 +1177,5 @@ var NE101CameraPanel = (function () {
 
     return jsx('div', { className: 'space-y-3', children: items });
   }
-
   return { default: NE101CameraPanel, NE101CameraPanel: NE101CameraPanel, ConfigPanel: ConfigPanel, AdvancedPanel: AdvancedPanel };
 })();
