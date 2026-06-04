@@ -757,25 +757,54 @@ var NE101CameraPanel = (function () {
   }
 
   // ---------------------------------------------------------------------------
-  // ConfigPanel — Display tab: basic component settings
+  // Shared UI helpers — match shadcn component CSS exactly
+  // ---------------------------------------------------------------------------
+  // shadcn Input classes (from components/ui/input.tsx)
+  var INPUT_CLS = 'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50';
+  // shadcn Label classes (from components/ui/label.tsx)
+  var LABEL_CLS = 'text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70';
+  // shadcn Field wrapper (from components/ui/field.tsx)
+  var FIELD_CLS = 'flex flex-col gap-1.5';
+  // shadcn Description
+  var DESC_CLS = 'text-sm text-muted-foreground';
+
+  // shadcn Switch replica — uses data-state to trigger same CSS rules
+  function SwitchControl(checked, onChangeFn) {
+    var state = checked ? 'checked' : 'unchecked';
+    return jsx('button', {
+      type: 'button',
+      role: 'switch',
+      'data-state': state,
+      'aria-checked': String(checked),
+      onClick: onChangeFn,
+      className: 'peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input',
+      children: jsx('span', {
+        'data-state': state,
+        className: 'pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0'
+      })
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // ConfigPanel — Display tab
   // ---------------------------------------------------------------------------
   function ConfigPanel(props) {
     var config = props.config || {};
     var onChange = props.onChange;
 
     return jsxs('div', { className: 'space-y-3', children: [
-      jsxs('label', { key: 'sm', className: 'flex items-center gap-2 cursor-pointer', children: [
-        jsx('input', { type: 'checkbox', className: 'h-4 w-4 rounded', checked: config.showMetrics !== false, onChange: function (e) { onChange('showMetrics', e.target.checked); } }),
-        jsx('span', { className: 'text-sm font-medium', children: 'Show Metrics Panel' })
+      jsxs('div', { key: 'sm', className: 'flex items-center justify-between', children: [
+        jsx('label', { className: LABEL_CLS + ' cursor-pointer', children: 'Show Metrics Panel' }),
+        SwitchControl(config.showMetrics !== false, function () { onChange('showMetrics', config.showMetrics === false); })
       ]}),
-      jsxs('label', { key: 'sc', className: 'flex items-center gap-2 cursor-pointer', children: [
-        jsx('input', { type: 'checkbox', className: 'h-4 w-4 rounded', checked: config.showCommands !== false, onChange: function (e) { onChange('showCommands', e.target.checked); } }),
-        jsx('span', { className: 'text-sm font-medium', children: 'Show Command Buttons' })
+      jsxs('div', { key: 'sc', className: 'flex items-center justify-between', children: [
+        jsx('label', { className: LABEL_CLS + ' cursor-pointer', children: 'Show Command Buttons' }),
+        SwitchControl(config.showCommands !== false, function () { onChange('showCommands', config.showCommands === false); })
       ]}),
-      jsxs('div', { key: 'loc', className: 'space-y-2', children: [
-        jsx('label', { className: 'text-sm font-medium', children: 'Location Title' }),
+      jsxs('div', { key: 'loc', className: FIELD_CLS, children: [
+        jsx('label', { className: LABEL_CLS, children: 'Location Title' }),
         jsx('input', {
-          className: 'w-full h-9 px-3 rounded-md border border-input bg-background text-sm',
+          className: INPUT_CLS,
           value: config.location || '',
           placeholder: 'e.g. Front Door',
           onChange: function (e) { onChange('location', e.target.value); }
@@ -785,7 +814,7 @@ var NE101CameraPanel = (function () {
   }
 
   // ---------------------------------------------------------------------------
-  // AdvancedPanel — Style tab: AI processing & ROI visual editor
+  // AdvancedPanel — Advanced tab: AI processing & ROI visual editor
   // ---------------------------------------------------------------------------
   function AdvancedPanel(props) {
     var config = props.config || {};
@@ -810,90 +839,73 @@ var NE101CameraPanel = (function () {
       var rect = el.getBoundingClientRect();
       var nx = (e.clientX - rect.left) / rect.width;
       var ny = (e.clientY - rect.top) / rect.height;
-
-      var hs = 0.06; // handle hit-size (normalized)
-      var atLeft = Math.abs(nx - roiX) < hs;
-      var atRight = Math.abs(nx - (roiX + roiW)) < hs;
-      var atTop = Math.abs(ny - roiY) < hs;
-      var atBottom = Math.abs(ny - (roiY + roiH)) < hs;
+      var hs = 0.06;
+      var atL = Math.abs(nx - roiX) < hs, atR = Math.abs(nx - (roiX + roiW)) < hs;
+      var atT = Math.abs(ny - roiY) < hs, atB = Math.abs(ny - (roiY + roiH)) < hs;
       var inside = nx >= roiX && nx <= roiX + roiW && ny >= roiY && ny <= roiY + roiH;
-
       var mode = null;
-      if (atRight && atBottom) mode = 'se';
-      else if (atLeft && atBottom) mode = 'sw';
-      else if (atRight && atTop) mode = 'ne';
-      else if (atLeft && atTop) mode = 'nw';
+      if (atR && atB) mode = 'se'; else if (atL && atB) mode = 'sw';
+      else if (atR && atT) mode = 'ne'; else if (atL && atT) mode = 'nw';
       else if (inside) mode = 'move';
       if (!mode) return;
-
       e.preventDefault();
       dragRef.current = { mode: mode, sx: nx, sy: ny, ox: roiX, oy: roiY, ow: roiW, oh: roiH };
-
       function onMove(ev) {
-        var d = dragRef.current;
-        if (!d) return;
+        var d = dragRef.current; if (!d) return;
         var r = roiRef.current.getBoundingClientRect();
         var cx = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
         var cy = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height));
-        var dx = cx - d.sx;
-        var dy = cy - d.sy;
-
+        var dx = cx - d.sx, dy = cy - d.sy;
         var nx2 = d.ox, ny2 = d.oy, nw = d.ow, nh = d.oh;
         if (d.mode === 'move') { nx2 += dx; ny2 += dy; }
         else if (d.mode === 'se') { nw += dx; nh += dy; }
         else if (d.mode === 'sw') { nx2 += dx; nw -= dx; nh += dy; }
         else if (d.mode === 'ne') { nw += dx; ny2 += dy; nh -= dy; }
         else if (d.mode === 'nw') { nx2 += dx; ny2 += dy; nw -= dx; nh -= dy; }
-
         nw = Math.max(0.05, nw); nh = Math.max(0.05, nh);
         nx2 = Math.max(0, Math.min(1 - nw, nx2));
         ny2 = Math.max(0, Math.min(1 - nh, ny2));
-
         onChange('processingRoiX', Math.round(nx2 * 100) / 100);
         onChange('processingRoiY', Math.round(ny2 * 100) / 100);
         onChange('processingRoiW', Math.round(nw * 100) / 100);
         onChange('processingRoiH', Math.round(nh * 100) / 100);
       }
-      function onUp() {
-        dragRef.current = null;
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-      }
+      function onUp() { dragRef.current = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     }
 
     var items = [];
 
-    // Processing toggle
+    // Processing toggle — matches ConfigRenderer boolean pattern exactly
     items.push(
-      jsxs('label', { key: 'toggle', className: 'flex items-center gap-2 cursor-pointer', children: [
-        jsx('input', { type: 'checkbox', className: 'h-4 w-4 rounded', checked: enabled, onChange: function (e) { onChange('processingEnabled', e.target.checked); } }),
-        jsx('span', { className: 'text-sm font-medium', children: 'Enable AI Processing' })
+      jsxs('div', { key: 'toggle', className: 'flex items-center justify-between', children: [
+        jsx('label', { className: LABEL_CLS + ' cursor-pointer', children: 'Enable AI Processing' }),
+        SwitchControl(enabled, function () { onChange('processingEnabled', !enabled); })
       ]})
     );
 
     if (enabled) {
       // Extension ID
       items.push(
-        jsxs('div', { key: 'ext', className: 'space-y-2', children: [
-          jsx('label', { className: 'text-sm font-medium', children: 'Extension ID' }),
+        jsxs('div', { key: 'ext', className: FIELD_CLS, children: [
+          jsx('label', { className: LABEL_CLS, children: 'Extension ID' }),
           jsx('input', {
-            className: 'w-full h-9 px-3 rounded-md border border-input bg-background text-sm',
+            className: INPUT_CLS,
             value: config.processingExtensionId || '',
             placeholder: 'e.g. locate-anything-v2',
             onChange: function (e) { onChange('processingExtensionId', e.target.value); }
           }),
-          jsx('p', { className: 'text-xs text-muted-foreground', children: 'ID of the installed extension to invoke' })
+          jsx('p', { className: DESC_CLS, children: 'ID of the installed extension to invoke' })
         ]})
       );
 
-      // Template selector
+      // Template selector — styled as Input
       items.push(
-        jsxs('div', { key: 'tpl', className: 'space-y-2', children: [
-          jsx('label', { className: 'text-sm font-medium', children: 'Processing Template' }),
+        jsxs('div', { key: 'tpl', className: FIELD_CLS, children: [
+          jsx('label', { className: LABEL_CLS, children: 'Processing Template' }),
           jsx('select', {
-            className: 'w-full h-9 px-3 rounded-md border border-input bg-background text-sm',
+            className: INPUT_CLS,
             value: template,
             onChange: function (e) { onChange('processingTemplate', e.target.value); },
             children: [
@@ -909,10 +921,10 @@ var NE101CameraPanel = (function () {
       // Categories (detection templates)
       if (template === 'object_detection' || template === 'object_detection_roi') {
         items.push(
-          jsxs('div', { key: 'cat', className: 'space-y-2', children: [
-            jsx('label', { className: 'text-sm font-medium', children: 'Detection Categories' }),
+          jsxs('div', { key: 'cat', className: FIELD_CLS, children: [
+            jsx('label', { className: LABEL_CLS, children: 'Detection Categories' }),
             jsx('input', {
-              className: 'w-full h-9 px-3 rounded-md border border-input bg-background text-sm',
+              className: INPUT_CLS,
               value: config.processingCategories || '',
               placeholder: 'person, car, dog',
               onChange: function (e) { onChange('processingCategories', e.target.value); }
@@ -924,10 +936,10 @@ var NE101CameraPanel = (function () {
       // Phrase (grounding / text detection)
       if (template === 'grounding' || template === 'text_detection') {
         items.push(
-          jsxs('div', { key: 'phrase', className: 'space-y-2', children: [
-            jsx('label', { className: 'text-sm font-medium', children: 'Search Phrase' }),
+          jsxs('div', { key: 'phrase', className: FIELD_CLS, children: [
+            jsx('label', { className: LABEL_CLS, children: 'Search Phrase' }),
             jsx('input', {
-              className: 'w-full h-9 px-3 rounded-md border border-input bg-background text-sm',
+              className: INPUT_CLS,
               value: config.processingPhrase || '',
               placeholder: 'Describe what to find',
               onChange: function (e) { onChange('processingPhrase', e.target.value); }
@@ -938,32 +950,30 @@ var NE101CameraPanel = (function () {
 
       // Class filter
       items.push(
-        jsxs('div', { key: 'cf', className: 'space-y-2', children: [
-          jsx('label', { className: 'text-sm font-medium', children: 'Class Filter' }),
+        jsxs('div', { key: 'cf', className: FIELD_CLS, children: [
+          jsx('label', { className: LABEL_CLS, children: 'Class Filter' }),
           jsx('input', {
-            className: 'w-full h-9 px-3 rounded-md border border-input bg-background text-sm',
+            className: INPUT_CLS,
             value: config.processingClassFilter || '',
             placeholder: 'Empty = all classes',
             onChange: function (e) { onChange('processingClassFilter', e.target.value); }
           }),
-          jsx('p', { className: 'text-xs text-muted-foreground', children: 'Comma-separated class names to include' })
+          jsx('p', { className: DESC_CLS, children: 'Comma-separated class names to include' })
         ]})
       );
 
       // ROI visual editor (only for object_detection_roi)
       if (showRoi) {
         items.push(
-          jsxs('div', { key: 'roi', className: 'space-y-2 pt-3 border-t', children: [
-            jsx('label', { className: 'text-sm font-medium', children: 'Region of Interest' }),
-            jsx('p', { className: 'text-xs text-muted-foreground', children: 'Drag to move, drag corners to resize' }),
-            // ROI canvas
+          jsxs('div', { key: 'roi', className: 'space-y-3 pt-3 border-t', children: [
+            jsx('label', { className: LABEL_CLS, children: 'Region of Interest' }),
+            jsx('p', { className: DESC_CLS, children: 'Drag to move, drag corners to resize' }),
             jsxs('div', {
               ref: roiRef,
               className: 'relative w-full rounded-md overflow-hidden select-none',
               style: { aspectRatio: '4/3', background: '#18181b', backgroundImage: 'linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '10% 10%', cursor: 'crosshair' },
               onMouseDown: handleRoiMouseDown,
               children: [
-                // ROI rectangle
                 jsxs('div', {
                   key: 'rect',
                   className: 'absolute',
@@ -972,8 +982,7 @@ var NE101CameraPanel = (function () {
                     width: (roiW * 100) + '%', height: (roiH * 100) + '%',
                     border: '2px dashed rgba(250,204,21,0.8)',
                     backgroundColor: 'rgba(250,204,21,0.06)',
-                    borderRadius: '2px',
-                    cursor: 'move'
+                    borderRadius: '2px', cursor: 'move'
                   },
                   children: [
                     jsx('span', { key: 'lbl', style: { position: 'absolute', top: '-16px', left: '0', background: 'rgba(250,204,21,0.9)', color: '#000', fontSize: '9px', fontWeight: '700', padding: '1px 4px', borderRadius: '2px', fontFamily: 'monospace', whiteSpace: 'nowrap' }, children: 'ROI' }),
@@ -985,33 +994,32 @@ var NE101CameraPanel = (function () {
                 })
               ]
             }),
-            // ROI numeric sliders
             jsxs('div', { key: 'sliders', className: 'grid grid-cols-2 gap-x-4 gap-y-2', children: [
-              jsxs('div', { key: 'x', className: 'space-y-1', children: [
+              jsxs('div', { key: 'x', className: FIELD_CLS, children: [
                 jsxs('div', { className: 'flex justify-between', children: [
-                  jsx('span', { className: 'text-xs text-muted-foreground', children: 'X' }),
-                  jsx('span', { className: 'text-xs font-mono text-muted-foreground', children: roiX.toFixed(2) })
+                  jsx('span', { className: DESC_CLS, children: 'X' }),
+                  jsx('span', { className: DESC_CLS + ' font-mono', children: roiX.toFixed(2) })
                 ]}),
                 jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiX, onChange: function (e) { onChange('processingRoiX', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
               ]}),
-              jsxs('div', { key: 'y', className: 'space-y-1', children: [
+              jsxs('div', { key: 'y', className: FIELD_CLS, children: [
                 jsxs('div', { className: 'flex justify-between', children: [
-                  jsx('span', { className: 'text-xs text-muted-foreground', children: 'Y' }),
-                  jsx('span', { className: 'text-xs font-mono text-muted-foreground', children: roiY.toFixed(2) })
+                  jsx('span', { className: DESC_CLS, children: 'Y' }),
+                  jsx('span', { className: DESC_CLS + ' font-mono', children: roiY.toFixed(2) })
                 ]}),
                 jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiY, onChange: function (e) { onChange('processingRoiY', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
               ]}),
-              jsxs('div', { key: 'w', className: 'space-y-1', children: [
+              jsxs('div', { key: 'w', className: FIELD_CLS, children: [
                 jsxs('div', { className: 'flex justify-between', children: [
-                  jsx('span', { className: 'text-xs text-muted-foreground', children: 'Width' }),
-                  jsx('span', { className: 'text-xs font-mono text-muted-foreground', children: roiW.toFixed(2) })
+                  jsx('span', { className: DESC_CLS, children: 'Width' }),
+                  jsx('span', { className: DESC_CLS + ' font-mono', children: roiW.toFixed(2) })
                 ]}),
                 jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiW, onChange: function (e) { onChange('processingRoiW', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
               ]}),
-              jsxs('div', { key: 'h', className: 'space-y-1', children: [
+              jsxs('div', { key: 'h', className: FIELD_CLS, children: [
                 jsxs('div', { className: 'flex justify-between', children: [
-                  jsx('span', { className: 'text-xs text-muted-foreground', children: 'Height' }),
-                  jsx('span', { className: 'text-xs font-mono text-muted-foreground', children: roiH.toFixed(2) })
+                  jsx('span', { className: DESC_CLS, children: 'Height' }),
+                  jsx('span', { className: DESC_CLS + ' font-mono', children: roiH.toFixed(2) })
                 ]}),
                 jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiH, onChange: function (e) { onChange('processingRoiH', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
               ]})
