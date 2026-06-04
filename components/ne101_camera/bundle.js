@@ -443,6 +443,32 @@ var NE101CameraPanel = (function () {
         // Build desired transform config
         var procConfigTpl = { roi: roi, roiAction: roiAction, classFilter: procClassFilter };
         var tplConfig = fillTemplate(procTemplate, extensionId, procConfigTpl);
+
+        // Validate required args before creating Transform
+        var currentMode = getExtMode(extensionId, procTemplate);
+        var modeReqArgs = currentMode ? (currentMode.args || []) : [];
+        var missingArg = false;
+        for (var ai = 0; ai < modeReqArgs.length; ai++) {
+          if (modeReqArgs[ai] === 'categories' && !procCategories.trim()) { missingArg = true; break; }
+          if (modeReqArgs[ai] === 'phrase' && !procPhrase.trim()) { missingArg = true; break; }
+        }
+        if (missingArg) {
+          console.log('[NE101] Skipping Transform creation: missing required args');
+          // If an existing Transform exists, delete it (config incomplete)
+          if (neomind.listTransforms && neomind.deleteTransform) {
+            neomind.listTransforms({ scope: device.id }).then(function (transforms) {
+              if (cancelled) return;
+              var tList = Array.isArray(transforms) ? transforms : [];
+              for (var ti = 0; ti < tList.length; ti++) {
+                if (tList[ti].name === transformName) {
+                  neomind.deleteTransform(tList[ti].id).catch(function () {});
+                  break;
+                }
+              }
+            });
+          }
+          return;
+        }
         var transformArgs = {};
         if (procCategories) transformArgs.categories = procCategories;
         if (procPhrase) transformArgs.phrase = procPhrase;
@@ -472,6 +498,10 @@ var NE101CameraPanel = (function () {
               if (oldFingerprint === desiredFingerprint) {
                 // Same config — reuse
                 setTransformId(existing.id);
+                // Persist transform ID in config so platform can clean up on component removal
+                if (props.onConfigChange && (!config._transformId || config._transformId !== existing.id)) {
+                  props.onConfigChange(Object.assign({}, config, { _transformId: existing.id }));
+                }
                 return null;
               }
               // Config changed — delete old, will recreate below
@@ -503,20 +533,65 @@ var NE101CameraPanel = (function () {
       }).then(function (result) {
         if (cancelled || !result) return;
         setTransformId(result.id);
+        // Persist transform ID in config so platform can clean up on component removal
+        if (props.onConfigChange) {
+          props.onConfigChange(Object.assign({}, config, { _transformId: result.id }));
+        }
+        // Dedup: remove any duplicate transforms with the same name (StrictMode race condition)
+        if (neomind.listTransforms && neomind.deleteTransform) {
+          neomind.listTransforms({ scope: device.id }).then(function (all) {
+            if (cancelled) return;
+            var tAll = Array.isArray(all) ? all : [];
+            for (var di = 0; di < tAll.length; di++) {
+              if (tAll[di].name === transformName && tAll[di].id !== result.id) {
+                console.log('[NE101] Dedup: removing duplicate transform', tAll[di].id);
+                neomind.deleteTransform(tAll[di].id).catch(function () {});
+              }
+            }
+          });
+        }
       }).catch(function () {
         if (!cancelled) setExtStatus('error');
       });
 
-      // Cleanup: delete associated transform when component unmounts
-      return function () {
-        cancelled = true;
-        var nm = window.neomind;
-        var tid = transformIdRef.current;
-        if (tid && nm && nm.deleteTransform) {
-          nm.deleteTransform(tid).catch(function () {});
-        }
-      };
+      // No cleanup on unmount — transforms persist in backend for continuous processing
+      // Cleanup happens via platform when the dashboard component is removed
+      return function () { cancelled = true; };
     }, [device ? device.id : null, processingEnabled, extensionId, procTemplate, roiEnabled, roiAction]);
+
+    // Cleanup: delete old Transforms when processing disabled or extension changes
+    var prevExtIdRef = React.useRef(extensionId);
+    React.useEffect(function () {
+      var neomind = window.neomind;
+      if (!neomind || !neomind.listTransforms || !neomind.deleteTransform || !device) return;
+
+      var oldExtId = prevExtIdRef.current;
+      prevExtIdRef.current = extensionId;
+
+      var shouldCleanup = false;
+      // Processing disabled — delete all ne101-* transforms for this device
+      if (!processingEnabled) shouldCleanup = true;
+      // Extension changed — delete old extension's transform
+      if (processingEnabled && oldExtId && oldExtId !== extensionId) shouldCleanup = true;
+
+      if (!shouldCleanup) return;
+
+      // Robust cleanup: list ALL transforms for this device and delete matching ones
+      console.log('[NE101] Cleanup: oldExtId=', oldExtId, 'newExtId=', extensionId, 'enabled=', processingEnabled);
+      neomind.listTransforms({ scope: device.id }).then(function (transforms) {
+        var tList = Array.isArray(transforms) ? transforms : [];
+        for (var i = 0; i < tList.length; i++) {
+          var t = tList[i];
+          var isOldExt = oldExtId && t.name === 'ne101-' + device.id + '-' + oldExtId;
+          var isDisabled = !processingEnabled && t.name.indexOf('ne101-' + device.id + '-') === 0;
+          var isKnown = config._transformId && t.id === config._transformId;
+          if (isOldExt || isDisabled || isKnown) {
+            console.log('[NE101] Deleting transform:', t.id, t.name);
+            neomind.deleteTransform(t.id).catch(function () {});
+          }
+        }
+      }).catch(function () {});
+    }, [processingEnabled, extensionId]);
 
     // Reset lastProcessedRef when extension becomes active (fixes race condition)
     React.useEffect(function () {
@@ -532,6 +607,14 @@ var NE101CameraPanel = (function () {
       if (lastProcessedRef.current === imageSrc) return;
       // Only process when extension is confirmed active (avoid wasted calls during checking)
       if (extStatus !== 'active') return;
+
+      // Validate required args — skip processing if incomplete
+      var mode = getExtMode(extensionId, procTemplate);
+      var reqArgs = mode ? (mode.args || []) : [];
+      for (var vi = 0; vi < reqArgs.length; vi++) {
+        if (reqArgs[vi] === 'categories' && !procCategories.trim()) return;
+        if (reqArgs[vi] === 'phrase' && !procPhrase.trim()) return;
+      }
 
       var neomind = window.neomind;
       if (!neomind || typeof neomind.callExtension !== 'function') return;
@@ -1120,21 +1203,68 @@ var NE101CameraPanel = (function () {
     var config = props.config || {};
     var onChange = props.onChange;
 
-    var enabled = config.processingEnabled === true;
-    // Backward compat: object_detection_roi → object_detection + roiEnabled
-    var rawTemplate = config.processingTemplate || 'object_detection';
+    // Local state — initialized from props.config, only flushed to store on Apply
+    var initState = {
+      processingEnabled: config.processingEnabled === true,
+      processingExtensionId: config.processingExtensionId || '',
+      processingTemplate: config.processingTemplate || 'object_detection',
+      processingCategories: config.processingCategories || '',
+      processingPhrase: config.processingPhrase || '',
+      processingClassFilter: config.processingClassFilter || '',
+      processingRoiEnabled: config.processingRoiEnabled === true || (config.processingTemplate || '') === 'object_detection_roi',
+      processingRoiAction: config.processingRoiAction || 'count',
+      processingRoiX: config.processingRoiX != null ? config.processingRoiX : 0.1,
+      processingRoiY: config.processingRoiY != null ? config.processingRoiY : 0.1,
+      processingRoiW: config.processingRoiW != null ? config.processingRoiW : 0.8,
+      processingRoiH: config.processingRoiH != null ? config.processingRoiH : 0.8,
+    };
+    var localSt = React.useState(initState);
+    var local = localSt[0];
+    var setLocal = localSt[1];
+
+    // Re-sync local state when props.config changes externally (e.g. dialog reopened after save)
+    var configFp = JSON.stringify(initState);
+    var fpRef = React.useRef(configFp);
+    React.useEffect(function () {
+      if (fpRef.current !== configFp) {
+        fpRef.current = configFp;
+        setLocal(initState);
+      }
+    }, [configFp]);
+
+    function updateLocal(key, value) {
+      setLocal(function (prev) {
+        var next = Object.assign({}, prev);
+        next[key] = value;
+        // Auto-switch template when extension changes and current template is unavailable
+        if (key === 'processingExtensionId' && value) {
+          var modes = getExtModes(value);
+          if (modes.length > 0) {
+            var found = false;
+            for (var i = 0; i < modes.length; i++) {
+              if (modes[i].id === prev.processingTemplate) { found = true; break; }
+            }
+            if (!found) next.processingTemplate = modes[0].id;
+          }
+        }
+        return next;
+      });
+    }
+
+    var enabled = local.processingEnabled;
+    var rawTemplate = local.processingTemplate || 'object_detection';
     var template = rawTemplate === 'object_detection_roi' ? 'object_detection' : rawTemplate;
-    var roiEnabled = config.processingRoiEnabled === true || rawTemplate === 'object_detection_roi';
-    var roiAction = config.processingRoiAction || 'count';
-    var selectedExtId = config.processingExtensionId || '';
+    var roiEnabled = local.processingRoiEnabled || rawTemplate === 'object_detection_roi';
+    var roiAction = local.processingRoiAction || 'count';
+    var selectedExtId = local.processingExtensionId;
+    var roiX = local.processingRoiX;
+    var roiY = local.processingRoiY;
+    var roiW = local.processingRoiW;
+    var roiH = local.processingRoiH;
 
     // ROI editor state
     var roiRef = React.useRef(null);
     var dragRef = React.useRef(null);
-    var roiX = config.processingRoiX != null ? config.processingRoiX : 0.1;
-    var roiY = config.processingRoiY != null ? config.processingRoiY : 0.1;
-    var roiW = config.processingRoiW != null ? config.processingRoiW : 0.8;
-    var roiH = config.processingRoiH != null ? config.processingRoiH : 0.8;
 
     // Extension list (auto-fetched, filtered to AI extensions only)
     var extState = React.useState({ list: [], loading: false, error: null });
@@ -1147,7 +1277,6 @@ var NE101CameraPanel = (function () {
       extState[1]({ list: [], loading: true, error: null });
       neomind.listExtensions().then(function (exts) {
         var arr = Array.isArray(exts) ? exts : [];
-        // Filter to AI extensions only
         var filtered = [];
         for (var i = 0; i < arr.length; i++) {
           if (AI_EXT_IDS.indexOf(arr[i].id) >= 0) filtered.push(arr[i]);
@@ -1162,7 +1291,6 @@ var NE101CameraPanel = (function () {
 
     // Available modes for the selected extension
     var availableModes = selectedExtId ? getExtModes(selectedExtId) : [];
-    // If current template is not in available modes, auto-switch to first available
     var validTemplate = template;
     if (availableModes.length > 0) {
       var found = false;
@@ -1172,7 +1300,7 @@ var NE101CameraPanel = (function () {
       if (!found) validTemplate = availableModes[0].id;
     }
 
-    // ROI drag handler
+    // ROI drag handler — updates local state only
     function handleRoiMouseDown(e) {
       var el = roiRef.current; if (!el) return;
       var rect = el.getBoundingClientRect();
@@ -1204,15 +1332,66 @@ var NE101CameraPanel = (function () {
         nw = Math.max(0.05, nw); nh = Math.max(0.05, nh);
         nx2 = Math.max(0, Math.min(1 - nw, nx2));
         ny2 = Math.max(0, Math.min(1 - nh, ny2));
-        onChange('processingRoiX', Math.round(nx2 * 100) / 100);
-        onChange('processingRoiY', Math.round(ny2 * 100) / 100);
-        onChange('processingRoiW', Math.round(nw * 100) / 100);
-        onChange('processingRoiH', Math.round(nh * 100) / 100);
+        setLocal(function (prev) {
+          return Object.assign({}, prev, {
+            processingRoiX: Math.round(nx2 * 100) / 100,
+            processingRoiY: Math.round(ny2 * 100) / 100,
+            processingRoiW: Math.round(nw * 100) / 100,
+            processingRoiH: Math.round(nh * 100) / 100,
+          });
+        });
       }
       function onUp() { dragRef.current = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     }
+
+    // Apply handler — validate and flush all local changes to store
+    var applyErrorSt = React.useState('');
+    var applyError = applyErrorSt[0];
+    var setApplyError = applyErrorSt[1];
+
+    // Expose flush function on the bundle global so platform Save button can trigger it
+    var flushRef = React.useRef(null);
+    flushRef.current = function (flushOnChange) {
+      if (!local.processingEnabled) {
+        flushOnChange('processingEnabled', false);
+        return true;
+      }
+      // Validate required args
+      var mode = getExtMode(local.processingExtensionId, validTemplate);
+      var reqArgs = mode ? (mode.args || []) : [];
+      var errors = [];
+      for (var i = 0; i < reqArgs.length; i++) {
+        if (reqArgs[i] === 'categories' && !local.processingCategories.trim()) errors.push('Detection Categories is required');
+        if (reqArgs[i] === 'phrase' && !local.processingPhrase.trim()) errors.push('Search Phrase is required');
+      }
+      if (!local.processingExtensionId) errors.push('Please select an AI Extension');
+      if (errors.length > 0) {
+        setApplyError(errors.join('. '));
+        return false;
+      }
+      setApplyError('');
+      flushOnChange('processingEnabled', local.processingEnabled);
+      flushOnChange('processingExtensionId', local.processingExtensionId);
+      flushOnChange('processingTemplate', validTemplate);
+      flushOnChange('processingCategories', local.processingCategories);
+      flushOnChange('processingPhrase', local.processingPhrase);
+      flushOnChange('processingClassFilter', local.processingClassFilter);
+      flushOnChange('processingRoiEnabled', local.processingRoiEnabled);
+      flushOnChange('processingRoiAction', local.processingRoiAction);
+      flushOnChange('processingRoiX', local.processingRoiX);
+      flushOnChange('processingRoiY', local.processingRoiY);
+      flushOnChange('processingRoiW', local.processingRoiW);
+      flushOnChange('processingRoiH', local.processingRoiH);
+      return true;
+    };
+
+    React.useEffect(function () {
+      var g = window.NE101CameraPanel || {};
+      g._flushConfig = flushRef;
+      window.NE101CameraPanel = g;
+    }, []);
 
     var items = [];
 
@@ -1220,19 +1399,19 @@ var NE101CameraPanel = (function () {
     items.push(
       jsxs('div', { key: 'toggle', className: 'flex items-center justify-between', children: [
         jsx('label', { className: LABEL_CLS + ' cursor-pointer', children: 'Enable AI Processing' }),
-        SwitchControl(enabled, function () { onChange('processingEnabled', !enabled); })
+        SwitchControl(enabled, function () { updateLocal('processingEnabled', !enabled); })
       ]})
     );
 
     if (enabled) {
-      // Extension selector — custom dropdown, AI extensions only
+      // Extension selector
       items.push(
         jsxs('div', { key: 'ext', className: FIELD_CLS, children: [
           jsx('label', { className: LABEL_CLS, children: 'AI Extension' }),
           jsx(ExtDropdown, {
             extensions: extensions,
             value: selectedExtId,
-            onChange: function (id) { onChange('processingExtensionId', id); },
+            onChange: function (id) { updateLocal('processingExtensionId', id); },
             loading: extLoading
           }),
           extensions.length === 0 && !extLoading
@@ -1241,14 +1420,14 @@ var NE101CameraPanel = (function () {
         ]})
       );
 
-      // Mode cards — only show modes available for the selected extension
+      // Mode cards
       if (availableModes.length > 0) {
         var tplCards = availableModes.map(function (m) {
           var selected = validTemplate === m.id;
           return jsx('button', {
             key: m.id,
             type: 'button',
-            onClick: function () { onChange('processingTemplate', m.id); },
+            onClick: function () { updateLocal('processingTemplate', m.id); },
             className: 'flex flex-col items-start gap-1 p-3 rounded-lg border text-left transition-colors ' +
               (selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-muted-foreground/30'),
             children: jsxs('div', { className: 'flex items-center gap-2', children: [
@@ -1268,31 +1447,27 @@ var NE101CameraPanel = (function () {
         );
       }
 
-      // Mode-specific fields (only show if the mode supports them)
+      // Mode-specific fields
       var currentMode = null;
       for (var cmi = 0; cmi < availableModes.length; cmi++) {
         if (availableModes[cmi].id === validTemplate) { currentMode = availableModes[cmi]; break; }
       }
       var modeArgs = currentMode ? (currentMode.args || []) : [];
       if (modeArgs.indexOf('categories') >= 0) {
-        var catVal = config.processingCategories || '';
-        var catMissing = enabled && !catVal.trim();
         items.push(
           jsxs('div', { key: 'cat', className: FIELD_CLS, children: [
             jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Detection Categories', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
-            jsx('input', { className: INPUT_CLS + (catMissing ? ' border-red-500 focus:ring-red-500' : ''), value: catVal, placeholder: 'person, car, dog', onChange: function (e) { onChange('processingCategories', e.target.value); } }),
-            catMissing ? jsx('p', { className: DESC_CLS, style: { color: '#ef4444' }, children: 'Required for this mode' }) : null
+            jsx('input', { className: INPUT_CLS, value: local.processingCategories, placeholder: 'person, car, dog', onChange: function (e) { updateLocal('processingCategories', e.target.value); } }),
+            jsx('p', { className: DESC_CLS, children: 'Required for this mode (comma-separated)' })
           ]})
         );
       }
       if (modeArgs.indexOf('phrase') >= 0) {
-        var phraseVal = config.processingPhrase || '';
-        var phraseMissing = enabled && !phraseVal.trim();
         items.push(
           jsxs('div', { key: 'phrase', className: FIELD_CLS, children: [
             jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Search Phrase', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
-            jsx('input', { className: INPUT_CLS + (phraseMissing ? ' border-red-500 focus:ring-red-500' : ''), value: phraseVal, placeholder: 'Describe what to find', onChange: function (e) { onChange('processingPhrase', e.target.value); } }),
-            phraseMissing ? jsx('p', { className: DESC_CLS, style: { color: '#ef4444' }, children: 'Required for this mode' }) : null
+            jsx('input', { className: INPUT_CLS, value: local.processingPhrase, placeholder: 'Describe what to find', onChange: function (e) { updateLocal('processingPhrase', e.target.value); } }),
+            jsx('p', { className: DESC_CLS, children: 'Required for this mode' })
           ]})
         );
       }
@@ -1301,27 +1476,26 @@ var NE101CameraPanel = (function () {
       items.push(
         jsxs('div', { key: 'cf', className: FIELD_CLS, children: [
           jsx('label', { className: LABEL_CLS, children: 'Class Filter' }),
-          jsx('input', { className: INPUT_CLS, value: config.processingClassFilter || '', placeholder: 'Empty = all classes', onChange: function (e) { onChange('processingClassFilter', e.target.value); } }),
+          jsx('input', { className: INPUT_CLS, value: local.processingClassFilter, placeholder: 'Empty = all classes', onChange: function (e) { updateLocal('processingClassFilter', e.target.value); } }),
           jsx('p', { className: DESC_CLS, children: 'Comma-separated class names to include' })
         ]})
       );
 
-      // ── ROI (independent of template) ──
+      // ROI toggle
       items.push(
         jsxs('div', { key: 'roi-div', className: 'flex items-center justify-between pt-3 border-t', children: [
           jsx('label', { className: LABEL_CLS + ' cursor-pointer', children: 'Region of Interest (ROI)' }),
-          SwitchControl(roiEnabled, function () { onChange('processingRoiEnabled', !roiEnabled); })
+          SwitchControl(roiEnabled, function () { updateLocal('processingRoiEnabled', !roiEnabled); })
         ]})
       );
 
       if (roiEnabled) {
-        // ROI action selector
         var actionChips = ROI_ACTIONS.map(function (a) {
           var selected = roiAction === a.id;
           return jsx('button', {
             key: a.id,
             type: 'button',
-            onClick: function () { onChange('processingRoiAction', a.id); },
+            onClick: function () { updateLocal('processingRoiAction', a.id); },
             className: 'px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ' +
               (selected ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-muted-foreground/30'),
             children: a.label
@@ -1362,22 +1536,31 @@ var NE101CameraPanel = (function () {
             jsxs('div', { key: 'sliders', className: 'grid grid-cols-2 gap-x-4 gap-y-2', children: [
               jsxs('div', { key: 'x', className: FIELD_CLS, children: [
                 jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'X' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiX.toFixed(2) }) ]}),
-                jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiX, onChange: function (e) { onChange('processingRoiX', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+                jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiX, onChange: function (e) { updateLocal('processingRoiX', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
               ]}),
               jsxs('div', { key: 'y', className: FIELD_CLS, children: [
                 jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Y' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiY.toFixed(2) }) ]}),
-                jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiY, onChange: function (e) { onChange('processingRoiY', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+                jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiY, onChange: function (e) { updateLocal('processingRoiY', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
               ]}),
               jsxs('div', { key: 'w', className: FIELD_CLS, children: [
                 jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Width' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiW.toFixed(2) }) ]}),
-                jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiW, onChange: function (e) { onChange('processingRoiW', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+                jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiW, onChange: function (e) { updateLocal('processingRoiW', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
               ]}),
               jsxs('div', { key: 'h', className: FIELD_CLS, children: [
                 jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Height' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiH.toFixed(2) }) ]}),
-                jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiH, onChange: function (e) { onChange('processingRoiH', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+                jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiH, onChange: function (e) { updateLocal('processingRoiH', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
               ]})
             ]})
           ]})
+        );
+      }
+
+      // Validation error display
+      if (applyError) {
+        items.push(
+          jsx('div', { key: 'err', className: 'pt-2', children:
+            jsx('p', { style: { color: '#ef4444', fontSize: '12px' }, children: applyError })
+          })
         );
       }
     }
