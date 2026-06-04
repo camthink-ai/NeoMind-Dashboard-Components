@@ -416,6 +416,7 @@ var NE101CameraPanel = (function () {
     // Transforms are persistent backend automations — created once, NOT deleted on unmount.
     // On mount: check if transform already exists for this device+extension, create if not.
     React.useEffect(function () {
+      console.log('[NE101 Transform] useEffect fired, processingEnabled=', processingEnabled, 'extensionId=', extensionId, 'device=', !!device);
       if (!processingEnabled || !extensionId || !device) return;
 
       var neomind = window.neomind;
