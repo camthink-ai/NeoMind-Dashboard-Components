@@ -76,27 +76,32 @@ var NE101CameraPanel = (function () {
   // ---------------------------------------------------------------------------
   // Extension profiles — which AI modes each extension supports
   // ---------------------------------------------------------------------------
-  var AI_EXT_IDS = ['locate-anything-v2', 'image-analyzer-v2', 'yolo-device-inference', 'face-recognition', 'ocr-device-inference'];
+  var AI_EXT_IDS = ['locate-anything-v2', 'image-analyzer-v2', 'yolo-device-inference', 'ocr-device-inference'];
 
+  // imageArg: extension's input parameter name for the image
+  //   'image_base64' = locate-anything-v2 style (expects raw base64 string)
+  //   'image' = most other extensions (expects base64 string under 'image' key)
+  // responseType: how the extension returns detection results
+  //   'boxes_x1y1x2y2' = { boxes: [{x1,y1,x2,y2}, ...] } (pixel coords)
+  //   'objects_bbox'   = { objects: [{label, confidence, bbox:{x,y,width,height}}] } (pixel coords)
+  //   'detections_bbox'= { detections: [{label, confidence, bbox:{x,y,width,height}}] } (pixel coords)
+  //   'ocr_text_blocks'= { success, data: { text_blocks: [{text,confidence,bbox:{x,y,width,height}}] } } (normalized 0-1)
   var EXT_MODES = {
     'locate-anything-v2': [
-      { id: 'object_detection', command: 'detect', label: 'Object Detection', desc: 'Detect objects by category', icon: '\u{1F50D}', args: ['categories'] },
-      { id: 'grounding', command: 'ground', label: 'Grounding', desc: 'Find objects by description', icon: '\u{1F3AF}', args: ['phrase'] },
-      { id: 'text_detection', command: 'detect_text', label: 'Text Detection', desc: 'Extract text from image', icon: '\u{1F4DD}', args: [] },
-      { id: 'ground_gui', command: 'ground_gui', label: 'UI Grounding', desc: 'Locate UI elements by description', icon: '\u{1F5A5}', args: ['phrase'] },
-      { id: 'point', command: 'point', label: 'Point', desc: 'Point to specific objects', icon: '\u{1F446}', args: ['phrase'] }
+      { id: 'object_detection', command: 'detect', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'Object Detection', desc: 'Detect objects by category', icon: '\u{1F50D}', args: ['categories'] },
+      { id: 'grounding', command: 'ground', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'Grounding', desc: 'Find objects by description', icon: '\u{1F3AF}', args: ['phrase'] },
+      { id: 'text_detection', command: 'detect_text', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'Text Detection', desc: 'Extract text from image', icon: '\u{1F4DD}', args: [] },
+      { id: 'ground_gui', command: 'ground_gui', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'UI Grounding', desc: 'Locate UI elements by description', icon: '\u{1F5A5}', args: ['phrase'] },
+      { id: 'point', command: 'point', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'Point', desc: 'Point to specific objects', icon: '\u{1F446}', args: ['phrase'] }
     ],
     'image-analyzer-v2': [
-      { id: 'object_detection', command: 'analyze_image', label: 'Object Detection', desc: 'YOLOv8 object detection', icon: '\u{1F50D}', args: [] }
+      { id: 'object_detection', command: 'analyze_image', imageArg: 'image', responseType: 'objects_bbox', label: 'Object Detection', desc: 'YOLOv8 object detection', icon: '\u{1F50D}', args: [] }
     ],
     'yolo-device-inference': [
-      { id: 'object_detection', command: 'recognize_image', label: 'Object Detection', desc: 'YOLOv8 device inference', icon: '\u{1F50D}', args: [] }
-    ],
-    'face-recognition': [
-      { id: 'object_detection', command: 'recognize_face', label: 'Face Detection', desc: 'Detect and recognize faces', icon: '\u{1F50D}', args: [] }
+      { id: 'object_detection', command: 'analyze_image', imageArg: 'image', responseType: 'detections_bbox', label: 'Object Detection', desc: 'YOLOv8 device inference', icon: '\u{1F50D}', args: [] }
     ],
     'ocr-device-inference': [
-      { id: 'text_detection', command: 'recognize_image', label: 'Text Detection', desc: 'OCR text recognition', icon: '\u{1F4DD}', args: [] }
+      { id: 'text_detection', command: 'recognize_image', imageArg: 'image', responseType: 'ocr_text_blocks', label: 'Text Detection', desc: 'OCR text recognition', icon: '\u{1F4DD}', args: [] }
     ]
   };
 
@@ -122,22 +127,120 @@ var NE101CameraPanel = (function () {
     }
   };
 
-  var TPL_INPUT = { image_base64: { from: 'values.imageUrl', convert: 'url_to_base64' } };
-
   /** Get the command for an extension + template combination */
   function getExtCommand(extensionId, templateName) {
+    var mode = getExtMode(extensionId, templateName);
+    return mode ? mode.command : 'detect';
+  }
+
+  /** Get a single mode definition for an extension + template */
+  function getExtMode(extensionId, templateName) {
     var modes = EXT_MODES[extensionId];
     if (modes) {
       for (var i = 0; i < modes.length; i++) {
-        if (modes[i].id === templateName) return modes[i].command;
+        if (modes[i].id === templateName) return modes[i];
       }
     }
-    return 'detect';
+    return null;
   }
 
   /** Get available modes for an extension */
   function getExtModes(extensionId) {
-    return EXT_MODES[extensionId] || [{ id: 'object_detection', command: 'detect', label: 'Object Detection', desc: 'Generic detection', icon: '\u{1F50D}' }];
+    return EXT_MODES[extensionId] || [{ id: 'object_detection', command: 'detect', imageArg: 'image', responseType: 'boxes_x1y1x2y2', label: 'Object Detection', desc: 'Generic detection', icon: '\u{1F50D}' }];
+  }
+
+  /**
+   * Build transform input mapping for an extension.
+   * locate-anything-v2 uses image_base64 key; all others use image key.
+   */
+  function buildInputMapping(extensionId, templateName) {
+    var mode = getExtMode(extensionId, templateName);
+    var arg = (mode && mode.imageArg) || 'image';
+    var mapping = {};
+    mapping[arg] = { from: 'values.imageUrl', convert: 'url_to_base64' };
+    return mapping;
+  }
+
+  /**
+   * Normalize extension response into a standard detections array.
+   * Returns: { detections: [{ bbox:[x1,y1,x2,y2], label, confidence }], texts?: string[], inferenceTimeMs?: number }
+   * bbox values are normalized 0-1.
+   */
+  function normalizeResponse(resp, responseType, imgW, imgH) {
+    if (!resp) return { detections: [] };
+    var w = imgW || 1;
+    var h = imgH || 1;
+    var dets = [];
+    var texts = null;
+    var inferenceTimeMs = null;
+
+    if (responseType === 'objects_bbox' && Array.isArray(resp.objects)) {
+      // image-analyzer-v2: { objects: [{ label, confidence, bbox: {x,y,width,height} }] }
+      inferenceTimeMs = resp.processing_time_ms;
+      for (var i = 0; i < resp.objects.length; i++) {
+        var obj = resp.objects[i];
+        var b = obj.bbox || {};
+        dets.push({
+          bbox: [b.x / w, b.y / h, (b.x + b.width) / w, (b.y + b.height) / h],
+          label: obj.label || '',
+          confidence: obj.confidence || null
+        });
+      }
+    } else if (responseType === 'detections_bbox' && Array.isArray(resp.detections)) {
+      // yolo-device-inference: { detections: [{ label, confidence, bbox: {x,y,width,height} }] }
+      inferenceTimeMs = resp.inference_time_ms;
+      for (var i = 0; i < resp.detections.length; i++) {
+        var det = resp.detections[i];
+        var b = det.bbox || {};
+        dets.push({
+          bbox: [b.x / w, b.y / h, (b.x + b.width) / w, (b.y + b.height) / h],
+          label: det.label || '',
+          confidence: det.confidence || null
+        });
+      }
+    } else if (responseType === 'ocr_text_blocks') {
+      // ocr-device-inference: { success, data: { text_blocks: [{ text, confidence, bbox: {x,y,width,height} }] } }
+      var data = resp.data || resp;
+      var blocks = Array.isArray(data.text_blocks) ? data.text_blocks : [];
+      inferenceTimeMs = data.inference_time_ms;
+      var textArr = [];
+      for (var i = 0; i < blocks.length; i++) {
+        var blk = blocks[i];
+        var b = blk.bbox || {};
+        // OCR bbox is already normalized 0-1
+        dets.push({
+          bbox: [b.x, b.y, b.x + b.width, b.y + b.height],
+          label: blk.text || '',
+          confidence: blk.confidence || null
+        });
+        if (blk.text) textArr.push(blk.text);
+      }
+      if (textArr.length > 0) texts = textArr;
+    } else if (Array.isArray(resp.boxes)) {
+      // locate-anything-v2: { boxes: [{x1,y1,x2,y2}], answer, inference_time_ms }
+      inferenceTimeMs = resp.inference_time_ms;
+      var answerStr = resp.answer || '';
+      var labels = [];
+      var refMatches = answerStr.match(/<ref>(.*?)<\/ref>/g);
+      if (refMatches) {
+        for (var ri = 0; ri < refMatches.length; ri++) {
+          labels.push(refMatches[ri].replace(/<\/?ref>/g, ''));
+        }
+      }
+      for (var i = 0; i < resp.boxes.length; i++) {
+        var box = resp.boxes[i];
+        dets.push({
+          bbox: [box.x1 / w, box.y1 / h, box.x2 / w, box.y2 / h],
+          label: labels[i] || '',
+          confidence: box.score || box.confidence || null
+        });
+      }
+    }
+
+    var result = { detections: dets };
+    if (texts) result.texts = texts;
+    if (inferenceTimeMs != null) result.inferenceTimeMs = inferenceTimeMs;
+    return result;
   }
 
   /**
@@ -146,9 +249,10 @@ var NE101CameraPanel = (function () {
   function fillTemplate(templateName, extensionId, procConfig) {
     var command = getExtCommand(extensionId, templateName);
     var output = TPL_OUTPUTS[templateName] || TPL_OUTPUTS.object_detection;
+    var inputMapping = buildInputMapping(extensionId, templateName);
     var config = {
       command: command,
-      input: JSON.parse(JSON.stringify(TPL_INPUT)),
+      input: inputMapping,
       output: JSON.parse(JSON.stringify(output))
     };
 
@@ -358,45 +462,35 @@ var NE101CameraPanel = (function () {
         var base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
         if (!base64) { if (!cancelled) setProcessingState('error'); return; }
 
-        // Build args for extension
-        var callArgs = { image_base64: base64 };
+        // Build args for extension using per-extension imageArg
+        var mode = getExtMode(extensionId, procTemplate);
+        var imageArg = (mode && mode.imageArg) || 'image';
+        var callArgs = {};
+        callArgs[imageArg] = base64;
         if (procCategories) callArgs.categories = procCategories;
         if (procPhrase) callArgs.phrase = procPhrase;
 
         neomind.callExtension(extensionId, command, callArgs).then(function (resp) {
           if (cancelled) return;
-          if (!resp || !Array.isArray(resp.boxes)) { setProcessingState('done'); return; }
 
           var imgW = img.naturalWidth || 1;
           var imgH = img.naturalHeight || 1;
-          var dets = [];
-          var labels = [];
-          var answerStr = resp.answer || '';
+          var respType = (mode && mode.responseType) || 'boxes_x1y1x2y2';
+          var norm = normalizeResponse(resp, respType, imgW, imgH);
 
-          // Extract labels from <ref>...</ref> tags
-          var refMatches = answerStr.match(/<ref>(.*?)<\/ref>/g);
-          if (refMatches) {
-            for (var ri = 0; ri < refMatches.length; ri++) {
-              labels.push(refMatches[ri].replace(/<\/?ref>/g, ''));
-            }
+          if (!norm.detections || norm.detections.length === 0) {
+            setProcessingState('done');
+            return;
           }
 
-          for (var bi = 0; bi < resp.boxes.length; bi++) {
-            var box = resp.boxes[bi];
-            dets.push({
-              bbox: [box.x1 / imgW, box.y1 / imgH, box.x2 / imgW, box.y2 / imgH],
-              label: labels[bi] || '',
-              confidence: box.score || box.confidence || null
-            });
-          }
-
-          setLocalDetections(dets);
+          setLocalDetections(norm.detections);
           setProcessingState('done');
-          if (resp.inference_time_ms != null) setInferenceTime(resp.inference_time_ms);
+          if (norm.inferenceTimeMs != null) setInferenceTime(norm.inferenceTimeMs);
 
           // Write back as virtual metric so dashboard can persist it
           if (neomind.writeMetric) {
-            neomind.writeMetric(device.id, 'virtual.detections', dets).catch(function () {});
+            neomind.writeMetric(device.id, 'virtual.detections', norm.detections).catch(function () {});
+            if (norm.texts) neomind.writeMetric(device.id, 'virtual.texts', norm.texts).catch(function () {});
           }
         }).catch(function () {
           if (!cancelled) setProcessingState('error');

@@ -313,11 +313,15 @@ The NE101 component supports a built-in AI processing pipeline that runs inferen
 
 ### Processing Templates
 
-| Template | Extension Command | Virtual Metrics |
-|----------|-------------------|-----------------|
-| `object_detection` | `detect` | `virtual.detections`, `virtual.total_count`, `virtual.count_by_class` |
-| `grounding` | `ground` | `virtual.detections` |
-| `text_detection` | `detect_text` | `virtual.detections`, `virtual.texts` |
+| Template | Extensions | Virtual Metrics |
+|----------|------------|-----------------|
+| `object_detection` | `locate-anything-v2` (`detect`), `image-analyzer-v2` (`analyze_image`), `yolo-device-inference` (`analyze_image`) | `virtual.detections`, `virtual.total_count`, `virtual.count_by_class` |
+| `grounding` | `locate-anything-v2` (`ground`) | `virtual.detections` |
+| `text_detection` | `locate-anything-v2` (`detect_text`), `ocr-device-inference` (`recognize_image`) | `virtual.detections`, `virtual.texts` |
+| `ground_gui` | `locate-anything-v2` (`ground_gui`) | `virtual.detections` |
+| `point` | `locate-anything-v2` (`point`) | `virtual.points` |
+
+Each extension uses a different input argument name and response format. The component normalizes all responses into a unified detection format (`{ bbox, label, confidence }`) with normalized 0–1 coordinates.
 
 ROI is a **standalone feature** enabled via `processingRoiEnabled`. When active, it adds `virtual.roi_count` and optionally modifies `virtual.detections` based on the `processingRoiAction` setting.
 
