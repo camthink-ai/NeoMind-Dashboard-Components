@@ -341,6 +341,9 @@ var NE101CameraPanel = (function () {
     var transformIdState = React.useState(null);
     var transformId = transformIdState[0];
     var setTransformId = transformIdState[1];
+    var transformIdRef = React.useRef(null);
+    // Keep ref in sync with state for cleanup access
+    transformIdRef.current = transformId;
 
     // Client-side processing state
     var procStateState = React.useState('idle');
@@ -504,8 +507,15 @@ var NE101CameraPanel = (function () {
         if (!cancelled) setExtStatus('error');
       });
 
-      // No cleanup — transforms persist across component lifecycle
-      return function () { cancelled = true; };
+      // Cleanup: delete associated transform when component unmounts
+      return function () {
+        cancelled = true;
+        var nm = window.neomind;
+        var tid = transformIdRef.current;
+        if (tid && nm && nm.deleteTransform) {
+          nm.deleteTransform(tid).catch(function () {});
+        }
+      };
     }, [device ? device.id : null, processingEnabled, extensionId, procTemplate, roiEnabled, roiAction]);
 
     // Reset lastProcessedRef when extension becomes active (fixes race condition)
