@@ -1203,66 +1203,40 @@ var NE101CameraPanel = (function () {
     var config = props.config || {};
     var onChange = props.onChange;
 
-    // Local state — initialized from props.config, only flushed to store on Apply
-    var initState = {
-      processingEnabled: config.processingEnabled === true,
-      processingExtensionId: config.processingExtensionId || '',
-      processingTemplate: config.processingTemplate || 'object_detection',
-      processingCategories: config.processingCategories || '',
-      processingPhrase: config.processingPhrase || '',
-      processingClassFilter: config.processingClassFilter || '',
-      processingRoiEnabled: config.processingRoiEnabled === true || (config.processingTemplate || '') === 'object_detection_roi',
-      processingRoiAction: config.processingRoiAction || 'count',
-      processingRoiX: config.processingRoiX != null ? config.processingRoiX : 0.1,
-      processingRoiY: config.processingRoiY != null ? config.processingRoiY : 0.1,
-      processingRoiW: config.processingRoiW != null ? config.processingRoiW : 0.8,
-      processingRoiH: config.processingRoiH != null ? config.processingRoiH : 0.8,
-    };
-    var localSt = React.useState(initState);
-    var local = localSt[0];
-    var setLocal = localSt[1];
-
-    // Re-sync local state when props.config changes externally (e.g. dialog reopened after save)
-    var configFp = JSON.stringify(initState);
-    var fpRef = React.useRef(configFp);
-    React.useEffect(function () {
-      if (fpRef.current !== configFp) {
-        fpRef.current = configFp;
-        setLocal(initState);
-      }
-    }, [configFp]);
-
-    function updateLocal(key, value) {
-      setLocal(function (prev) {
-        var next = Object.assign({}, prev);
-        next[key] = value;
-        // Auto-switch template when extension changes and current template is unavailable
-        if (key === 'processingExtensionId' && value) {
-          var modes = getExtModes(value);
-          if (modes.length > 0) {
-            var found = false;
-            for (var i = 0; i < modes.length; i++) {
-              if (modes[i].id === prev.processingTemplate) { found = true; break; }
-            }
-            if (!found) next.processingTemplate = modes[0].id;
-          }
-        }
-        return next;
-      });
+    // Helper: update a single config key via props.onChange (standard pattern)
+    function update(key, value) {
+      if (onChange) onChange(key, value);
     }
 
-    var enabled = local.processingEnabled;
-    var rawTemplate = local.processingTemplate || 'object_detection';
-    var template = rawTemplate === 'object_detection_roi' ? 'object_detection' : rawTemplate;
-    var roiEnabled = local.processingRoiEnabled || rawTemplate === 'object_detection_roi';
-    var roiAction = local.processingRoiAction || 'count';
-    var selectedExtId = local.processingExtensionId;
-    var roiX = local.processingRoiX;
-    var roiY = local.processingRoiY;
-    var roiW = local.processingRoiW;
-    var roiH = local.processingRoiH;
+    // Auto-switch template when extension changes and current template is unavailable
+    function updateExtension(id) {
+      update('processingExtensionId', id);
+      if (id) {
+        var modes = getExtModes(id);
+        if (modes.length > 0) {
+          var currentTemplate = config.processingTemplate || 'object_detection';
+          var found = false;
+          for (var i = 0; i < modes.length; i++) {
+            if (modes[i].id === currentTemplate) { found = true; break; }
+          }
+          if (!found) update('processingTemplate', modes[0].id);
+        }
+      }
+    }
 
-    // ROI editor state
+    // Derived values from config (no local state — config is the source of truth)
+    var enabled = config.processingEnabled === true;
+    var rawTemplate = config.processingTemplate || 'object_detection';
+    var template = rawTemplate === 'object_detection_roi' ? 'object_detection' : rawTemplate;
+    var roiEnabled = config.processingRoiEnabled === true || rawTemplate === 'object_detection_roi';
+    var roiAction = config.processingRoiAction || 'count';
+    var selectedExtId = config.processingExtensionId || '';
+    var roiX = config.processingRoiX != null ? config.processingRoiX : 0.1;
+    var roiY = config.processingRoiY != null ? config.processingRoiY : 0.1;
+    var roiW = config.processingRoiW != null ? config.processingRoiW : 0.8;
+    var roiH = config.processingRoiH != null ? config.processingRoiH : 0.8;
+
+    // ROI editor refs
     var roiRef = React.useRef(null);
     var dragRef = React.useRef(null);
 
@@ -1300,7 +1274,7 @@ var NE101CameraPanel = (function () {
       if (!found) validTemplate = availableModes[0].id;
     }
 
-    // ROI drag handler — updates local state only
+    // ROI drag handler — calls onChange for each position update
     function handleRoiMouseDown(e) {
       var el = roiRef.current; if (!el) return;
       var rect = el.getBoundingClientRect();
@@ -1332,66 +1306,15 @@ var NE101CameraPanel = (function () {
         nw = Math.max(0.05, nw); nh = Math.max(0.05, nh);
         nx2 = Math.max(0, Math.min(1 - nw, nx2));
         ny2 = Math.max(0, Math.min(1 - nh, ny2));
-        setLocal(function (prev) {
-          return Object.assign({}, prev, {
-            processingRoiX: Math.round(nx2 * 100) / 100,
-            processingRoiY: Math.round(ny2 * 100) / 100,
-            processingRoiW: Math.round(nw * 100) / 100,
-            processingRoiH: Math.round(nh * 100) / 100,
-          });
-        });
+        update('processingRoiX', Math.round(nx2 * 100) / 100);
+        update('processingRoiY', Math.round(ny2 * 100) / 100);
+        update('processingRoiW', Math.round(nw * 100) / 100);
+        update('processingRoiH', Math.round(nh * 100) / 100);
       }
       function onUp() { dragRef.current = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     }
-
-    // Apply handler — validate and flush all local changes to store
-    var applyErrorSt = React.useState('');
-    var applyError = applyErrorSt[0];
-    var setApplyError = applyErrorSt[1];
-
-    // Expose flush function on the bundle global so platform Save button can trigger it
-    var flushRef = React.useRef(null);
-    flushRef.current = function (flushOnChange) {
-      if (!local.processingEnabled) {
-        flushOnChange('processingEnabled', false);
-        return true;
-      }
-      // Validate required args
-      var mode = getExtMode(local.processingExtensionId, validTemplate);
-      var reqArgs = mode ? (mode.args || []) : [];
-      var errors = [];
-      for (var i = 0; i < reqArgs.length; i++) {
-        if (reqArgs[i] === 'categories' && !local.processingCategories.trim()) errors.push('Detection Categories is required');
-        if (reqArgs[i] === 'phrase' && !local.processingPhrase.trim()) errors.push('Search Phrase is required');
-      }
-      if (!local.processingExtensionId) errors.push('Please select an AI Extension');
-      if (errors.length > 0) {
-        setApplyError(errors.join('. '));
-        return false;
-      }
-      setApplyError('');
-      flushOnChange('processingEnabled', local.processingEnabled);
-      flushOnChange('processingExtensionId', local.processingExtensionId);
-      flushOnChange('processingTemplate', validTemplate);
-      flushOnChange('processingCategories', local.processingCategories);
-      flushOnChange('processingPhrase', local.processingPhrase);
-      flushOnChange('processingClassFilter', local.processingClassFilter);
-      flushOnChange('processingRoiEnabled', local.processingRoiEnabled);
-      flushOnChange('processingRoiAction', local.processingRoiAction);
-      flushOnChange('processingRoiX', local.processingRoiX);
-      flushOnChange('processingRoiY', local.processingRoiY);
-      flushOnChange('processingRoiW', local.processingRoiW);
-      flushOnChange('processingRoiH', local.processingRoiH);
-      return true;
-    };
-
-    React.useEffect(function () {
-      var g = window.NE101CameraPanel || {};
-      g._flushConfig = flushRef;
-      window.NE101CameraPanel = g;
-    }, []);
 
     var items = [];
 
@@ -1399,7 +1322,7 @@ var NE101CameraPanel = (function () {
     items.push(
       jsxs('div', { key: 'toggle', className: 'flex items-center justify-between', children: [
         jsx('label', { className: LABEL_CLS + ' cursor-pointer', children: 'Enable AI Processing' }),
-        SwitchControl(enabled, function () { updateLocal('processingEnabled', !enabled); })
+        SwitchControl(enabled, function () { update('processingEnabled', !enabled); })
       ]})
     );
 
@@ -1411,7 +1334,7 @@ var NE101CameraPanel = (function () {
           jsx(ExtDropdown, {
             extensions: extensions,
             value: selectedExtId,
-            onChange: function (id) { updateLocal('processingExtensionId', id); },
+            onChange: function (id) { updateExtension(id); },
             loading: extLoading
           }),
           extensions.length === 0 && !extLoading
@@ -1427,7 +1350,7 @@ var NE101CameraPanel = (function () {
           return jsx('button', {
             key: m.id,
             type: 'button',
-            onClick: function () { updateLocal('processingTemplate', m.id); },
+            onClick: function () { update('processingTemplate', m.id); },
             className: 'flex flex-col items-start gap-1 p-3 rounded-lg border text-left transition-colors ' +
               (selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-muted-foreground/30'),
             children: jsxs('div', { className: 'flex items-center gap-2', children: [
@@ -1457,7 +1380,7 @@ var NE101CameraPanel = (function () {
         items.push(
           jsxs('div', { key: 'cat', className: FIELD_CLS, children: [
             jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Detection Categories', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
-            jsx('input', { className: INPUT_CLS, value: local.processingCategories, placeholder: 'person, car, dog', onChange: function (e) { updateLocal('processingCategories', e.target.value); } }),
+            jsx('input', { className: INPUT_CLS, value: config.processingCategories || '', placeholder: 'person, car, dog', onChange: function (e) { update('processingCategories', e.target.value); } }),
             jsx('p', { className: DESC_CLS, children: 'Required for this mode (comma-separated)' })
           ]})
         );
@@ -1466,7 +1389,7 @@ var NE101CameraPanel = (function () {
         items.push(
           jsxs('div', { key: 'phrase', className: FIELD_CLS, children: [
             jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Search Phrase', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
-            jsx('input', { className: INPUT_CLS, value: local.processingPhrase, placeholder: 'Describe what to find', onChange: function (e) { updateLocal('processingPhrase', e.target.value); } }),
+            jsx('input', { className: INPUT_CLS, value: config.processingPhrase || '', placeholder: 'Describe what to find', onChange: function (e) { update('processingPhrase', e.target.value); } }),
             jsx('p', { className: DESC_CLS, children: 'Required for this mode' })
           ]})
         );
@@ -1476,7 +1399,7 @@ var NE101CameraPanel = (function () {
       items.push(
         jsxs('div', { key: 'cf', className: FIELD_CLS, children: [
           jsx('label', { className: LABEL_CLS, children: 'Class Filter' }),
-          jsx('input', { className: INPUT_CLS, value: local.processingClassFilter, placeholder: 'Empty = all classes', onChange: function (e) { updateLocal('processingClassFilter', e.target.value); } }),
+          jsx('input', { className: INPUT_CLS, value: config.processingClassFilter || '', placeholder: 'Empty = all classes', onChange: function (e) { update('processingClassFilter', e.target.value); } }),
           jsx('p', { className: DESC_CLS, children: 'Comma-separated class names to include' })
         ]})
       );
@@ -1485,7 +1408,7 @@ var NE101CameraPanel = (function () {
       items.push(
         jsxs('div', { key: 'roi-div', className: 'flex items-center justify-between pt-3 border-t', children: [
           jsx('label', { className: LABEL_CLS + ' cursor-pointer', children: 'Region of Interest (ROI)' }),
-          SwitchControl(roiEnabled, function () { updateLocal('processingRoiEnabled', !roiEnabled); })
+          SwitchControl(roiEnabled, function () { update('processingRoiEnabled', !roiEnabled); })
         ]})
       );
 
@@ -1495,7 +1418,7 @@ var NE101CameraPanel = (function () {
           return jsx('button', {
             key: a.id,
             type: 'button',
-            onClick: function () { updateLocal('processingRoiAction', a.id); },
+            onClick: function () { update('processingRoiAction', a.id); },
             className: 'px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ' +
               (selected ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-muted-foreground/30'),
             children: a.label
@@ -1536,31 +1459,22 @@ var NE101CameraPanel = (function () {
             jsxs('div', { key: 'sliders', className: 'grid grid-cols-2 gap-x-4 gap-y-2', children: [
               jsxs('div', { key: 'x', className: FIELD_CLS, children: [
                 jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'X' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiX.toFixed(2) }) ]}),
-                jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiX, onChange: function (e) { updateLocal('processingRoiX', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+                jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiX, onChange: function (e) { update('processingRoiX', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
               ]}),
               jsxs('div', { key: 'y', className: FIELD_CLS, children: [
                 jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Y' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiY.toFixed(2) }) ]}),
-                jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiY, onChange: function (e) { updateLocal('processingRoiY', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+                jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiY, onChange: function (e) { update('processingRoiY', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
               ]}),
               jsxs('div', { key: 'w', className: FIELD_CLS, children: [
                 jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Width' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiW.toFixed(2) }) ]}),
-                jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiW, onChange: function (e) { updateLocal('processingRoiW', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+                jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiW, onChange: function (e) { update('processingRoiW', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
               ]}),
               jsxs('div', { key: 'h', className: FIELD_CLS, children: [
                 jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Height' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiH.toFixed(2) }) ]}),
-                jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiH, onChange: function (e) { updateLocal('processingRoiH', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+                jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiH, onChange: function (e) { update('processingRoiH', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
               ]})
             ]})
           ]})
-        );
-      }
-
-      // Validation error display
-      if (applyError) {
-        items.push(
-          jsx('div', { key: 'err', className: 'pt-2', children:
-            jsx('p', { style: { color: '#ef4444', fontSize: '12px' }, children: applyError })
-          })
         );
       }
     }
