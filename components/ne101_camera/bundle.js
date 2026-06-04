@@ -357,11 +357,42 @@ var NE101CameraPanel = (function () {
 
     var lastProcessedRef = React.useRef('');
 
-    // Device telemetry comes from the platform's WS infrastructure via props.
-    // ComponentRenderer processes WS DeviceMetric events → store.updateDeviceMetric()
-    // → boundDeviceTelemetry selector → deviceContext.currentValues → props.
-    // No REST polling needed — the platform handles real-time updates.
-    var _vals = device ? (device.currentValues || {}) : {};
+    // WS-triggered fetch: platform WS delivers small metrics (battery, ts) in real-time,
+    // but large base64 images may exceed WS message size limits.
+    // Strategy: when WS updates device.currentValues (detected by ts change),
+    // trigger a single REST fetch to get the full data including the image.
+    var imageState = React.useState(null);
+    var imageData = imageState[0];
+    var setImageData = imageState[1];
+
+    var lastFetchTsRef = React.useRef(null);
+    var fetchingRef = React.useRef(false);
+
+    // Track latest device.currentValues (updated by WS via ComponentRenderer)
+    var wsValues = device ? (device.currentValues || {}) : {};
+    var wsTs = getFirst(wsValues, ['ts', 'values.ts', 'timestamp', 'values.timestamp']);
+
+    React.useEffect(function () {
+      if (!device || wsTs == null) return;
+      // Only fetch when ts actually changed (new telemetry from WS)
+      if (wsTs === lastFetchTsRef.current) return;
+      if (fetchingRef.current) return;
+
+      var neomind = window.neomind;
+      if (!neomind || typeof neomind.fetchDeviceValues !== 'function') return;
+
+      lastFetchTsRef.current = wsTs;
+      fetchingRef.current = true;
+
+      neomind.fetchDeviceValues(device.id).then(function (v) {
+        if (v) setImageData(v);
+      }).catch(function () {}).finally(function () {
+        fetchingRef.current = false;
+      });
+    }, [device ? device.id : null, wsTs]);
+
+    // Merge: WS values as base (real-time small metrics), REST image data overlay
+    var _vals = Object.assign({}, wsValues, imageData || {});
 
     // Early-extract imageSrc — device may send URL or base64
     var rawImageSrc = getFirst(_vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);

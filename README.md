@@ -118,9 +118,9 @@ When a device is bound, the component receives these additional props:
 
 ### Real-time Data Updates (WebSocket)
 
-**`device.currentValues` is updated in real-time by the platform.** Do NOT poll REST APIs or use `setInterval` to fetch device data.
+**`device.currentValues` is updated in real-time by the platform for small metrics.** However, large payloads (e.g., base64 images) may exceed WS message size limits and require a REST fetch.
 
-The platform's update flow:
+The platform's WS update flow:
 
 ```
 WS DeviceMetric event
@@ -130,18 +130,26 @@ WS DeviceMetric event
   → Component re-renders with new props
 ```
 
-Community components receive real-time updates automatically through this mechanism — the same WebSocket infrastructure used by built-in components. Simply read `device.currentValues` in your render logic and the component will re-render whenever new telemetry arrives.
+**Recommended pattern for image-heavy components** — WS-triggered fetch:
 
 ```javascript
-// ✅ Correct — use device.currentValues directly (auto-updated via WS)
-function Component(props) {
-  var device = props.deviceContext && props.deviceContext.device;
-  var values = device ? (device.currentValues || {}) : {};
-  var battery = values['values.battery'];
-  // ...
-}
+// ✅ Correct — WS triggers fetch only when new data arrives
+var wsValues = device ? (device.currentValues || {}) : {};
+var wsTs = wsValues['ts'];  // WS delivers small metrics in real-time
 
-// ❌ Wrong — do NOT poll REST APIs for real-time data
+React.useEffect(function () {
+  if (!device || wsTs == null) return;
+  if (wsTs === lastFetchTsRef.current) return;  // Skip if ts unchanged
+  lastFetchTsRef.current = wsTs;
+  // Fetch full data (including large images) only when WS says there's new data
+  neomind.fetchDeviceValues(device.id).then(function (v) { setImageData(v); });
+}, [device ? device.id : null, wsTs]);
+
+var _vals = Object.assign({}, wsValues, imageData || {});
+```
+
+```javascript
+// ❌ Wrong — do NOT blindly poll REST APIs
 var timer = setInterval(function () {
   neomind.fetchDeviceValues(device.id).then(function (v) { ... });
 }, 5000);
