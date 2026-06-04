@@ -112,75 +112,118 @@ var ClockWidget = (function () {
 
     var greeting = getGreeting(hours);
 
+    // Style constants — original typography preserved
+    var cardBg = {
+      borderRadius: '10px'
+    };
+
+    var greetingStyle = {
+      fontSize: '11px',
+      fontWeight: '500',
+      letterSpacing: '0.5px',
+      textTransform: 'uppercase'
+    };
+
+    var timeStyle = {
+      fontSize: '42px',
+      fontWeight: '200',
+      letterSpacing: '-1px',
+      lineHeight: '1',
+      fontVariantNumeric: 'tabular-nums'
+    };
+
+    var colonStyle = {
+      animation: 'clock-blink 2s ease-in-out infinite'
+    };
+
+    var secondsStyle = {
+      fontSize: '18px',
+      fontWeight: '300',
+      fontVariantNumeric: 'tabular-nums',
+      marginLeft: '4px',
+      verticalAlign: 'super',
+      lineHeight: '1'
+    };
+
+    var ampmStyle = {
+      fontSize: '12px',
+      fontWeight: '600',
+      marginLeft: '6px',
+      letterSpacing: '1px'
+    };
+
+    var dividerStyle = {
+      width: '32px',
+      height: '1px',
+      margin: '10px 0 8px 0'
+    };
+
+    var weekdayStyle = {
+      fontSize: '12px',
+      fontWeight: '500',
+      letterSpacing: '0.3px'
+    };
+
+    var dateStyle = {
+      fontSize: '12px',
+      fontWeight: '400'
+    };
+
+    var metaStyle = {
+      fontSize: '10px',
+      fontWeight: '400',
+      letterSpacing: '0.3px'
+    };
+
     return jsxs('div', {
-      className: 'flex flex-col h-full w-full select-none bg-muted-30 backdrop-blur-xl rounded-[10px] border border-glass-border',
-      style: {
-        padding: '16px 18px 14px 18px',
-        backgroundImage: 'linear-gradient(145deg, oklch(0.65 0.08 260 / 0.1), oklch(0.5 0.06 290 / 0.06))',
-        boxShadow: 'inset 0 1px 0 oklch(1 0 0 / 0.06), 0 4px 20px oklch(0 0 0 / 0.05)'
-      },
+      className: 'flex flex-col h-full w-full select-none bg-card border border-glass-border',
+      style: Object.assign({}, cardBg, { padding: '16px 18px 14px 18px' }),
       children: [
         // Greeting line
         jsxs('div', {
           key: 'greeting',
-          className: 'flex items-center gap-1.5 mb-3',
+          style: { display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' },
           children: [
-            jsx('span', { className: 'flex items-center', children: jsx(GreetingIcon, { hours: hours }) }),
-            jsx('span', { className: 'text-muted-foreground text-[11px] font-medium tracking-[0.5px] uppercase', children: greeting })
+            jsx('span', { style: { display: 'flex', alignItems: 'center' }, children: jsx(GreetingIcon, { hours: hours }) }),
+            jsx('span', { className: 'text-muted-foreground', style: greetingStyle, children: greeting })
           ]
         }),
 
         // Time display
         jsxs('div', {
           key: 'time',
-          className: 'flex items-baseline leading-none',
+          style: { display: 'flex', alignItems: 'baseline', lineHeight: '1' },
           children: [
-            jsx('span', { className: 'text-foreground text-[42px] font-extralight tracking-tight leading-none font-mono tabular-nums', children: h }),
-            jsx('span', {
-              className: 'text-muted-foreground text-[42px] font-extralight tracking-tight leading-none font-mono tabular-nums',
-              style: { animation: 'clock-blink 2s ease-in-out infinite' },
-              children: ':'
-            }),
-            jsx('span', { className: 'text-foreground text-[42px] font-extralight tracking-tight leading-none font-mono tabular-nums', children: m }),
-            showSeconds ? jsx('span', {
-              className: 'text-muted-foreground text-lg font-light font-mono tabular-nums leading-none',
-              style: { marginLeft: '4px', verticalAlign: 'super' },
-              children: s
-            }) : null,
-            is12 ? jsx('span', {
-              className: 'text-muted-foreground text-xs font-semibold',
-              style: { marginLeft: '6px', letterSpacing: '1px' },
-              children: ampm
-            }) : null
+            jsx('span', { className: 'text-foreground', style: timeStyle, children: h }),
+            jsx('span', { className: 'text-muted-foreground', style: Object.assign({}, timeStyle, colonStyle), children: ':' }),
+            jsx('span', { className: 'text-foreground', style: timeStyle, children: m }),
+            showSeconds ? jsx('span', { className: 'text-muted-foreground', style: secondsStyle, children: s }) : null,
+            is12 ? jsx('span', { className: 'text-muted-foreground', style: ampmStyle, children: ampm }) : null
           ]
         }),
 
         // Divider
-        jsx('div', {
-          key: 'divider',
-          className: 'w-8 h-px bg-border',
-          style: { margin: '10px 0 8px 0' }
-        }),
+        jsx('div', { key: 'divider', className: 'bg-border', style: dividerStyle }),
 
         // Date info
         jsxs('div', {
           key: 'date',
-          className: 'flex items-center gap-2',
+          style: { display: 'flex', alignItems: 'center', gap: '8px' },
           children: [
-            jsx('span', { className: 'text-foreground text-xs font-medium tracking-tight', children: weekday }),
-            jsx('span', { className: 'text-muted-foreground text-xs', children: '\u00B7' }),
-            jsxs('span', { className: 'text-muted-foreground text-xs font-normal', children: [month, ' ', date, ', ', year] })
+            jsx('span', { className: 'text-foreground', style: weekdayStyle, children: weekday }),
+            jsx('span', { className: 'text-muted-foreground', style: { opacity: 0.4 }, children: '\u00B7' }),
+            jsxs('span', { className: 'text-muted-foreground', style: dateStyle, children: [month, ' ', date, ', ', year] })
           ]
         }),
 
         // Meta line: week + timezone
         jsxs('div', {
           key: 'meta',
-          className: 'flex items-center gap-2 mt-1',
+          style: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' },
           children: [
-            jsxs('span', { className: 'text-muted-foreground text-[10px] font-normal tracking-tight', children: ['W', weekNum] }),
-            jsx('span', { className: 'text-muted-foreground text-[10px]', children: '\u00B7' }),
-            jsx('span', { className: 'text-muted-foreground text-[10px] font-normal tracking-tight', children: tzStr })
+            jsxs('span', { className: 'text-muted-foreground', style: metaStyle, children: ['W', weekNum] }),
+            jsx('span', { className: 'text-muted-foreground', style: { opacity: 0.3 }, children: '\u00B7' }),
+            jsx('span', { className: 'text-muted-foreground', style: metaStyle, children: tzStr })
           ]
         })
       ]
