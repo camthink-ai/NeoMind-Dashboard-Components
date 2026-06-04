@@ -300,8 +300,9 @@ var NE101CameraPanel = (function () {
   function NE101CameraPanel(props) {
     var config = props.config || {};
     var showCommands = config.showCommands !== false;
-    // Read location title from multiple possible sources
-    var location = config.displayTitle || config.location || '';
+    // Title: platform passes as props.title (from ComponentConfigDialog titleSection)
+    // Backward compat: also check config.displayTitle / config.location
+    var location = props.title || config.displayTitle || config.location || '';
 
     var deviceCtx = props.deviceContext;
     var device = deviceCtx && deviceCtx.device;
@@ -355,7 +356,13 @@ var NE101CameraPanel = (function () {
 
     // Early-extract imageSrc so the client-side processing useEffect can reference it
     var _vals = device ? (device.currentValues || {}) : {};
-    var imageSrc = getFirst(_vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
+    var rawImageSrc = getFirst(_vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
+    // Track a refresh counter tied to the device's ts metric to force image reload on new data
+    var imgTs = getFirst(_vals, ['ts', 'values.ts', 'timestamp', 'values.timestamp']);
+    var refreshKey = imgTs || 0;
+    var imageSrc = rawImageSrc
+      ? rawImageSrc + (rawImageSrc.indexOf('?') >= 0 ? '&' : '?') + '_t=' + refreshKey
+      : '';
 
     // Extension check + transform lifecycle (async, non-blocking)
     React.useEffect(function () {
@@ -418,13 +425,20 @@ var NE101CameraPanel = (function () {
       };
     }, [device ? device.id : null, processingEnabled, extensionId, procTemplate, roiEnabled, roiAction]);
 
+    // Reset lastProcessedRef when extension becomes active (fixes race condition)
+    React.useEffect(function () {
+      if (extStatus === 'active') {
+        lastProcessedRef.current = '';
+      }
+    }, [extStatus]);
+
     // Client-side processing: when new image arrives and no virtual detections, process directly
     React.useEffect(function () {
       if (!processingEnabled || !extensionId || !imageSrc) return;
       // Skip if already processed this image
       if (lastProcessedRef.current === imageSrc) return;
-      // Skip if extension is not usable (not installed, offline, or API unavailable)
-      if (extStatus === 'not_installed' || extStatus === 'offline' || extStatus === 'unavailable') return;
+      // Only process when extension is confirmed active (avoid wasted calls during checking)
+      if (extStatus !== 'active') return;
 
       var neomind = window.neomind;
       if (!neomind || typeof neomind.callExtension !== 'function') return;
@@ -917,20 +931,9 @@ var NE101CameraPanel = (function () {
   // ConfigPanel — Display tab
   // ---------------------------------------------------------------------------
   function ConfigPanel(props) {
-    var config = props.config || {};
-    var onChange = props.onChange;
-
-    return jsxs('div', { className: 'space-y-3', children: [
-      jsxs('div', { key: 'loc', className: FIELD_CLS, children: [
-        jsx('label', { className: LABEL_CLS, children: 'Display Title' }),
-        jsx('input', {
-          className: INPUT_CLS,
-          value: config.displayTitle || config.location || '',
-          placeholder: 'e.g. Front Door Camera',
-          onChange: function (e) { onChange('displayTitle', e.target.value); }
-        })
-      ]})
-    ]});
+    // Title field is provided by the platform (ComponentConfigDialog → titleSection)
+    // No custom fields needed — this keeps Display tab clean with just the platform title
+    return jsx('div', { className: 'space-y-3', children: null });
   }
 
 
