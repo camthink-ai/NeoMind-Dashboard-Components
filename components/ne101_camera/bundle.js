@@ -151,13 +151,16 @@ var NE101CameraPanel = (function () {
 
   /**
    * Build transform input mapping for an extension.
-   * locate-anything-v2 uses image_base64 key; all others use image key.
+   * Uses the image field path with url_to_base64 conversion.
+   * The backend's resolve_input_mapping auto-detects base64 and passes through.
    */
   function buildInputMapping(extensionId, templateName) {
     var mode = getExtMode(extensionId, templateName);
     var arg = (mode && mode.imageArg) || 'image';
     var mapping = {};
-    mapping[arg] = { from: 'values.imageUrl', convert: 'url_to_base64' };
+    // Use 'values.image' as primary source (base64 from device), fallback to imageUrl
+    // Backend resolve_input_mapping handles both URL and base64 automatically
+    mapping[arg] = { from: 'values.image', convert: 'url_to_base64' };
     return mapping;
   }
 
@@ -354,15 +357,21 @@ var NE101CameraPanel = (function () {
 
     var lastProcessedRef = React.useRef('');
 
-    // Early-extract imageSrc so the client-side processing useEffect can reference it
+    // Early-extract imageSrc — device may send URL or base64
     var _vals = device ? (device.currentValues || {}) : {};
     var rawImageSrc = getFirst(_vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
-    // Track a refresh counter tied to the device's ts metric to force image reload on new data
+    var isBase64Image = rawImageSrc && (rawImageSrc.indexOf('data:image') === 0 || !rawImageSrc.match(/^https?:\/\//));
+    // For URL images: append ts-based cache buster; for base64: use as-is (ts change triggers re-render via new imageSrc ref)
     var imgTs = getFirst(_vals, ['ts', 'values.ts', 'timestamp', 'values.timestamp']);
-    var refreshKey = imgTs || 0;
-    var imageSrc = rawImageSrc
-      ? rawImageSrc + (rawImageSrc.indexOf('?') >= 0 ? '&' : '?') + '_t=' + refreshKey
-      : '';
+    var imageSrc;
+    if (!rawImageSrc) {
+      imageSrc = '';
+    } else if (isBase64Image) {
+      // Ensure base64 has data URI prefix for <img> display
+      imageSrc = rawImageSrc.indexOf('data:') === 0 ? rawImageSrc : 'data:image/jpeg;base64,' + rawImageSrc;
+    } else {
+      imageSrc = rawImageSrc + (rawImageSrc.indexOf('?') >= 0 ? '&' : '?') + '_t=' + (imgTs || 0);
+    }
 
     // Extension check + transform lifecycle (async, non-blocking)
     React.useEffect(function () {
@@ -459,30 +468,28 @@ var NE101CameraPanel = (function () {
 
       // Resolve command from extension + template
       var command = getExtCommand(extensionId, procTemplate);
+      var mode = getExtMode(extensionId, procTemplate);
+      var imageArg = (mode && mode.imageArg) || 'image';
 
       var cancelled = false;
 
-      // Load image to get dimensions for coordinate normalization
+      // Extract pure base64 string (strip data URI prefix if present)
+      var rawB64 = rawImageSrc || '';
+      if (rawB64.indexOf('data:') === 0) {
+        var commaIdx = rawB64.indexOf(',');
+        if (commaIdx >= 0) rawB64 = rawB64.substring(commaIdx + 1);
+      }
+
+      // Build args for extension
+      var callArgs = {};
+      callArgs[imageArg] = rawB64;
+      if (procCategories) callArgs.categories = procCategories;
+      if (procPhrase) callArgs.phrase = procPhrase;
+
+      // Load image to get dimensions for coordinate normalization (async)
       var img = new Image();
-      img.crossOrigin = 'anonymous';
       img.onload = function () {
         if (cancelled) return;
-        var canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        var ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        var dataUrl = canvas.getContext('2d') ? canvas.toDataURL('image/jpeg', 0.85) : '';
-        var base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-        if (!base64) { if (!cancelled) setProcessingState('error'); return; }
-
-        // Build args for extension using per-extension imageArg
-        var mode = getExtMode(extensionId, procTemplate);
-        var imageArg = (mode && mode.imageArg) || 'image';
-        var callArgs = {};
-        callArgs[imageArg] = base64;
-        if (procCategories) callArgs.categories = procCategories;
-        if (procPhrase) callArgs.phrase = procPhrase;
 
         neomind.callExtension(extensionId, command, callArgs).then(function (resp) {
           if (cancelled) return;
