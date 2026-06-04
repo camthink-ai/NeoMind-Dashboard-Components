@@ -28,10 +28,10 @@
         "default": true,
         "title": "Show Command Buttons"
       },
-      "location": {
+      "displayTitle": {
         "type": "string",
         "default": "",
-        "title": "Location Title"
+        "title": "Display Title"
       },
       "processingEnabled": {
         "type": "boolean",
@@ -110,7 +110,7 @@
     },
     "ui_hints": {
       "field_order": [
-        "showMetrics", "showCommands", "location",
+        "showMetrics", "showCommands", "displayTitle",
         "processingEnabled", "processingExtensionId", "processingTemplate",
         "processingCategories", "processingPhrase", "processingClassFilter",
         "processingRoiEnabled", "processingRoiAction",
@@ -154,6 +154,7 @@
     "showMetrics": true,
     "showCommands": true,
     "location": "",
+    "displayTitle": "",
     "processingEnabled": false,
     "processingExtensionId": "",
     "processingTemplate": "object_detection",

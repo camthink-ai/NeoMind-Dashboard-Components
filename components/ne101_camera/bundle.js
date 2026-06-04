@@ -161,7 +161,7 @@ var NE101CameraPanel = (function () {
     var config = props.config || {};
     var showCommands = config.showCommands !== false;
     // Read location title from multiple possible sources
-    var location = config.location || '';
+    var location = config.displayTitle || config.location || '';
 
     var deviceCtx = props.deviceContext;
     var device = deviceCtx && deviceCtx.device;
@@ -802,12 +802,12 @@ var NE101CameraPanel = (function () {
         SwitchControl(config.showCommands !== false, function () { onChange('showCommands', config.showCommands === false); })
       ]}),
       jsxs('div', { key: 'loc', className: FIELD_CLS, children: [
-        jsx('label', { className: LABEL_CLS, children: 'Location Title' }),
+        jsx('label', { className: LABEL_CLS, children: 'Display Title' }),
         jsx('input', {
           className: INPUT_CLS,
-          value: config.location || '',
-          placeholder: 'e.g. Front Door',
-          onChange: function (e) { onChange('location', e.target.value); }
+          value: config.displayTitle || config.location || '',
+          placeholder: 'e.g. Front Door Camera',
+          onChange: function (e) { onChange('displayTitle', e.target.value); }
         })
       ]})
     ]});
