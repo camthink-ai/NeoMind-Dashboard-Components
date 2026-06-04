@@ -385,8 +385,14 @@ var NE101CameraPanel = (function () {
       fetchingRef.current = true;
 
       neomind.fetchDeviceValues(device.id).then(function (v) {
-        if (v) setImageData(v);
-      }).catch(function () {}).finally(function () {
+        if (v) {
+          var keys = Object.keys(v);
+          var hasValues = v.values && typeof v.values === 'object';
+          var imgKeys = hasValues ? Object.keys(v.values) : [];
+          console.log('[NE101] REST fetch returned keys:', keys.join(','), '| values keys:', imgKeys.join(',').substring(0, 200));
+          setImageData(v);
+        }
+      }).catch(function (e) { console.log('[NE101] REST fetch failed:', e); }).finally(function () {
         fetchingRef.current = false;
       });
     }, [device ? device.id : null, wsTs]);
@@ -397,6 +403,7 @@ var NE101CameraPanel = (function () {
     // Early-extract imageSrc — device may send URL or base64
     var rawImageSrc = getFirst(_vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
     var isBase64Image = rawImageSrc && (rawImageSrc.indexOf('data:image') === 0 || !rawImageSrc.match(/^https?:\/\//));
+    console.log('[NE101] rawImageSrc:', rawImageSrc ? (isBase64Image ? 'base64 len=' + rawImageSrc.length : 'url') : 'null', '| imageData:', !!imageData, '| wsTs:', wsTs);
     // For URL images: append ts-based cache buster; for base64: use as-is (ts change triggers re-render via new imageSrc ref)
     var imgTs = getFirst(_vals, ['ts', 'values.ts', 'timestamp', 'values.timestamp']);
     var imageSrc;
@@ -432,16 +439,18 @@ var NE101CameraPanel = (function () {
         for (var ei = 0; ei < extList.length; ei++) {
           if (extList[ei].id === extensionId) { matched = extList[ei]; break; }
         }
-        if (!matched) { setExtStatus('not_installed'); return; }
+        if (!matched) { setExtStatus('not_installed'); console.log('[NE101] Extension not found:', extensionId); return; }
         var stateLower = (matched.state || '').toLowerCase();
-        if (stateLower.indexOf('stopped') >= 0 || stateLower.indexOf('failed') >= 0 || stateLower.indexOf('error') >= 0) { setExtStatus('offline'); return; }
+        if (stateLower.indexOf('stopped') >= 0 || stateLower.indexOf('failed') >= 0 || stateLower.indexOf('error') >= 0) { setExtStatus('offline'); console.log('[NE101] Extension offline:', stateLower); return; }
         setExtStatus('active');
+        console.log('[NE101] Extension active, checking transforms...');
 
         // Check if transform already exists — avoid duplicates
         if (neomind.listTransforms) {
           return neomind.listTransforms({ scope: device.id }).then(function (transforms) {
             if (cancelled) return;
             var tList = Array.isArray(transforms) ? transforms : [];
+            console.log('[NE101] Found', tList.length, 'transforms, looking for:', transformName);
             for (var ti = 0; ti < tList.length; ti++) {
               if (tList[ti].name === transformName) {
                 // Already exists — reuse it
@@ -463,6 +472,7 @@ var NE101CameraPanel = (function () {
               args: Object.keys(transformArgs).length > 0 ? transformArgs : undefined,
               rule: { device_id: device.id, device_type: 'ne101_camera' }
             });
+            console.log('[NE101] Creating transform:', JSON.stringify(transformPayload).substring(0, 300));
             return neomind.createTransform(transformPayload);
           });
         }
@@ -484,9 +494,12 @@ var NE101CameraPanel = (function () {
         }
         return null;
       }).then(function (result) {
-        if (cancelled || !result) return;
+        if (cancelled) return;
+        if (!result) { console.log('[NE101] Transform result null (reused or skipped)'); return; }
+        console.log('[NE101] Transform created:', result.id, result.name);
         setTransformId(result.id);
-      }).catch(function () {
+      }).catch(function (e) {
+        console.log('[NE101] Transform error:', e);
         if (!cancelled) setExtStatus('error');
       });
 
@@ -507,7 +520,10 @@ var NE101CameraPanel = (function () {
       // Skip if already processed this image
       if (lastProcessedRef.current === imageSrc) return;
       // Only process when extension is confirmed active (avoid wasted calls during checking)
-      if (extStatus !== 'active') return;
+      if (extStatus !== 'active') {
+        console.log('[NE101] Processing skipped: extStatus=' + extStatus);
+        return;
+      }
 
       var neomind = window.neomind;
       if (!neomind || typeof neomind.callExtension !== 'function') return;
