@@ -7,7 +7,7 @@
   },
   "icon": "Camera",
   "category": "device",
-  "version": "2.10.2",
+  "version": "2.11.0",
   "author": "CamThink Team",
   "size_constraints": { "min_w": 2, "min_h": 2, "default_w": 3, "default_h": 3, "max_w": 6, "max_h": 6 },
   "has_data_source": false,

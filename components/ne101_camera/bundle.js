@@ -319,12 +319,6 @@ var NE101CameraPanel = (function () {
     // -- Processing pipeline state (must be declared before early return) --
     var processingEnabled = config.processingEnabled === true;
     var extensionId = config.processingExtensionId || '';
-    console.log('[NE101] Config:', JSON.stringify({
-      processingEnabled: processingEnabled,
-      extensionId: extensionId,
-      template: config.processingTemplate,
-      hasDevice: !!device
-    }));
     // Backward compat: object_detection_roi → object_detection + roiEnabled
     var rawTemplate = config.processingTemplate || 'object_detection';
     var procTemplate = rawTemplate === 'object_detection_roi' ? 'object_detection' : rawTemplate;
@@ -391,14 +385,8 @@ var NE101CameraPanel = (function () {
       fetchingRef.current = true;
 
       neomind.fetchDeviceValues(device.id).then(function (v) {
-        if (v) {
-          var keys = Object.keys(v);
-          var hasValues = v.values && typeof v.values === 'object';
-          var imgKeys = hasValues ? Object.keys(v.values) : [];
-          console.log('[NE101] REST fetch returned keys:', keys.join(','), '| values keys:', imgKeys.join(',').substring(0, 200));
-          setImageData(v);
-        }
-      }).catch(function (e) { console.log('[NE101] REST fetch failed:', e); }).finally(function () {
+        if (v) setImageData(v);
+      }).catch(function () {}).finally(function () {
         fetchingRef.current = false;
       });
     }, [device ? device.id : null, wsTs]);
@@ -409,7 +397,6 @@ var NE101CameraPanel = (function () {
     // Early-extract imageSrc — device may send URL or base64
     var rawImageSrc = getFirst(_vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
     var isBase64Image = rawImageSrc && (rawImageSrc.indexOf('data:image') === 0 || !rawImageSrc.match(/^https?:\/\//));
-    console.log('[NE101] rawImageSrc:', rawImageSrc ? (isBase64Image ? 'base64 len=' + rawImageSrc.length : 'url') : 'null', '| imageData:', !!imageData, '| wsTs:', wsTs);
     // For URL images: append ts-based cache buster; for base64: use as-is (ts change triggers re-render via new imageSrc ref)
     var imgTs = getFirst(_vals, ['ts', 'values.ts', 'timestamp', 'values.timestamp']);
     var imageSrc;
@@ -445,67 +432,75 @@ var NE101CameraPanel = (function () {
         for (var ei = 0; ei < extList.length; ei++) {
           if (extList[ei].id === extensionId) { matched = extList[ei]; break; }
         }
-        if (!matched) { setExtStatus('not_installed'); console.log('[NE101] Extension not found:', extensionId); return; }
+        if (!matched) { setExtStatus('not_installed'); return; }
         var stateLower = (matched.state || '').toLowerCase();
-        if (stateLower.indexOf('stopped') >= 0 || stateLower.indexOf('failed') >= 0 || stateLower.indexOf('error') >= 0) { setExtStatus('offline'); console.log('[NE101] Extension offline:', stateLower); return; }
+        if (stateLower.indexOf('stopped') >= 0 || stateLower.indexOf('failed') >= 0 || stateLower.indexOf('error') >= 0) { setExtStatus('offline'); return; }
         setExtStatus('active');
-        console.log('[NE101] Extension active, checking transforms...');
 
-        // Check if transform already exists — avoid duplicates
+        // Build desired transform config
+        var procConfigTpl = { roi: roi, roiAction: roiAction, classFilter: procClassFilter };
+        var tplConfig = fillTemplate(procTemplate, extensionId, procConfigTpl);
+        var transformArgs = {};
+        if (procCategories) transformArgs.categories = procCategories;
+        if (procPhrase) transformArgs.phrase = procPhrase;
+        var desiredPayload = Object.assign({}, tplConfig, {
+          name: transformName,
+          scope: device.id,
+          extension_id: extensionId,
+          args: Object.keys(transformArgs).length > 0 ? transformArgs : undefined,
+          rule: { device_id: device.id, device_type: 'ne101_camera' }
+        });
+        // Compute a config fingerprint to detect changes
+        var desiredFingerprint = JSON.stringify({ command: desiredPayload.command, input: desiredPayload.input, output: desiredPayload.output, args: desiredPayload.args });
+
+        // Check if transform already exists — update if config changed
         if (neomind.listTransforms) {
           return neomind.listTransforms({ scope: device.id }).then(function (transforms) {
             if (cancelled) return;
             var tList = Array.isArray(transforms) ? transforms : [];
-            console.log('[NE101] Found', tList.length, 'transforms, looking for:', transformName);
+            var existing = null;
             for (var ti = 0; ti < tList.length; ti++) {
-              if (tList[ti].name === transformName) {
-                // Already exists — reuse it
-                setTransformId(tList[ti].id);
-                return null; // skip creation
-              }
+              if (tList[ti].name === transformName) { existing = tList[ti]; break; }
             }
+
+            if (existing) {
+              // Check if config changed by comparing fingerprint stored in rule
+              var oldFingerprint = (existing.rule && existing.rule._fp) || '';
+              if (oldFingerprint === desiredFingerprint) {
+                // Same config — reuse
+                setTransformId(existing.id);
+                return null;
+              }
+              // Config changed — delete old, will recreate below
+              console.log('[NE101] Transform config changed, recreating:', existing.id);
+              if (neomind.deleteTransform) {
+                return neomind.deleteTransform(existing.id).then(function () {
+                  if (cancelled) return;
+                  if (!neomind.createTransform) return null;
+                  // Attach fingerprint to rule for future change detection
+                  desiredPayload.rule = Object.assign({}, desiredPayload.rule, { _fp: desiredFingerprint });
+                  return neomind.createTransform(desiredPayload);
+                });
+              }
+              return null;
+            }
+
             // Not found — create new transform
             if (!neomind.createTransform) return null;
-            var procConfigTpl = { roi: roi, roiAction: roiAction, classFilter: procClassFilter };
-            var tplConfig = fillTemplate(procTemplate, extensionId, procConfigTpl);
-            var transformArgs = {};
-            if (procCategories) transformArgs.categories = procCategories;
-            if (procPhrase) transformArgs.phrase = procPhrase;
-            var transformPayload = Object.assign({}, tplConfig, {
-              name: transformName,
-              scope: device.id,
-              extension_id: extensionId,
-              args: Object.keys(transformArgs).length > 0 ? transformArgs : undefined,
-              rule: { device_id: device.id, device_type: 'ne101_camera' }
-            });
-            console.log('[NE101] Creating transform:', JSON.stringify(transformPayload).substring(0, 300));
-            return neomind.createTransform(transformPayload);
+            desiredPayload.rule = Object.assign({}, desiredPayload.rule, { _fp: desiredFingerprint });
+            return neomind.createTransform(desiredPayload);
           });
         }
         // Fallback: no listTransforms, create directly
         if (neomind.createTransform) {
-          var procConfigTpl = { roi: roi, roiAction: roiAction, classFilter: procClassFilter };
-          var tplConfig = fillTemplate(procTemplate, extensionId, procConfigTpl);
-          var transformArgs = {};
-          if (procCategories) transformArgs.categories = procCategories;
-          if (procPhrase) transformArgs.phrase = procPhrase;
-          var transformPayload = Object.assign({}, tplConfig, {
-            name: transformName,
-            scope: device.id,
-            extension_id: extensionId,
-            args: Object.keys(transformArgs).length > 0 ? transformArgs : undefined,
-            rule: { device_id: device.id, device_type: 'ne101_camera' }
-          });
-          return neomind.createTransform(transformPayload);
+          desiredPayload.rule = Object.assign({}, desiredPayload.rule, { _fp: desiredFingerprint });
+          return neomind.createTransform(desiredPayload);
         }
         return null;
       }).then(function (result) {
-        if (cancelled) return;
-        if (!result) { console.log('[NE101] Transform result null (reused or skipped)'); return; }
-        console.log('[NE101] Transform created:', result.id, result.name);
+        if (cancelled || !result) return;
         setTransformId(result.id);
-      }).catch(function (e) {
-        console.log('[NE101] Transform error:', e);
+      }).catch(function () {
         if (!cancelled) setExtStatus('error');
       });
 
@@ -526,10 +521,7 @@ var NE101CameraPanel = (function () {
       // Skip if already processed this image
       if (lastProcessedRef.current === imageSrc) return;
       // Only process when extension is confirmed active (avoid wasted calls during checking)
-      if (extStatus !== 'active') {
-        console.log('[NE101] Processing skipped: extStatus=' + extStatus);
-        return;
-      }
+      if (extStatus !== 'active') return;
 
       var neomind = window.neomind;
       if (!neomind || typeof neomind.callExtension !== 'function') return;
@@ -1273,18 +1265,24 @@ var NE101CameraPanel = (function () {
       }
       var modeArgs = currentMode ? (currentMode.args || []) : [];
       if (modeArgs.indexOf('categories') >= 0) {
+        var catVal = config.processingCategories || '';
+        var catMissing = enabled && !catVal.trim();
         items.push(
           jsxs('div', { key: 'cat', className: FIELD_CLS, children: [
-            jsx('label', { className: LABEL_CLS, children: 'Detection Categories' }),
-            jsx('input', { className: INPUT_CLS, value: config.processingCategories || '', placeholder: 'person, car, dog', onChange: function (e) { onChange('processingCategories', e.target.value); } })
+            jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Detection Categories', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
+            jsx('input', { className: INPUT_CLS + (catMissing ? ' border-red-500 focus:ring-red-500' : ''), value: catVal, placeholder: 'person, car, dog', onChange: function (e) { onChange('processingCategories', e.target.value); } }),
+            catMissing ? jsx('p', { className: DESC_CLS, style: { color: '#ef4444' }, children: 'Required for this mode' }) : null
           ]})
         );
       }
       if (modeArgs.indexOf('phrase') >= 0) {
+        var phraseVal = config.processingPhrase || '';
+        var phraseMissing = enabled && !phraseVal.trim();
         items.push(
           jsxs('div', { key: 'phrase', className: FIELD_CLS, children: [
-            jsx('label', { className: LABEL_CLS, children: 'Search Phrase' }),
-            jsx('input', { className: INPUT_CLS, value: config.processingPhrase || '', placeholder: 'Describe what to find', onChange: function (e) { onChange('processingPhrase', e.target.value); } })
+            jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Search Phrase', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
+            jsx('input', { className: INPUT_CLS + (phraseMissing ? ' border-red-500 focus:ring-red-500' : ''), value: phraseVal, placeholder: 'Describe what to find', onChange: function (e) { onChange('processingPhrase', e.target.value); } }),
+            phraseMissing ? jsx('p', { className: DESC_CLS, style: { color: '#ef4444' }, children: 'Required for this mode' }) : null
           ]})
         );
       }
