@@ -944,6 +944,13 @@ var NE101CameraPanel = (function () {
         if (itMs != null && (maxInfTime == null || itMs > maxInfTime)) maxInfTime = itMs;
       }
 
+      // Calculate ROI from first pipeline with ROI enabled (for overlay display)
+      var roi = null;
+      for (var ri = 0; ri < pipelines.length; ri++) {
+        var r = pipeRoi(pipelines[ri]);
+        if (r != null) { roi = r; break; }
+      }
+
       var displayCount = vTotalCount != null ? vTotalCount : detections.length;
       var detLabels = detections.slice(0, 4).map(function (d) { return d.label || '?'; });
 
