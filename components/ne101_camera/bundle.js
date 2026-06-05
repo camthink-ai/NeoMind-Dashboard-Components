@@ -571,6 +571,12 @@ var NE101CameraPanel = (function () {
     // Single-extension Transform lifecycle
     // One Transform per component instance. Persist ID in config for reuse across remounts.
     var _storedTid = config._transformId || '';
+    // Full config hash: covers ALL fields that affect Transform JS code generation
+    var _configHash = processingExtId + ':' + processingTemplate + ':' +
+      (processingCategories || '') + ':' + (processingPhrase || '') + ':' + (processingClassFilter || '') + ':' +
+      (processingRoiEnabled ? '1' : '0') + ':' + (processingRoiAction || '') + ':' +
+      processingRoiX + ':' + processingRoiY + ':' + processingRoiW + ':' + processingRoiH + ':' +
+      JSON.stringify(processingRois);
     var _storedKey = config._transformKey || '';
     // Keep latest config in ref to avoid stale closure in async callbacks
     var configRef = React.useRef(config);
@@ -597,31 +603,48 @@ var NE101CameraPanel = (function () {
         return;
       }
 
-      var currentKey = processingExtId + ':' + processingTemplate;
+      var currentKey = _configHash;
+      // Extract ext+template prefix to detect pipeline switch vs config-only change
+      var currentPipeline = processingExtId + ':' + processingTemplate;
+      var storedPipeline = (_storedKey || '').split(':').slice(0, 2).join(':');
+      var pipelineChanged = storedPipeline !== currentPipeline;
+
       // Use ref as fallback — protects against race where onCfgChange hasn't propagated yet
       var activeId = _storedTid || transformIdRef.current || '';
 
-      // Fast path: same ext+template — just set ref, dedup, no update
+      // Fast path: exact same config hash — nothing to do
       if (activeId && _storedKey === currentKey) {
         transformIdRef.current = activeId;
         setExtStatus('active');
-        // Clean up duplicate transforms with same extension+template
-        var bizPfx = 'ne101:' + device.id + ':' + processingExtId + ':' + processingTemplate;
-        if (neomind.listTransforms) {
-          neomind.listTransforms({ scope: device.id }).then(function (transforms) {
-            if (!transforms) return;
-            var tList = Array.isArray(transforms) ? transforms : [];
-            for (var i = 0; i < tList.length; i++) {
-              var desc = tList[i].description || '';
-              if (desc.indexOf(bizPfx) === 0 && tList[i].id !== activeId) {
-                neomind.deleteTransform(tList[i].id).catch(function () {});
-              }
-            }
+        return;
+      }
+
+      // Config-only change (same pipeline, different ROI/categories/etc.) — lightweight update
+      if (activeId && !pipelineChanged) {
+        transformIdRef.current = activeId;
+        setExtStatus('active');
+        var mode = getExtMode(processingExtId, processingTemplate);
+        if (mode && neomind.updateTransform) {
+          var pipe = {
+            id: 'main', deviceId: device.id, extId: processingExtId, template: processingTemplate,
+            categories: processingCategories, phrase: processingPhrase, classFilter: processingClassFilter,
+            roiEnabled: processingRoiEnabled, roiAction: processingRoiAction,
+            roiX: processingRoiX, roiY: processingRoiY, roiW: processingRoiW, roiH: processingRoiH,
+            rois: processingRois
+          };
+          var tplCfg = fillTemplate(pipe);
+          var tName = 'ne101-' + device.id + '-' + processingExtId.replace(/-/g, '_') + '-' + processingTemplate;
+          neomind.updateTransform(activeId, {
+            name: tName, description: 'ne101:' + device.id + ':' + processingExtId + ':' + processingTemplate,
+            scope: device.id, js_code: tplCfg.js_code, output_prefix: tplCfg.output_prefix
+          }).then(function () {
+            if (props.onConfigChange) props.onConfigChange(Object.assign({}, configRef.current, { _transformId: activeId, _transformKey: currentKey }));
           }).catch(function () {});
         }
         return;
       }
 
+      // Pipeline changed (ext/template switch) — full path with extension check
       setExtStatus('checking');
       var cancelled = false;
       var onCfgChange = props.onConfigChange;
@@ -791,7 +814,7 @@ var NE101CameraPanel = (function () {
       return function () {
         cancelled = true;
       };
-    }, [device ? device.id : null, processingEnabled, processingExtId, processingTemplate, _storedTid, _storedKey]);
+    }, [device ? device.id : null, processingEnabled, _configHash, _storedTid, _storedKey]);
 
     if (!device) return jsx(NoDevice, {});
 
