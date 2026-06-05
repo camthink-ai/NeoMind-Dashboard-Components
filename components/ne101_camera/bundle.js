@@ -492,11 +492,19 @@ var NE101CameraPanel = (function () {
 
     // Single-extension Transform lifecycle
     React.useEffect(function () {
+      // Cancel pending delete if component remounted (page switch)
+      var pending = transformIdRef.current;
+      if (pending && pending._pendingDelete) {
+        clearTimeout(pending._timer);
+        transformIdRef.current = pending._pendingDelete; // restore ID
+      }
+
       if (!processingEnabled || !processingExtId || !device) {
         // Clean up transform if processing is disabled
         var nm = window.neomind;
         if (transformIdRef.current && nm && nm.deleteTransform) {
-          nm.deleteTransform(transformIdRef.current).catch(function () {});
+          var tid = typeof transformIdRef.current === 'string' ? transformIdRef.current : null;
+          if (tid) nm.deleteTransform(tid).catch(function () {});
           transformIdRef.current = null;
         }
         setExtStatus('idle');
@@ -653,9 +661,18 @@ var NE101CameraPanel = (function () {
 
       return function () {
         cancelled = true;
-        // Don't delete Transform on unmount — it should persist and keep processing data.
-        // Transform is updated/replaced when config changes (fingerprint comparison above),
-        // and deleted only when processing is explicitly disabled (early return above).
+        // Delayed cleanup: if component remounts quickly (page switch), cancel deletion.
+        // If component is truly removed, Transform is cleaned up after timeout.
+        var tid = transformIdRef.current;
+        if (tid) {
+          transformIdRef.current = null;
+          var deleteTimer = setTimeout(function () {
+            var nm = window.neomind;
+            if (nm && nm.deleteTransform) nm.deleteTransform(tid).catch(function () {});
+          }, 5000);
+          // Store timer so next mount can cancel it
+          transformIdRef.current = { _pendingDelete: tid, _timer: deleteTimer };
+        }
       };
     }, [device ? device.id : null, processingEnabled, processingExtId, processingTemplate]);
 
