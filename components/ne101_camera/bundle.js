@@ -1738,37 +1738,40 @@ var NE101CameraPanel = (function () {
               children: 'Clear All'
             })
           ]}),
-          // ROI list with name editing
+          // ROI regions list
           rois.length > 0
-            ? jsx('div', { className: 'space-y-1.5 mt-1.5', children:
+            ? jsx('div', { className: 'mt-2 space-y-1.5', children:
                 rois.map(function (roi, ri) {
                   return jsxs('div', {
-                    className: 'flex items-center gap-1.5',
+                    className: 'flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/40 border border-border',
                     children: [
                       jsx('div', {
-                        className: 'w-2.5 h-2.5 rounded-sm flex-shrink-0',
-                        style: { background: 'rgba(255,200,50,0.6)', border: '1px solid rgba(255,200,50,0.8)' }
+                        className: 'w-3 h-3 rounded flex-shrink-0 border',
+                        style: { background: 'rgba(255,200,50,0.35)', borderColor: 'rgba(255,200,50,0.7)' }
                       }),
-                      jsx('input', {
-                        className: 'h-6 px-1.5 rounded border border-border bg-background text-xs font-medium flex-1 min-w-0',
-                        style: { maxWidth: '120px' },
-                        value: roi.name || '',
-                        placeholder: 'ROI name',
-                        onChange: function (e) {
-                          var updated = rois.slice();
-                          updated[ri] = Object.assign({}, updated[ri], { name: e.target.value });
-                          update('processingRois', updated);
-                        }
-                      }),
-                      jsx('span', { className: 'text-xs text-muted-foreground', children: (roi.points || []).length + ' pts' }),
+                      jsxs('div', { className: 'flex-1 min-w-0', children: [
+                        jsx('input', {
+                          className: 'h-5 px-1.5 rounded border border-border bg-background text-xs font-medium w-full',
+                          value: roi.name || '',
+                          placeholder: 'Region name',
+                          onChange: function (e) {
+                            var updated = rois.slice();
+                            updated[ri] = Object.assign({}, updated[ri], { name: e.target.value });
+                            update('processingRois', updated);
+                          }
+                        })
+                      ]}),
+                      jsx('span', { className: 'text-[10px] text-muted-foreground tabular-nums flex-shrink-0', children: (roi.points || []).length + 'pts' }),
                       jsx('button', {
                         type: 'button',
                         onClick: function () {
                           var updated = rois.filter(function (_, i) { return i !== ri; });
                           update('processingRois', updated);
                         },
-                        className: 'text-red-400 hover:text-red-500 text-xs px-0.5',
-                        children: '\u00D7'
+                        className: 'flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors',
+                        children: jsx('svg', { width: '12', height: '12', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round', children:
+                          jsx('path', { d: 'M18 6 6 18M6 6l12 12' })
+                        })
                       })
                     ]
                   });
