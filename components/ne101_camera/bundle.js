@@ -491,14 +491,21 @@ var NE101CameraPanel = (function () {
     }
 
     // Single-extension Transform lifecycle
+    // Stores Transform ID in component config via onConfigChange for persistence across page switches.
+    // No listTransforms+search needed — ID is used directly for update/delete.
     React.useEffect(function () {
       if (!processingEnabled || !processingExtId || !device) {
-        // Clean up transform if processing is disabled
-        var nm = window.neomind;
-        if (transformIdRef.current && nm && nm.deleteTransform) {
-          nm.deleteTransform(transformIdRef.current).catch(function () {});
-          transformIdRef.current = null;
+        // Processing disabled — delete stored Transform and clear config
+        var storedTid = config.processingTransformId;
+        if (storedTid) {
+          var nm = window.neomind;
+          if (nm && nm.deleteTransform) {
+            console.log('[ne101] Processing disabled, deleting transform:', storedTid);
+            nm.deleteTransform(storedTid).catch(function () {});
+          }
+          if (props.onConfigChange) props.onConfigChange({ processingTransformId: '', processingTransformKey: '' });
         }
+        transformIdRef.current = null;
         setExtStatus('idle');
         return;
       }
@@ -512,6 +519,7 @@ var NE101CameraPanel = (function () {
 
       setExtStatus('checking');
       var cancelled = false;
+      var onCfgChange = props.onConfigChange;
 
       neomind.listExtensions().then(function (exts) {
         if (cancelled) return;
@@ -536,7 +544,6 @@ var NE101CameraPanel = (function () {
           return;
         }
 
-        console.log('[ne101] Extension active, creating transform...');
         setExtStatus('active');
 
         // Build transform config
@@ -554,7 +561,12 @@ var NE101CameraPanel = (function () {
           if (reqArgs[ai] === 'phrase' && !(processingPhrase || '').trim()) { missing = true; break; }
         }
         if (missing) {
-          console.warn('[ne101] Missing required args for transform', { extId: processingExtId, template: processingTemplate, reqArgs: reqArgs, categories: processingCategories, phrase: processingPhrase });
+          console.warn('[ne101] Missing required args for transform');
+          return;
+        }
+
+        if (!neomind.createTransform) {
+          console.error('[ne101] NeoMind Transform API not available');
           return;
         }
 
@@ -576,77 +588,97 @@ var NE101CameraPanel = (function () {
 
         var tplConfig = fillTemplate(pipe);
         var tName = 'ne101-' + device.id + '-' + processingExtId.replace(/-/g, '_') + '-' + processingTemplate;
-        var fp = JSON.stringify({ js_code: tplConfig.js_code });
-        // Business identifier: device + extension + template (stable, not name-based)
-        var bizId = 'ne101:' + device.id + ':' + processingExtId + ':' + processingTemplate;
+        var currentKey = processingExtId + ':' + processingTemplate;
         var payload = Object.assign({}, tplConfig, {
           name: tName,
           scope: device.id,
-          description: bizId + '\nfp:' + fp
+          description: 'ne101:' + device.id + ':' + processingExtId + ':' + processingTemplate
         });
 
-        console.log('[ne101] Creating transform:', tName);
+        var storedId = config.processingTransformId || '';
+        var storedKey = config.processingTransformKey || '';
 
-        // Sync transform: create or update
-        if (!neomind.listTransforms || !neomind.createTransform) {
-          console.error('[ne101] NeoMind Transform API not available');
-          return null;
-        }
-
-        return neomind.listTransforms({ scope: device.id }).then(function (transforms) {
-          if (cancelled) return;
-          var tList = Array.isArray(transforms) ? transforms : [];
-          var existing = null;
-          for (var ti = 0; ti < tList.length; ti++) {
-            // Match by business identifier (device+extension+template), not by name
-            var desc = (tList[ti].description || '');
-            if (desc.indexOf(bizId) === 0) { existing = tList[ti]; break; }
-          }
-
-          if (existing) {
-            // Check fingerprint for config changes
-            var oldFp = desc.split('\nfp:')[1] || '';
-            if (oldFp === fp) {
-              // Same config — reuse
-              console.log('[ne101] Transform exists with same config, reusing:', existing.id);
-              transformIdRef.current = existing.id;
-              return;
-            }
-            // Config changed — update
-            console.log('[ne101] Transform config changed, updating...');
-            if (neomind.updateTransform) {
-              return neomind.updateTransform(existing.id, {
-                name: payload.name,
-                description: payload.description,
-                scope: payload.scope,
-                js_code: payload.js_code,
-                output_prefix: payload.output_prefix
-              }).catch(function (err) {
-                console.error('[ne101] Update failed, recreating:', err);
-                // Transform may have been deleted — recreate
-                if (cancelled) return null;
-                return neomind.createTransform(payload);
-              }).then(function (result) {
-                if (result && result.id) {
-                  console.log('[ne101] Transform updated:', result.id);
-                  transformIdRef.current = result.id;
-                }
-              });
-            }
-          } else {
-            // Create new
-            console.log('[ne101] Creating new transform...');
-            return neomind.createTransform(payload).then(function (result) {
-              if (result && result.id) {
-                console.log('[ne101] Transform created:', result.id);
-                transformIdRef.current = result.id;
-              } else {
-                console.error('[ne101] Transform creation failed, no result');
-              }
+        // Case 1: Stored ID matches current key — reuse existing Transform
+        if (storedId && storedKey === currentKey) {
+          console.log('[ne101] Reusing stored transform:', storedId);
+          transformIdRef.current = storedId;
+          // Sync config (ROI, categories, etc. may have changed)
+          if (neomind.updateTransform) {
+            neomind.updateTransform(storedId, {
+              name: payload.name,
+              description: payload.description,
+              scope: payload.scope,
+              js_code: payload.js_code,
+              output_prefix: payload.output_prefix
             }).catch(function (err) {
-              console.error('[ne101] Transform creation error:', err);
+              if (cancelled) return;
+              // Transform may have been deleted externally — recreate
+              console.error('[ne101] Stored transform invalid, recreating:', err);
+              neomind.deleteTransform(storedId).catch(function () {});
+              if (onCfgChange) onCfgChange({ processingTransformId: '', processingTransformKey: '' });
+              neomind.createTransform(payload).then(function (result) {
+                if (cancelled) return;
+                if (result && result.id) {
+                  console.log('[ne101] Transform recreated:', result.id);
+                  transformIdRef.current = result.id;
+                  if (onCfgChange) onCfgChange({ processingTransformId: result.id, processingTransformKey: currentKey });
+                }
+              }).catch(function (err2) {
+                console.error('[ne101] Transform creation error:', err2);
+              });
             });
           }
+          return;
+        }
+
+        // Case 2: Key changed — delete old Transform
+        if (storedId && storedKey !== currentKey) {
+          console.log('[ne101] Extension/template changed, deleting old transform:', storedId);
+          neomind.deleteTransform(storedId).catch(function () {});
+        }
+
+        // Case 3: No stored ID (first time) — clean orphaned transforms from old versions
+        if (!storedId && neomind.listTransforms) {
+          neomind.listTransforms({ scope: device.id }).then(function (transforms) {
+            if (cancelled) return;
+            var tList = Array.isArray(transforms) ? transforms : [];
+            for (var ci = 0; ci < tList.length; ci++) {
+              var cDesc = (tList[ci].description || '');
+              if (cDesc.indexOf('ne101:') !== 0) {
+                console.log('[ne101] Cleaning orphaned transform:', tList[ci].id);
+                neomind.deleteTransform(tList[ci].id).catch(function () {});
+              }
+            }
+          }).catch(function () {});
+        }
+
+        // Create new Transform
+        console.log('[ne101] Creating new transform...');
+        neomind.createTransform(payload).then(function (result) {
+          if (cancelled) return;
+          if (result && result.id) {
+            console.log('[ne101] Transform created:', result.id);
+            transformIdRef.current = result.id;
+            // Persist ID to component config for reuse on remount
+            if (onCfgChange) onCfgChange({ processingTransformId: result.id, processingTransformKey: currentKey });
+            // Dedup: clean any stale transforms for this device (handles race conditions)
+            if (neomind.listTransforms) {
+              neomind.listTransforms({ scope: device.id }).then(function (fresh) {
+                if (cancelled) return;
+                var fList = Array.isArray(fresh) ? fresh : [];
+                for (var fi = 0; fi < fList.length; fi++) {
+                  if (fList[fi].id !== result.id) {
+                    console.log('[ne101] Removing stale transform:', fList[fi].id);
+                    neomind.deleteTransform(fList[fi].id).catch(function () {});
+                  }
+                }
+              }).catch(function () {});
+            }
+          } else {
+            console.error('[ne101] Transform creation failed, no result');
+          }
+        }).catch(function (err) {
+          console.error('[ne101] Transform creation error:', err);
         });
       }).catch(function () {
         if (!cancelled) setExtStatus('error');
@@ -654,14 +686,8 @@ var NE101CameraPanel = (function () {
 
       return function () {
         cancelled = true;
-        // Delete Transform on unmount (page switch, component deletion, config change).
-        // On remount, effect re-runs and creates/reuses Transform by stable name.
-        var tid = transformIdRef.current;
-        if (tid && typeof tid === 'string') {
-          transformIdRef.current = null;
-          var nm = window.neomind;
-          if (nm && nm.deleteTransform) nm.deleteTransform(tid).catch(function () {});
-        }
+        // Don't delete Transform on unmount — ID persists in config.processingTransformId.
+        // Transform is reused on remount or deleted when processing is disabled/config changes.
       };
     }, [device ? device.id : null, processingEnabled, processingExtId, processingTemplate]);
 
