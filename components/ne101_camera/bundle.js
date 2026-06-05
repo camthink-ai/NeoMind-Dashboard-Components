@@ -1284,10 +1284,9 @@ var NE101CameraPanel = (function () {
   // ---------------------------------------------------------------------------
 
   var ROI_ACTIONS = [
-    { id: 'count', label: 'Count', desc: 'Count objects in ROI' },
-    { id: 'count_by_class', label: 'Count by Class', desc: 'Per-class count in ROI' },
-    { id: 'filter', label: 'Inside', desc: 'Only show detections inside ROI' },
-    { id: 'filter_outside', label: 'Outside', desc: 'Only show detections outside ROI' }
+    { id: 'count', label: 'Count Only', desc: 'Show all detections, count per ROI' },
+    { id: 'filter', label: 'Inside Only', desc: 'Only show detections inside ROI' },
+    { id: 'filter_outside', label: 'Outside Only', desc: 'Only show detections outside ROI' }
   ];
 
   // shadcn-style dropdown (replaces native <select>)
