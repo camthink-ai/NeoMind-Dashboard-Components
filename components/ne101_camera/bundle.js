@@ -601,15 +601,15 @@ var NE101CameraPanel = (function () {
       if (activeId && _storedKey === currentKey) {
         transformIdRef.current = activeId;
         setExtStatus('active');
-        // Clean up stale ne101 transforms (from previous extension/template)
+        // Clean up duplicate transforms with same extension+template
+        var bizPfx = 'ne101:' + device.id + ':' + processingExtId + ':' + processingTemplate;
         if (neomind.listTransforms) {
           neomind.listTransforms({ scope: device.id }).then(function (transforms) {
             if (!transforms) return;
             var tList = Array.isArray(transforms) ? transforms : [];
-            var devicePrefix = 'ne101:' + device.id + ':';
             for (var i = 0; i < tList.length; i++) {
               var desc = tList[i].description || '';
-              if (desc.indexOf(devicePrefix) === 0 && tList[i].id !== activeId) {
+              if (desc.indexOf(bizPfx) === 0 && tList[i].id !== activeId) {
                 neomind.deleteTransform(tList[i].id).catch(function () {});
               }
             }
@@ -683,7 +683,6 @@ var NE101CameraPanel = (function () {
         });
 
         var bizPrefix = 'ne101:' + device.id + ':' + processingExtId + ':' + processingTemplate;
-        var devicePrefix = 'ne101:' + device.id + ':';
 
         // Helper: persist Transform ID to config
         var persistId = function (id) {
@@ -699,7 +698,8 @@ var NE101CameraPanel = (function () {
             var tList = Array.isArray(transforms) ? transforms : [];
             for (var i = 0; i < tList.length; i++) {
               var desc = tList[i].description || '';
-              if (desc.indexOf(devicePrefix) === 0 && tList[i].id !== keepId) {
+              // Only delete duplicates of SAME extension+template, not other components' transforms
+              if (desc.indexOf(bizPrefix) === 0 && tList[i].id !== keepId) {
                 neomind.deleteTransform(tList[i].id).catch(function () {});
               }
             }
