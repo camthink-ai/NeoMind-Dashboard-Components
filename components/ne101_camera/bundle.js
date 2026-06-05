@@ -416,6 +416,10 @@ var NE101CameraPanel = (function () {
 
     // Track transform ID for cleanup
     var transformIdRef = React.useRef(null); // single transform ID
+    // Pending delete timers: { transformId: timerId }
+    // Used to delay Transform deletion on unmount — remount (page switch) cancels the timer.
+    // If no remount within 3s (component truly deleted), delete proceeds.
+    var pendingDeletes = React.useRef({});
 
     // Cache last known detections — platform store may wipe virtual metrics
     // on batch telemetry updates (_applyCurrentValuesBatch replaces entire entry).
@@ -600,6 +604,12 @@ var NE101CameraPanel = (function () {
 
         // Case 1: Stored ID matches current key — reuse existing Transform
         if (storedId && storedKey === currentKey) {
+          // Cancel pending delete from previous unmount (page switch back)
+          if (pendingDeletes.current[storedId]) {
+            clearTimeout(pendingDeletes.current[storedId]);
+            delete pendingDeletes.current[storedId];
+            console.log('[ne101] Cancelled pending delete for:', storedId);
+          }
           console.log('[ne101] Reusing stored transform:', storedId);
           transformIdRef.current = storedId;
           // Sync config (ROI, categories, etc. may have changed)
@@ -688,8 +698,19 @@ var NE101CameraPanel = (function () {
 
       return function () {
         cancelled = true;
-        // Don't delete Transform on unmount — ID persists in config.processingTransformId.
-        // Transform is reused on remount or deleted when processing is disabled/config changes.
+        // Delayed delete: if component remounts within 3s (page switch), it cancels the timer.
+        // If no remount (component truly deleted from dashboard), Transform is cleaned up.
+        var tid = transformIdRef.current;
+        if (tid) {
+          var nm = window.neomind;
+          pendingDeletes.current[tid] = setTimeout(function () {
+            delete pendingDeletes.current[tid];
+            if (nm && nm.deleteTransform) {
+              console.log('[ne101] Deleting transform (component removed):', tid);
+              nm.deleteTransform(tid).catch(function () {});
+            }
+          }, 3000);
+        }
       };
     }, [device ? device.id : null, processingEnabled, processingExtId, processingTemplate]);
 
