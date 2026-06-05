@@ -783,6 +783,14 @@ var NE101CameraPanel = (function () {
 
       return function () {
         cancelled = true;
+        // Component unmounting (removed from dashboard) — delete Transform
+        var tid = transformIdRef.current || _storedTid;
+        if (tid) {
+          var nm = window.neomind;
+          if (nm && nm.deleteTransform) {
+            nm.deleteTransform(tid).catch(function () {});
+          }
+        }
       };
     }, [device ? device.id : null, processingEnabled, processingExtId, processingTemplate, _storedTid, _storedKey]);
 
