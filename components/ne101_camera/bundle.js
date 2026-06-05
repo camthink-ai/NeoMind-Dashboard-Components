@@ -73,6 +73,52 @@ var NE101CameraPanel = (function () {
     });
   }
 
+  // SVG icons for AI mode cards (Lucide-style)
+  var _iconBase = { fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round' };
+  function ModeIcon(type) {
+    switch (type) {
+      case 'search':
+        return jsx('svg', Object.assign({}, _iconBase, { width: '18', height: '18', viewBox: '0 0 24 24', children:
+          jsxs('g', { children: [
+            jsx('circle', { cx: '11', cy: '11', r: '8' }),
+            jsx('path', { d: 'm21 21-4.3-4.3' })
+          ]})
+        }));
+      case 'target':
+        return jsx('svg', Object.assign({}, _iconBase, { width: '18', height: '18', viewBox: '0 0 24 24', children:
+          jsxs('g', { children: [
+            jsx('circle', { cx: '12', cy: '12', r: '10' }),
+            jsx('circle', { cx: '12', cy: '12', r: '6' }),
+            jsx('circle', { cx: '12', cy: '12', r: '2' })
+          ]})
+        }));
+      case 'text':
+        return jsx('svg', Object.assign({}, _iconBase, { width: '18', height: '18', viewBox: '0 0 24 24', children:
+          jsxs('g', { children: [
+            jsx('path', { d: 'M4 7V4h16v3' }),
+            jsx('path', { d: 'M9 20h6' }),
+            jsx('path', { d: 'M12 4v16' })
+          ]})
+        }));
+      case 'monitor':
+        return jsx('svg', Object.assign({}, _iconBase, { width: '18', height: '18', viewBox: '0 0 24 24', children:
+          jsxs('g', { children: [
+            jsx('rect', { x: '2', y: '3', width: '20', height: '14', rx: '2' }),
+            jsx('path', { d: 'M8 21h8' }),
+            jsx('path', { d: 'M12 17v4' })
+          ]})
+        }));
+      case 'cursor':
+        return jsx('svg', Object.assign({}, _iconBase, { width: '18', height: '18', viewBox: '0 0 24 24', children:
+          jsx('path', { d: 'm4 4 7.07 17 2.51-7.39L21 11.07z' })
+        }));
+      default:
+        return jsx('svg', Object.assign({}, _iconBase, { width: '18', height: '18', viewBox: '0 0 24 24', children:
+          jsx('circle', { cx: '12', cy: '12', r: '10' })
+        }));
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Extension profiles — which AI modes each extension supports
   // ---------------------------------------------------------------------------
@@ -88,50 +134,22 @@ var NE101CameraPanel = (function () {
   //   'ocr_text_blocks'= { success, data: { text_blocks: [{text,confidence,bbox:{x,y,width,height}}] } } (normalized 0-1)
   var EXT_MODES = {
     'locate-anything-v2': [
-      { id: 'object_detection', command: 'detect', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'Object Detection', desc: 'Detect objects by category', icon: '\u{1F50D}', args: ['categories'] },
-      { id: 'grounding', command: 'ground', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'Grounding', desc: 'Find objects by description', icon: '\u{1F3AF}', args: ['phrase'] },
-      { id: 'text_detection', command: 'detect_text', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'Text Detection', desc: 'Extract text from image', icon: '\u{1F4DD}', args: [] },
-      { id: 'ground_gui', command: 'ground_gui', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'UI Grounding', desc: 'Locate UI elements by description', icon: '\u{1F5A5}', args: ['phrase'] },
-      { id: 'point', command: 'point', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'Point', desc: 'Point to specific objects', icon: '\u{1F446}', args: ['phrase'] }
+      { id: 'object_detection', command: 'detect', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'Object Detection', desc: 'Detect objects by category', icon: 'search', args: ['categories'] },
+      { id: 'grounding', command: 'ground', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'Grounding', desc: 'Find objects by description', icon: 'target', args: ['phrase'] },
+      { id: 'text_detection', command: 'detect_text', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'Text Detection', desc: 'Extract text from image', icon: 'text', args: [] },
+      { id: 'ground_gui', command: 'ground_gui', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'UI Grounding', desc: 'Locate UI elements by description', icon: 'monitor', args: ['phrase'] },
+      { id: 'point', command: 'point', imageArg: 'image_base64', responseType: 'boxes_x1y1x2y2', label: 'Point', desc: 'Point to specific objects', icon: 'cursor', args: ['phrase'] }
     ],
     'image-analyzer-v2': [
-      { id: 'object_detection', command: 'analyze_image', imageArg: 'image', responseType: 'objects_bbox', label: 'Object Detection', desc: 'YOLOv8 object detection', icon: '\u{1F50D}', args: [] }
+      { id: 'object_detection', command: 'analyze_image', imageArg: 'image', responseType: 'objects_bbox', label: 'Object Detection', desc: 'YOLOv8 object detection', icon: 'search', args: [] }
     ],
     'yolo-device-inference': [
-      { id: 'object_detection', command: 'analyze_image', imageArg: 'image', responseType: 'detections_bbox', label: 'Object Detection', desc: 'YOLOv8 device inference', icon: '\u{1F50D}', args: [] }
+      { id: 'object_detection', command: 'analyze_image', imageArg: 'image', responseType: 'detections_bbox', label: 'Object Detection', desc: 'YOLOv8 device inference', icon: 'search', args: [] }
     ],
     'ocr-device-inference': [
-      { id: 'text_detection', command: 'recognize_image', imageArg: 'image', responseType: 'ocr_text_blocks', label: 'Text Detection', desc: 'OCR text recognition', icon: '\u{1F4DD}', args: [] }
+      { id: 'text_detection', command: 'recognize_image', imageArg: 'image', responseType: 'ocr_text_blocks', label: 'Text Detection', desc: 'OCR text recognition', icon: 'text', args: [] }
     ]
   };
-
-  // Output mapping per template type (independent of extension)
-  var TPL_OUTPUTS = {
-    object_detection: {
-      'virtual.detections': { from: 'boxes', normalize: true },
-      'virtual.total_count': { from: 'boxes', transform: 'count' },
-      'virtual.count_by_class': { from: 'boxes', transform: 'count_by_class' }
-    },
-    grounding: {
-      'virtual.detections': { from: 'boxes', normalize: true }
-    },
-    text_detection: {
-      'virtual.detections': { from: 'boxes', normalize: true },
-      'virtual.texts': { from: 'answer', transform: 'extract_texts' }
-    },
-    ground_gui: {
-      'virtual.detections': { from: 'boxes', normalize: true }
-    },
-    point: {
-      'virtual.points': { from: 'points' }
-    }
-  };
-
-  /** Get the command for an extension + template combination */
-  function getExtCommand(extensionId, templateName) {
-    var mode = getExtMode(extensionId, templateName);
-    return mode ? mode.command : 'detect';
-  }
 
   /** Get a single mode definition for an extension + template */
   function getExtMode(extensionId, templateName) {
@@ -146,143 +164,234 @@ var NE101CameraPanel = (function () {
 
   /** Get available modes for an extension */
   function getExtModes(extensionId) {
-    return EXT_MODES[extensionId] || [{ id: 'object_detection', command: 'detect', imageArg: 'image', responseType: 'boxes_x1y1x2y2', label: 'Object Detection', desc: 'Generic detection', icon: '\u{1F50D}' }];
+    return EXT_MODES[extensionId] || [{ id: 'object_detection', command: 'detect', imageArg: 'image', responseType: 'boxes_x1y1x2y2', label: 'Object Detection', desc: 'Generic detection', icon: 'search' }];
   }
 
   /**
-   * Build transform input mapping for an extension.
-   * Uses the image field path with url_to_base64 conversion.
-   * The backend's resolve_input_mapping auto-detects base64 and passes through.
+   * Migrate legacy single-extension config to multi-pipeline format.
+   * Returns array of pipeline objects:
+   *   { id, extId, template, categories, phrase, classFilter, roiEnabled, roiAction, roiX, roiY, roiW, roiH }
    */
-  function buildInputMapping(extensionId, templateName) {
+  function migrateToPipelines(config) {
+    // Already migrated
+    if (Array.isArray(config.processingPipelines)) return config.processingPipelines;
+
+    // Legacy single-extension config
+    var extId = config.processingExtensionId;
+    if (!extId) return [];
+
+    var rawTemplate = config.processingTemplate || 'object_detection';
+    var template = rawTemplate === 'object_detection_roi' ? 'object_detection' : rawTemplate;
+    var roiEnabled = config.processingRoiEnabled === true || rawTemplate === 'object_detection_roi';
+
+    return [{
+      id: 'p0',
+      extId: extId,
+      template: template,
+      categories: config.processingCategories || '',
+      phrase: config.processingPhrase || '',
+      classFilter: config.processingClassFilter || '',
+      roiEnabled: roiEnabled,
+      roiAction: config.processingRoiAction || 'count',
+      roiX: config.processingRoiX != null ? config.processingRoiX : 0.1,
+      roiY: config.processingRoiY != null ? config.processingRoiY : 0.1,
+      roiW: config.processingRoiW != null ? config.processingRoiW : 0.8,
+      roiH: config.processingRoiH != null ? config.processingRoiH : 0.8
+    }];
+  }
+
+  /** Generate a unique pipeline ID */
+  var _pipeIdCounter = 0;
+  function nextPipeId() {
+    return 'p' + (++_pipeIdCounter) + '_' + Date.now();
+  }
+
+  /** Build ROI object from a pipeline config */
+  function pipeRoi(pipe) {
+    if (!pipe.roiEnabled) return null;
+    if (pipe.roiX == null || pipe.roiY == null) return null;
+    return { x: pipe.roiX, y: pipe.roiY, w: pipe.roiW || 0.8, h: pipe.roiH || 0.8 };
+  }
+
+  /**
+   * Generate a js_code string for a single pipeline in a TransformAutomation.
+   * Uses extensions.invoke() for AI extension calls.
+   * Virtual metrics are namespaced: virtual.{ext_id}.{metric}
+   *
+   * @param {object} pipe - A pipeline config object { extId, template, categories, phrase, classFilter, roiEnabled, roiAction, roiX/Y/W/H }
+   */
+  function generateTransformJsCode(pipe) {
+    var extensionId = pipe.extId;
+    // Remove any 'virtual' prefix in various formats (defensive)
+    if (extensionId.indexOf('virtual') === 0) {
+      // Handle: virtual-xxx, virtual.xxx, virtual_xxx
+      extensionId = extensionId.replace(/^virtual[._-]/, '');
+    }
+    var templateName = pipe.template;
     var mode = getExtMode(extensionId, templateName);
-    var arg = (mode && mode.imageArg) || 'image';
-    var mapping = {};
-    // Use 'values.image' as primary source (base64 from device), fallback to imageUrl
-    // Backend resolve_input_mapping handles both URL and base64 automatically
-    mapping[arg] = { from: 'values.image', convert: 'url_to_base64' };
-    return mapping;
-  }
+    if (!mode) return '';
 
-  /**
-   * Normalize extension response into a standard detections array.
-   * Returns: { detections: [{ bbox:[x1,y1,x2,y2], label, confidence }], texts?: string[], inferenceTimeMs?: number }
-   * bbox values are normalized 0-1.
-   */
-  function normalizeResponse(resp, responseType, imgW, imgH) {
-    if (!resp) return { detections: [] };
-    var w = imgW || 1;
-    var h = imgH || 1;
-    var dets = [];
-    var texts = null;
-    var inferenceTimeMs = null;
+    var extKey = extensionId.replace(/-/g, '_');
+    var pfx = extKey + '.';
+    var imageArg = mode.imageArg;
+    var hasCats = (mode.args || []).indexOf('categories') >= 0 && pipe.categories;
+    var hasPhrase = (mode.args || []).indexOf('phrase') >= 0 && pipe.phrase;
+    var roi = pipeRoi(pipe);
+    var roiAction = pipe.roiAction || 'count';
+    var classFilter = pipe.classFilter;
 
-    if (responseType === 'objects_bbox' && Array.isArray(resp.objects)) {
-      // image-analyzer-v2: { objects: [{ label, confidence, bbox: {x,y,width,height} }] }
-      inferenceTimeMs = resp.processing_time_ms;
-      for (var i = 0; i < resp.objects.length; i++) {
-        var obj = resp.objects[i];
-        var b = obj.bbox || {};
-        dets.push({
-          bbox: [b.x / w, b.y / h, (b.x + b.width) / w, (b.y + b.height) / h],
-          label: obj.label || '',
-          confidence: obj.confidence || null
-        });
-      }
-    } else if (responseType === 'detections_bbox' && Array.isArray(resp.detections)) {
-      // yolo-device-inference: { detections: [{ label, confidence, bbox: {x,y,width,height} }] }
-      inferenceTimeMs = resp.inference_time_ms;
-      for (var i = 0; i < resp.detections.length; i++) {
-        var det = resp.detections[i];
-        var b = det.bbox || {};
-        dets.push({
-          bbox: [b.x / w, b.y / h, (b.x + b.width) / w, (b.y + b.height) / h],
-          label: det.label || '',
-          confidence: det.confidence || null
-        });
-      }
-    } else if (responseType === 'ocr_text_blocks') {
-      // ocr-device-inference: { success, data: { text_blocks: [{ text, confidence, bbox: {x,y,width,height} }] } }
-      var data = resp.data || resp;
-      var blocks = Array.isArray(data.text_blocks) ? data.text_blocks : [];
-      inferenceTimeMs = data.inference_time_ms;
-      var textArr = [];
-      for (var i = 0; i < blocks.length; i++) {
-        var blk = blocks[i];
-        var b = blk.bbox || {};
-        // OCR bbox is already normalized 0-1
-        dets.push({
-          bbox: [b.x, b.y, b.x + b.width, b.y + b.height],
-          label: blk.text || '',
-          confidence: blk.confidence || null
-        });
-        if (blk.text) textArr.push(blk.text);
-      }
-      if (textArr.length > 0) texts = textArr;
-    } else if (Array.isArray(resp.boxes)) {
-      // locate-anything-v2: { boxes: [{x1,y1,x2,y2}], answer, inference_time_ms }
-      inferenceTimeMs = resp.inference_time_ms;
-      var answerStr = resp.answer || '';
-      var labels = [];
-      var refMatches = answerStr.match(/<ref>(.*?)<\/ref>/g);
-      if (refMatches) {
-        for (var ri = 0; ri < refMatches.length; ri++) {
-          labels.push(refMatches[ri].replace(/<\/?ref>/g, ''));
-        }
-      }
-      for (var i = 0; i < resp.boxes.length; i++) {
-        var box = resp.boxes[i];
-        dets.push({
-          bbox: [box.x1 / w, box.y1 / h, box.x2 / w, box.y2 / h],
-          label: labels[i] || '',
-          confidence: box.score || box.confidence || null
-        });
-      }
+    var L = [];
+    L.push('// NE101 Camera Transform');
+    L.push('// Extension: ' + extensionId + ' | Mode: ' + mode.label);
+    L.push('// Generated by component config — safe to customize');
+    L.push('');
+
+    // Input
+    L.push('var imageData = __imageData || (input_raw && input_raw.values && input_raw.values.image) || (input_raw && input_raw.image) || \'\';');
+    L.push('if (!imageData) return {};');
+    L.push('');
+
+    // Image dimensions for coordinate normalization
+    L.push('var W = (imageMeta && imageMeta.width) || 1;');
+    L.push('var H = (imageMeta && imageMeta.height) || 1;');
+    L.push('');
+
+    // Extension invocation — params use __imageData (injected by platform)
+    L.push('var r = extensions.invoke(\'' + extensionId + '\', \'' + mode.command + '\', {');
+    L.push('  ' + imageArg + ': __imageData');
+    if (hasCats) L.push(',  categories: \'' + pipe.categories.replace(/'/g, "\\'") + '\'');
+    if (hasPhrase) L.push(',  phrase: \'' + pipe.phrase.replace(/'/g, "\\'") + '\'');
+    L.push('});');
+    L.push('');
+
+    // Parse detections based on response type
+    L.push('// Parse detections from extension response');
+    if (mode.responseType === 'boxes_x1y1x2y2') {
+      L.push('var rawBoxes = r.boxes || [];');
+      L.push('var refTags = (r.answer || \'\').match(/<ref>(.*?)<\\/ref>/g) || [];');
+      L.push('var dets = rawBoxes.map(function(b, i) {');
+      L.push('  return {');
+      L.push('    bbox: [b.x1 / W, b.y1 / H, b.x2 / W, b.y2 / H],');
+      L.push('    label: (refTags[i] || \'\').replace(/<\\/?ref>/g, \'\'),');
+      L.push('    confidence: b.score || b.confidence || null');
+      L.push('  };');
+      L.push('});');
+    } else if (mode.responseType === 'objects_bbox') {
+      L.push('var dets = (r.objects || []).map(function(o) {');
+      L.push('  var b = o.bbox || {};');
+      L.push('  return {');
+      L.push('    bbox: [(b.x||0)/W, (b.y||0)/H, ((b.x||0)+(b.width||0))/W, ((b.y||0)+(b.height||0))/H],');
+      L.push('    label: o.label || \'\',');
+      L.push('    confidence: o.confidence || null');
+      L.push('  };');
+      L.push('});');
+    } else if (mode.responseType === 'detections_bbox') {
+      L.push('var dets = (r.detections || []).map(function(d) {');
+      L.push('  var b = d.bbox || {};');
+      L.push('  return {');
+      L.push('    bbox: [(b.x||0)/W, (b.y||0)/H, ((b.x||0)+(b.width||0))/W, ((b.y||0)+(b.height||0))/H],');
+      L.push('    label: d.label || \'\',');
+      L.push('    confidence: d.confidence || null');
+      L.push('  };');
+      L.push('});');
+    } else if (mode.responseType === 'ocr_text_blocks') {
+      L.push('var data = r.data || r;');
+      L.push('var blocks = data.text_blocks || [];');
+      L.push('var dets = blocks.map(function(b) {');
+      L.push('  var b2 = b.bbox || {};');
+      L.push('  return {');
+      L.push('    bbox: [b2.x, b2.y, (b2.x||0) + (b2.width||0), (b2.y||0) + (b2.height||0)],');
+      L.push('    label: b.text || \'\',');
+      L.push('    confidence: b.confidence || null');
+      L.push('  };');
+      L.push('});');
+      L.push('var texts = blocks.map(function(b) { return b.text; }).filter(Boolean);');
     }
+    L.push('');
 
-    var result = { detections: dets };
-    if (texts) result.texts = texts;
-    if (inferenceTimeMs != null) result.inferenceTimeMs = inferenceTimeMs;
-    return result;
-  }
-
-  /**
-   * Build a transform config from template + extension + procConfig.
-   */
-  function fillTemplate(templateName, extensionId, procConfig) {
-    var command = getExtCommand(extensionId, templateName);
-    var output = TPL_OUTPUTS[templateName] || TPL_OUTPUTS.object_detection;
-    var inputMapping = buildInputMapping(extensionId, templateName);
-    var config = {
-      command: command,
-      input: inputMapping,
-      output: JSON.parse(JSON.stringify(output))
-    };
-
-    // Inject classFilter into count_by_class transforms
-    var cf = procConfig.classFilter;
-    if (cf && config.output) {
-      var keys2 = Object.keys(config.output);
-      for (var ci = 0; ci < keys2.length; ci++) {
-        if (config.output[keys2[ci]].transform === 'count_by_class') {
-          config.output[keys2[ci]].classFilter = cf;
-        }
-      }
-    }
-
-    // Inject ROI-related output transforms dynamically
-    var roi = procConfig.roi;
-    var roiAction = procConfig.roiAction || 'count';
-    if (roi && config.output) {
-      config.output['virtual.roi_count'] = { from: 'boxes', transform: 'count_in_roi', roi: roi };
+    // ROI filter
+    if (roi) {
+      L.push('// ROI: {x:' + roi.x + ', y:' + roi.y + ', w:' + roi.w + ', h:' + roi.h + '}');
+      L.push('var roi = {x:' + roi.x + ', y:' + roi.y + ', w:' + roi.w + ', h:' + roi.h + '};');
+      L.push('var inRoi = function(d) {');
+      L.push('  var cx = (d.bbox[0] + d.bbox[2]) / 2;');
+      L.push('  var cy = (d.bbox[1] + d.bbox[3]) / 2;');
+      L.push('  return cx >= roi.x && cx <= roi.x + roi.w && cy >= roi.y && cy <= roi.y + roi.h;');
+      L.push('};');
       if (roiAction === 'filter') {
-        config.output['virtual.detections'] = { from: 'boxes', transform: 'filter_roi', roi: roi };
-      } else if (roiAction === 'count_by_class') {
-        config.output['virtual.roi_count_by_class'] = { from: 'boxes', transform: 'count_by_class_in_roi', roi: roi };
+        L.push('var filtered = dets.filter(inRoi);');
+        L.push('var roiCount = filtered.length;');
+      } else {
+        L.push('var filtered = dets;');
+        L.push('var roiCount = dets.filter(inRoi).length;');
+      }
+    } else {
+      L.push('var filtered = dets;');
+    }
+    L.push('');
+
+    // Class filter
+    if (classFilter) {
+      var classes = classFilter.split(',').map(function(c) { return c.trim(); }).filter(Boolean);
+      if (classes.length > 0) {
+        L.push('// Class filter');
+        L.push('var allowed = ' + JSON.stringify(classes) + ';');
+        L.push('var outputDets = filtered.filter(function(d) { return !d.label || allowed.indexOf(d.label) >= 0; });');
+      } else {
+        L.push('var outputDets = filtered;');
+      }
+    } else {
+      L.push('var outputDets = filtered;');
+    }
+    L.push('');
+
+    // Output metrics
+    L.push('var out = {};');
+    L.push('out[\'' + pfx + 'detections\'] = outputDets;');
+
+    if (templateName === 'object_detection') {
+      L.push('out[\'' + pfx + 'total_count\'] = outputDets.length;');
+      L.push('out[\'' + pfx + 'count_by_class\'] = outputDets.reduce(function(a, d) { a[d.label] = (a[d.label]||0)+1; return a; }, {});');
+    }
+
+    if (roi) {
+      L.push('out[\'' + pfx + 'roi_count\'] = roiCount;');
+      if (roiAction === 'count_by_class') {
+        L.push('out[\'' + pfx + 'roi_count_by_class\'] = dets.filter(inRoi).reduce(function(a, d) { a[d.label] = (a[d.label]||0)+1; return a; }, {});');
       }
     }
 
-    return config;
+    if (mode.responseType === 'ocr_text_blocks') {
+      L.push('out[\'' + pfx + 'texts\'] = texts || [];');
+    }
+
+    L.push('out[\'' + pfx + 'inference_time_ms\'] = r.inference_time_ms || r.processing_time_ms || null;');
+
+    L.push('');
+    L.push('return out;');
+
+    return L.join('\n');
+  }
+
+  /**
+   * Build transform payload for a single pipeline.
+   * Returns { js_code, output_prefix } — standard TransformAutomation format.
+   */
+  function fillTemplate(pipe) {
+    var jsCode = generateTransformJsCode(pipe);
+    return {
+      js_code: jsCode,
+      output_prefix: 'virtual'
+    };
+  }
+
+  /**
+   * Build transform name for a pipeline.
+   * Format: ne101-{deviceId}-{pipeId}
+   * Uses pipeId to guarantee uniqueness even when multiple pipelines use the same extension+template.
+   */
+  function transformNameForPipe(deviceId, pipe) {
+    return 'ne101-' + deviceId + '-' + pipe.id;
   }
 
   // No device placeholder
@@ -318,47 +427,20 @@ var NE101CameraPanel = (function () {
 
     // -- Processing pipeline state (must be declared before early return) --
     var processingEnabled = config.processingEnabled === true;
-    var extensionId = config.processingExtensionId || '';
-    // Backward compat: object_detection_roi → object_detection + roiEnabled
-    var rawTemplate = config.processingTemplate || 'object_detection';
-    var procTemplate = rawTemplate === 'object_detection_roi' ? 'object_detection' : rawTemplate;
-    var procCategories = config.processingCategories || '';
-    var procPhrase = config.processingPhrase || '';
-    var procClassFilter = config.processingClassFilter || '';
-    // ROI enabled independently of template
-    var roiEnabled = config.processingRoiEnabled === true || rawTemplate === 'object_detection_roi';
-    var roiAction = config.processingRoiAction || 'count';
-    // Reconstruct ROI from flat config fields (only when enabled)
-    var roi = null;
-    if (roiEnabled && config.processingRoiX != null && config.processingRoiY != null) {
-      roi = { x: config.processingRoiX, y: config.processingRoiY, w: config.processingRoiW || 0.8, h: config.processingRoiH || 0.8 };
+    // Multi-pipeline: migrate legacy config if needed
+    var pipelines = processingEnabled ? migrateToPipelines(config) : [];
+    // Extension IDs referenced by active pipelines (for status checking)
+    var pipelineExtIds = [];
+    for (var pi = 0; pi < pipelines.length; pi++) {
+      if (pipelineExtIds.indexOf(pipelines[pi].extId) < 0) pipelineExtIds.push(pipelines[pi].extId);
     }
 
     var extStatusState = React.useState('idle');
     var extStatus = extStatusState[0];
     var setExtStatus = extStatusState[1];
 
-    var transformIdState = React.useState(null);
-    var transformId = transformIdState[0];
-    var setTransformId = transformIdState[1];
-    var transformIdRef = React.useRef(null);
-    // Keep ref in sync with state for cleanup access
-    transformIdRef.current = transformId;
-
-    // Client-side processing state
-    var procStateState = React.useState('idle');
-    var processingState = procStateState[0];
-    var setProcessingState = procStateState[1];
-
-    var localDetectionsState = React.useState([]);
-    var localDetections = localDetectionsState[0];
-    var setLocalDetections = localDetectionsState[1];
-
-    var inferenceTimeState = React.useState(null);
-    var inferenceTime = inferenceTimeState[0];
-    var setInferenceTime = inferenceTimeState[1];
-
-    var lastProcessedRef = React.useRef('');
+    // Track transform IDs per pipeline for proper cleanup
+    var transformIdsRef = React.useRef({}); // { pipelineName: transformId }
 
     // WS-triggered fetch: platform WS delivers small metrics (battery, ts) in real-time,
     // but large base64 images may exceed WS message size limits.
@@ -412,12 +494,9 @@ var NE101CameraPanel = (function () {
       imageSrc = rawImageSrc + (rawImageSrc.indexOf('?') >= 0 ? '&' : '?') + '_t=' + (imgTs || 0);
     }
 
-    // Extension check + transform lifecycle (async, non-blocking)
-    // Transforms are persistent backend automations — created once, NOT deleted on unmount.
-    // On mount: check if transform already exists for this device+extension, create if not.
+    // Extension check + multi-pipeline transform lifecycle
     React.useEffect(function () {
-      console.log('[NE101 Transform] useEffect fired, processingEnabled=', processingEnabled, 'extensionId=', extensionId, 'device=', !!device);
-      if (!processingEnabled || !extensionId || !device) return;
+      if (!processingEnabled || pipelines.length === 0 || !device) return;
 
       var neomind = window.neomind;
       if (!neomind || typeof neomind.listExtensions !== 'function') {
@@ -427,271 +506,215 @@ var NE101CameraPanel = (function () {
 
       setExtStatus('checking');
       var cancelled = false;
-      var transformName = 'ne101-' + device.id + '-' + extensionId;
 
       neomind.listExtensions().then(function (exts) {
         if (cancelled) return;
         var extList = Array.isArray(exts) ? exts : [];
-        var matched = null;
-        for (var ei = 0; ei < extList.length; ei++) {
-          if (extList[ei].id === extensionId) { matched = extList[ei]; break; }
+
+        // Check all referenced extensions
+        var allActive = true;
+        for (var ci = 0; ci < pipelineExtIds.length; ci++) {
+          var matched = null;
+          for (var ei = 0; ei < extList.length; ei++) {
+            if (extList[ei].id === pipelineExtIds[ci]) { matched = extList[ei]; break; }
+          }
+          if (!matched) { allActive = false; setExtStatus('not_installed'); return; }
+          var stateLower = (matched.state || '').toLowerCase();
+          if (stateLower.indexOf('stopped') >= 0 || stateLower.indexOf('failed') >= 0 || stateLower.indexOf('error') >= 0) {
+            allActive = false; setExtStatus('offline'); return;
+          }
         }
-        if (!matched) { setExtStatus('not_installed'); return; }
-        var stateLower = (matched.state || '').toLowerCase();
-        if (stateLower.indexOf('stopped') >= 0 || stateLower.indexOf('failed') >= 0 || stateLower.indexOf('error') >= 0) { setExtStatus('offline'); return; }
+        if (!allActive) return;
         setExtStatus('active');
 
-        // Build desired transform config
-        var procConfigTpl = { roi: roi, roiAction: roiAction, classFilter: procClassFilter };
-        var tplConfig = fillTemplate(procTemplate, extensionId, procConfigTpl);
+        // Build desired transforms for each pipeline
+        var desiredTransforms = [];
+        for (var pi2 = 0; pi2 < pipelines.length; pi2++) {
+          var pipe = pipelines[pi2];
+          var mode = getExtMode(pipe.extId, pipe.template);
+          if (!mode) continue;
 
-        // Validate required args before creating Transform
-        var currentMode = getExtMode(extensionId, procTemplate);
-        var modeReqArgs = currentMode ? (currentMode.args || []) : [];
-        var missingArg = false;
-        for (var ai = 0; ai < modeReqArgs.length; ai++) {
-          if (modeReqArgs[ai] === 'categories' && !procCategories.trim()) { missingArg = true; break; }
-          if (modeReqArgs[ai] === 'phrase' && !procPhrase.trim()) { missingArg = true; break; }
-        }
-        if (missingArg) {
-          console.log('[NE101] Skipping Transform creation: missing required args');
-          // If an existing Transform exists, delete it (config incomplete)
-          if (neomind.listTransforms && neomind.deleteTransform) {
-            neomind.listTransforms({ scope: device.id }).then(function (transforms) {
-              if (cancelled) return;
-              var tList = Array.isArray(transforms) ? transforms : [];
-              for (var ti = 0; ti < tList.length; ti++) {
-                if (tList[ti].name === transformName) {
-                  neomind.deleteTransform(tList[ti].id).catch(function () {});
-                  break;
-                }
-              }
-            });
+          // Validate required args
+          var reqArgs = mode.args || [];
+          var missing = false;
+          for (var ai = 0; ai < reqArgs.length; ai++) {
+            if (reqArgs[ai] === 'categories' && !(pipe.categories || '').trim()) { missing = true; break; }
+            if (reqArgs[ai] === 'phrase' && !(pipe.phrase || '').trim()) { missing = true; break; }
           }
-          return;
+          if (missing) continue;
+
+          var tplConfig = fillTemplate(pipe);
+          var tName = transformNameForPipe(device.id, pipe);
+          var fp = JSON.stringify({ js_code: tplConfig.js_code });
+
+          desiredTransforms.push({
+            name: tName,
+            pipelineId: pipe.id,
+            fingerprint: fp,
+            payload: Object.assign({}, tplConfig, {
+              name: tName,
+              scope: device.id,
+              // Store fingerprint in description field so it persists through serde round-trip
+              // (rule, _fp fields are not part of TransformAutomation and get silently dropped)
+              description: 'fp:' + fp,
+            })
+          });
         }
-        var transformArgs = {};
-        if (procCategories) transformArgs.categories = procCategories;
-        if (procPhrase) transformArgs.phrase = procPhrase;
-        var desiredPayload = Object.assign({}, tplConfig, {
-          name: transformName,
-          scope: device.id,
-          extension_id: extensionId,
-          args: Object.keys(transformArgs).length > 0 ? transformArgs : undefined,
-          rule: { device_id: device.id, device_type: 'ne101_camera' }
-        });
-        // Compute a config fingerprint to detect changes
-        var desiredFingerprint = JSON.stringify({ command: desiredPayload.command, input: desiredPayload.input, output: desiredPayload.output, args: desiredPayload.args });
 
-        // Check if transform already exists — update if config changed
-        if (neomind.listTransforms) {
-          return neomind.listTransforms({ scope: device.id }).then(function (transforms) {
-            if (cancelled) return;
-            var tList = Array.isArray(transforms) ? transforms : [];
-            var existing = null;
-            for (var ti = 0; ti < tList.length; ti++) {
-              if (tList[ti].name === transformName) { existing = tList[ti]; break; }
+        if (desiredTransforms.length === 0) return null;
+
+        // Sync transforms: list existing, diff, create/update/delete
+        if (!neomind.listTransforms) return null;
+        return neomind.listTransforms({ scope: device.id }).then(function (transforms) {
+          if (cancelled) return;
+          var tList = Array.isArray(transforms) ? transforms : [];
+          var existingMap = {};
+          for (var ti = 0; ti < tList.length; ti++) {
+            if (tList[ti].name.indexOf('ne101-' + device.id + '-') === 0) {
+              existingMap[tList[ti].name] = tList[ti];
             }
+          }
 
-            if (existing) {
-              // Check if config changed by comparing fingerprint stored in rule
-              var oldFingerprint = (existing.rule && existing.rule._fp) || '';
-              if (oldFingerprint === desiredFingerprint) {
-                // Same config — reuse
-                setTransformId(existing.id);
-                // Persist transform ID in config so platform can clean up on component removal
-                if (props.onConfigChange && (!config._transformId || config._transformId !== existing.id)) {
-                  props.onConfigChange(Object.assign({}, config, { _transformId: existing.id }));
+          var ops = []; // array of promises
+          var desiredNames = {};
+
+          for (var di2 = 0; di2 < desiredTransforms.length; di2++) {
+            // IIFE to capture loop variable correctly in async callbacks
+            (function (dt) {
+              desiredNames[dt.name] = true;
+              var existing = existingMap[dt.name];
+
+              if (existing) {
+                // Check fingerprint from description field (format: "fp:...")
+                var oldDesc = existing.description || '';
+                var oldFp = oldDesc.indexOf('fp:') === 0 ? oldDesc.substring(3) : '';
+                var newFp = dt.fingerprint;
+                if (oldFp === newFp) {
+                  // Same config — reuse, record ID
+                  transformIdsRef.current[dt.name] = existing.id;
+                  return;
                 }
-                return null;
+                // Config changed — update in place, fallback to create if not found
+                if (neomind.updateTransform) {
+                  ops.push(
+                    neomind.updateTransform(existing.id, {
+                      name: dt.payload.name,
+                      description: dt.payload.description,
+                      scope: dt.payload.scope,
+                      js_code: dt.payload.js_code,
+                      output_prefix: dt.payload.output_prefix,
+                    }).catch(function () {
+                      // Transform may have been deleted externally — recreate
+                      if (cancelled) return null;
+                      return neomind.createTransform(dt.payload);
+                    })
+                  );
+                } else if (neomind.createTransform) {
+                  // No update API — create fresh (may produce duplicates if old one still exists)
+                  ops.push(neomind.createTransform(dt.payload));
+                }
+              } else {
+                // Create new
+                if (neomind.createTransform) {
+                  ops.push(neomind.createTransform(dt.payload));
+                }
               }
-              // Config changed — delete old, will recreate below
-              console.log('[NE101] Transform config changed, recreating:', existing.id);
-              if (neomind.deleteTransform) {
-                return neomind.deleteTransform(existing.id).then(function () {
-                  if (cancelled) return;
-                  if (!neomind.createTransform) return null;
-                  // Attach fingerprint to rule for future change detection
-                  desiredPayload.rule = Object.assign({}, desiredPayload.rule, { _fp: desiredFingerprint });
-                  return neomind.createTransform(desiredPayload);
-                });
-              }
-              return null;
-            }
+            })(desiredTransforms[di2]);
+          }
 
-            // Not found — create new transform
-            if (!neomind.createTransform) return null;
-            desiredPayload.rule = Object.assign({}, desiredPayload.rule, { _fp: desiredFingerprint });
-            return neomind.createTransform(desiredPayload);
-          });
-        }
-        // Fallback: no listTransforms, create directly
-        if (neomind.createTransform) {
-          desiredPayload.rule = Object.assign({}, desiredPayload.rule, { _fp: desiredFingerprint });
-          return neomind.createTransform(desiredPayload);
-        }
-        return null;
-      }).then(function (result) {
-        if (cancelled || !result) return;
-        setTransformId(result.id);
-        // Persist transform ID in config so platform can clean up on component removal
-        if (props.onConfigChange) {
-          props.onConfigChange(Object.assign({}, config, { _transformId: result.id }));
-        }
-        // Dedup: remove any duplicate transforms with the same name (StrictMode race condition)
-        if (neomind.listTransforms && neomind.deleteTransform) {
-          neomind.listTransforms({ scope: device.id }).then(function (all) {
-            if (cancelled) return;
-            var tAll = Array.isArray(all) ? all : [];
-            for (var di = 0; di < tAll.length; di++) {
-              if (tAll[di].name === transformName && tAll[di].id !== result.id) {
-                console.log('[NE101] Dedup: removing duplicate transform', tAll[di].id);
-                neomind.deleteTransform(tAll[di].id).catch(function () {});
+          // Delete transforms for pipelines no longer configured
+          var existingNames = Object.keys(existingMap);
+          for (var eni = 0; eni < existingNames.length; eni++) {
+            if (!desiredNames[existingNames[eni]]) {
+              if (neomind.deleteTransform) {
+                ops.push(neomind.deleteTransform(existingMap[existingNames[eni]].id).catch(function (err) {
+                  console.warn('[ne101] Failed to delete stale transform:', existingMap[existingNames[eni]].id, err);
+                }));
               }
             }
-          });
+          }
+
+          return Promise.all(ops);
+        });
+      }).then(function (results) {
+        if (cancelled || !results) return;
+        var flat = Array.isArray(results) ? results : [results];
+        for (var ri = 0; ri < flat.length; ri++) {
+          if (flat[ri] && flat[ri].id && flat[ri].name) {
+            transformIdsRef.current[flat[ri].name] = flat[ri].id;
+          }
         }
       }).catch(function () {
         if (!cancelled) setExtStatus('error');
       });
 
-      // No cleanup on unmount — transforms persist in backend for continuous processing
-      // Cleanup happens via platform when the dashboard component is removed
-      return function () { cancelled = true; };
-    }, [device ? device.id : null, processingEnabled, extensionId, procTemplate, roiEnabled, roiAction]);
+      return function () {
+        cancelled = true;
+        // Cleanup transforms when unmounting or deps change
+        var nm = window.neomind;
+        var ids = transformIdsRef.current;
+        var keys = Object.keys(ids);
+        for (var ki = 0; ki < keys.length; ki++) {
+          if (ids[keys[ki]] && nm && nm.deleteTransform) {
+            nm.deleteTransform(ids[keys[ki]]).catch(function () {});
+          }
+        }
+        transformIdsRef.current = {};
+      };
+    }, [device ? device.id : null, processingEnabled, JSON.stringify(pipelines)]);
 
-    // Cleanup: delete old Transforms when processing disabled or extension changes
-    var prevExtIdRef = React.useRef(extensionId);
+    // Cleanup: delete all ne101-* transforms when processing disabled
+    var prevPipelinesRef = React.useRef(pipelines);
     React.useEffect(function () {
       var neomind = window.neomind;
       if (!neomind || !neomind.listTransforms || !neomind.deleteTransform || !device) return;
 
-      var oldExtId = prevExtIdRef.current;
-      prevExtIdRef.current = extensionId;
+      var prevPipes = prevPipelinesRef.current;
+      // Update ref AFTER capturing prevPipes so deletion detection works correctly
 
-      var shouldCleanup = false;
-      // Processing disabled — delete all ne101-* transforms for this device
-      if (!processingEnabled) shouldCleanup = true;
-      // Extension changed — delete old extension's transform
-      if (processingEnabled && oldExtId && oldExtId !== extensionId) shouldCleanup = true;
-
-      if (!shouldCleanup) return;
-
-      // Robust cleanup: list ALL transforms for this device and delete matching ones
-      console.log('[NE101] Cleanup: oldExtId=', oldExtId, 'newExtId=', extensionId, 'enabled=', processingEnabled);
-      neomind.listTransforms({ scope: device.id }).then(function (transforms) {
-        var tList = Array.isArray(transforms) ? transforms : [];
-        for (var i = 0; i < tList.length; i++) {
-          var t = tList[i];
-          var isOldExt = oldExtId && t.name === 'ne101-' + device.id + '-' + oldExtId;
-          var isDisabled = !processingEnabled && t.name.indexOf('ne101-' + device.id + '-') === 0;
-          var isKnown = config._transformId && t.id === config._transformId;
-          if (isOldExt || isDisabled || isKnown) {
-            console.log('[NE101] Deleting transform:', t.id, t.name);
-            neomind.deleteTransform(t.id).catch(function () {});
+      if (!processingEnabled) {
+        prevPipelinesRef.current = pipelines;
+        // Delete all ne101-* transforms for this device
+        neomind.listTransforms({ scope: device.id }).then(function (transforms) {
+          var tList = Array.isArray(transforms) ? transforms : [];
+          for (var i = 0; i < tList.length; i++) {
+            if (tList[i].name.indexOf('ne101-' + device.id + '-') === 0) {
+              neomind.deleteTransform(tList[i].id).catch(function (err) {
+                console.warn('[ne101] Failed to delete transform on disable:', tList[i].id, err);
+              });
+            }
           }
-        }
-      }).catch(function () {});
-    }, [processingEnabled, extensionId]);
-
-    // Reset lastProcessedRef when extension becomes active (fixes race condition)
-    React.useEffect(function () {
-      if (extStatus === 'active') {
-        lastProcessedRef.current = '';
-      }
-    }, [extStatus]);
-
-    // Client-side processing: when new image arrives and no virtual detections, process directly
-    React.useEffect(function () {
-      if (!processingEnabled || !extensionId || !imageSrc) return;
-      // Skip if already processed this image
-      if (lastProcessedRef.current === imageSrc) return;
-      // Only process when extension is confirmed active (avoid wasted calls during checking)
-      if (extStatus !== 'active') return;
-
-      // Validate required args — skip processing if incomplete
-      var mode = getExtMode(extensionId, procTemplate);
-      var reqArgs = mode ? (mode.args || []) : [];
-      for (var vi = 0; vi < reqArgs.length; vi++) {
-        if (reqArgs[vi] === 'categories' && !procCategories.trim()) return;
-        if (reqArgs[vi] === 'phrase' && !procPhrase.trim()) return;
-      }
-
-      var neomind = window.neomind;
-      if (!neomind || typeof neomind.callExtension !== 'function') return;
-
-      // Check if TransformEngine already produced detections
-      var detRaw = getFirst(_vals, ['virtual.detections', 'values.virtual.detections']);
-      if (Array.isArray(detRaw) && detRaw.length > 0) {
-        lastProcessedRef.current = imageSrc;
-        setProcessingState('done');
+        }).catch(function () {});
         return;
       }
 
-      // Mark as running to prevent re-entry
-      lastProcessedRef.current = imageSrc;
-      setProcessingState('running');
-      setLocalDetections([]);
-      setInferenceTime(null);
-
-      // Resolve command from extension + template
-      var command = getExtCommand(extensionId, procTemplate);
-      var mode = getExtMode(extensionId, procTemplate);
-      var imageArg = (mode && mode.imageArg) || 'image';
-
-      var cancelled = false;
-
-      // Extract pure base64 string (strip data URI prefix if present)
-      var rawB64 = rawImageSrc || '';
-      if (rawB64.indexOf('data:') === 0) {
-        var commaIdx = rawB64.indexOf(',');
-        if (commaIdx >= 0) rawB64 = rawB64.substring(commaIdx + 1);
+      // Delete transforms for removed pipelines
+      var prevPipeNames = {};
+      for (var pp = 0; pp < prevPipes.length; pp++) {
+        prevPipeNames[transformNameForPipe(device.id, prevPipes[pp])] = true;
       }
+      var curPipeNames = {};
+      for (var cp = 0; cp < pipelines.length; cp++) {
+        curPipeNames[transformNameForPipe(device.id, pipelines[cp])] = true;
+      }
+      var toDelete = Object.keys(prevPipeNames).filter(function (n) { return !curPipeNames[n]; });
 
-      // Build args for extension
-      var callArgs = {};
-      callArgs[imageArg] = rawB64;
-      if (procCategories) callArgs.categories = procCategories;
-      if (procPhrase) callArgs.phrase = procPhrase;
+      // Update ref after diff computation is done
+      prevPipelinesRef.current = pipelines;
 
-      // Load image to get dimensions for coordinate normalization (async)
-      var img = new Image();
-      img.onload = function () {
-        if (cancelled) return;
+      if (toDelete.length === 0) return;
 
-        neomind.callExtension(extensionId, command, callArgs).then(function (resp) {
-          if (cancelled) return;
-
-          var imgW = img.naturalWidth || 1;
-          var imgH = img.naturalHeight || 1;
-          var respType = (mode && mode.responseType) || 'boxes_x1y1x2y2';
-          var norm = normalizeResponse(resp, respType, imgW, imgH);
-
-          if (!norm.detections || norm.detections.length === 0) {
-            setProcessingState('done');
-            return;
+      neomind.listTransforms({ scope: device.id }).then(function (transforms) {
+        var tList = Array.isArray(transforms) ? transforms : [];
+        for (var i2 = 0; i2 < tList.length; i2++) {
+          if (toDelete.indexOf(tList[i2].name) >= 0) {
+            neomind.deleteTransform(tList[i2].id).catch(function (err) {
+              console.warn('[ne101] Failed to delete transform for removed pipeline:', err);
+            });
           }
-
-          setLocalDetections(norm.detections);
-          setProcessingState('done');
-          if (norm.inferenceTimeMs != null) setInferenceTime(norm.inferenceTimeMs);
-
-          // Write back as virtual metric so dashboard can persist it
-          if (neomind.writeMetric) {
-            neomind.writeMetric(device.id, 'virtual.detections', norm.detections).catch(function () {});
-            if (norm.texts) neomind.writeMetric(device.id, 'virtual.texts', norm.texts).catch(function () {});
-          }
-        }).catch(function () {
-          if (!cancelled) setProcessingState('error');
-        });
-      };
-      img.onerror = function () {
-        if (!cancelled) setProcessingState('error');
-      };
-      img.src = imageSrc;
-
-      return function () { cancelled = true; };
-    }, [imageSrc, processingEnabled, extensionId, extStatus]);
+        }
+      }).catch(function () {});
+    }, [processingEnabled, JSON.stringify(pipelines)]);
 
     if (!device) return jsx(NoDevice, {});
 
@@ -719,12 +742,20 @@ var NE101CameraPanel = (function () {
 
     // Virtual metrics (from processing pipeline) + client-side detections
     var detections = [];
-    if (processingEnabled) {
-      var detRaw = getFirst(vals, ['virtual.detections', 'values.virtual.detections']);
-      if (Array.isArray(detRaw) && detRaw.length > 0) {
-        detections = detRaw;
-      } else if (localDetections.length > 0) {
-        detections = localDetections;
+    // Aggregate detections from all pipelines
+    if (processingEnabled && pipelines.length > 0) {
+      // Collect from virtual metrics (backend transform results)
+      for (var agi = 0; agi < pipelines.length; agi++) {
+        var pPipe = pipelines[agi];
+        var pPfx = 'virtual.' + pPipe.extId.replace(/-/g, '_') + '.';
+        var pDet = getFirst(vals, [pPfx + 'detections', 'values.' + pPfx + 'detections']);
+        if (Array.isArray(pDet) && pDet.length > 0) {
+          for (var pdi = 0; pdi < pDet.length; pdi++) {
+            pDet[pdi]._pipeId = pPipe.id;
+            pDet[pdi]._extId = pPipe.extId;
+          }
+          detections = detections.concat(pDet);
+        }
       }
     }
 
@@ -772,10 +803,10 @@ var NE101CameraPanel = (function () {
     if (processingEnabled && extStatus !== 'idle') {
       var statusMap = {
         checking: { color: 'rgba(234,179,8,0.9)', label: 'Checking...' },
-        active: { color: 'rgba(34,197,94,0.9)', label: processingState === 'running' ? 'Processing...' : 'Pipeline Active' },
+        active: { color: 'rgba(34,197,94,0.9)', label: 'Pipeline Active' },
         not_installed: { color: 'rgba(239,68,68,0.9)', label: 'Ext. Not Installed' },
         offline: { color: 'rgba(234,179,8,0.9)', label: 'Ext. Offline' },
-        error: { color: 'rgba(239,68,68,0.9)', label: processingState === 'error' ? 'Processing Failed' : 'Pipeline Error' },
+        error: { color: 'rgba(239,68,68,0.9)', label: 'Pipeline Error' },
         unavailable: { color: 'rgba(128,128,128,0.6)', label: 'API Unavailable' }
       };
       var sc = statusMap[extStatus] || statusMap.error;
@@ -787,12 +818,11 @@ var NE101CameraPanel = (function () {
           children: [
             jsx('div', {
               key: 'dot',
-              className: processingState === 'running' ? 'animate-spin' : '',
+              className: '',
               style: {
                 width: '6px', height: '6px', borderRadius: '50%',
-                border: processingState === 'running' ? '1.5px solid rgba(255,255,255,0.3)' : 'none',
-                borderTopColor: processingState === 'running' ? sc.color : undefined,
-                background: processingState === 'running' ? 'transparent' : sc.color
+                border: 'none',
+                background: sc.color
               }
             }),
             jsx('span', { key: 'lbl', style: Object.assign({}, white, { fontSize: '8px', fontWeight: '500' }), children: sc.label })
@@ -858,13 +888,54 @@ var NE101CameraPanel = (function () {
       );
     }
 
-    // Detection summary (from processing pipeline + virtual metrics)
-    if (processingEnabled && (detections.length > 0 || getFirst(vals, ['virtual.total_count', 'values.virtual.total_count']) != null)) {
-      // Read virtual metrics produced by backend transform
-      var vTotalCount = getFirst(vals, ['virtual.total_count', 'values.virtual.total_count']);
-      var vRoiCount = getFirst(vals, ['virtual.roi_count', 'values.virtual.roi_count']);
-      var vCountByClass = getFirst(vals, ['virtual.count_by_class', 'values.virtual.count_by_class']);
-      var vTexts = getFirst(vals, ['virtual.texts', 'values.virtual.texts']);
+    // Detection summary — aggregate from all pipelines
+    var hasAnySummary = processingEnabled && pipelines.length > 0 && (
+      detections.length > 0 ||
+      (function () {
+        for (var hsi = 0; hsi < pipelines.length; hsi++) {
+          var hPfx = 'virtual.' + pipelines[hsi].extId.replace(/-/g, '_') + '.';
+          if (getFirst(vals, [hPfx + 'total_count', 'values.' + hPfx + 'total_count']) != null) return true;
+        }
+        return false;
+      })()
+    );
+    if (hasAnySummary) {
+      // Aggregate virtual metrics from all pipelines
+      var aggTotalCount = 0;
+      var aggRoiCount = 0;
+      var aggCountByClass = {};
+      var aggTexts = [];
+
+      for (var si = 0; si < pipelines.length; si++) {
+        var sPipe = pipelines[si];
+        var sPfx = 'virtual.' + sPipe.extId.replace(/-/g, '_') + '.';
+        var sTotal = getFirst(vals, [sPfx + 'total_count', 'values.' + sPfx + 'total_count']);
+        if (sTotal != null) aggTotalCount += sTotal;
+        var sRoi = getFirst(vals, [sPfx + 'roi_count', 'values.' + sPfx + 'roi_count']);
+        if (sRoi != null) aggRoiCount += sRoi;
+        var sCbc = getFirst(vals, [sPfx + 'count_by_class', 'values.' + sPfx + 'count_by_class']);
+        if (sCbc && typeof sCbc === 'object') {
+          var sKeys = Object.keys(sCbc);
+          for (var ski = 0; ski < sKeys.length; ski++) {
+            aggCountByClass[sKeys[ski]] = (aggCountByClass[sKeys[ski]] || 0) + sCbc[sKeys[ski]];
+          }
+        }
+        var sTexts = getFirst(vals, [sPfx + 'texts', 'values.' + sPfx + 'texts']);
+        if (Array.isArray(sTexts)) aggTexts = aggTexts.concat(sTexts);
+      }
+
+      var vTotalCount = aggTotalCount || detections.length;
+      var vRoiCount = aggRoiCount > 0 ? aggRoiCount : null;
+      var vCountByClass = Object.keys(aggCountByClass).length > 0 ? aggCountByClass : null;
+      var vTexts = aggTexts.length > 0 ? aggTexts : null;
+
+      // Read inference time from virtual metrics (max across all pipelines)
+      var maxInfTime = null;
+      for (var iti = 0; iti < pipelines.length; iti++) {
+        var itPfx = 'virtual.' + pipelines[iti].extId.replace(/-/g, '_') + '.';
+        var itMs = getFirst(vals, [itPfx + 'inference_time_ms', 'values.' + itPfx + 'inference_time_ms']);
+        if (itMs != null && (maxInfTime == null || itMs > maxInfTime)) maxInfTime = itMs;
+      }
 
       var displayCount = vTotalCount != null ? vTotalCount : detections.length;
       var detLabels = detections.slice(0, 4).map(function (d) { return d.label || '?'; });
@@ -925,9 +996,9 @@ var NE101CameraPanel = (function () {
         );
       }
 
-      if (inferenceTime != null) {
+      if (maxInfTime != null) {
         detSummaryChildren.push(
-          jsx('span', { key: 'inf', style: Object.assign({}, white50, textShadow, { fontSize: '8px', fontFamily: 'monospace' }), children: Math.round(inferenceTime) + 'ms' })
+          jsx('span', { key: 'inf', style: Object.assign({}, white50, textShadow, { fontSize: '8px', fontFamily: 'monospace' }), children: Math.round(maxInfTime) + 'ms' })
         );
       }
 
@@ -990,7 +1061,7 @@ var NE101CameraPanel = (function () {
                       ]
                     })
                   : null,
-                // Detection boxes overlay (virtual metrics from processing pipeline)
+                // Detection boxes overlay — color-coded per pipeline
                 processingEnabled && detections.length > 0
                   ? jsx('div', {
                       key: 'det-boxes',
@@ -1001,20 +1072,35 @@ var NE101CameraPanel = (function () {
                         var bx1 = det.bbox[0], by1 = det.bbox[1], bx2 = det.bbox[2], by2 = det.bbox[3];
                         var detLabel = det.label || '';
                         var detConf = typeof det.confidence === 'number' ? Math.round(det.confidence * 100) : '';
+                        // Color per pipeline
+                        var pipeColors = [
+                          { border: 'rgba(59,130,246,0.8)', bg: 'rgba(59,130,246,0.85)', shadow: 'rgba(59,130,246,0.3)' },
+                          { border: 'rgba(34,197,94,0.8)', bg: 'rgba(34,197,94,0.85)', shadow: 'rgba(34,197,94,0.3)' },
+                          { border: 'rgba(249,115,22,0.8)', bg: 'rgba(249,115,22,0.85)', shadow: 'rgba(249,115,22,0.3)' },
+                          { border: 'rgba(168,85,247,0.8)', bg: 'rgba(168,85,247,0.85)', shadow: 'rgba(168,85,247,0.3)' },
+                          { border: 'rgba(236,72,153,0.8)', bg: 'rgba(236,72,153,0.85)', shadow: 'rgba(236,72,153,0.3)' }
+                        ];
+                        var pipeIdx = 0;
+                        if (det._pipeId) {
+                          for (var pci = 0; pci < pipelines.length; pci++) {
+                            if (pipelines[pci].id === det._pipeId) { pipeIdx = pci; break; }
+                          }
+                        }
+                        var clr = pipeColors[pipeIdx % pipeColors.length];
                         return jsxs('div', {
                           key: 'dbox-' + i,
                           className: 'absolute',
                           style: {
                             left: (bx1 * 100) + '%', top: (by1 * 100) + '%',
                             width: ((bx2 - bx1) * 100) + '%', height: ((by2 - by1) * 100) + '%',
-                            border: '1.5px solid rgba(59,130,246,0.8)', borderRadius: '2px',
-                            boxShadow: '0 0 4px rgba(59,130,246,0.3)'
+                            border: '1.5px solid ' + clr.border, borderRadius: '2px',
+                            boxShadow: '0 0 4px ' + clr.shadow
                           },
                           children: (detLabel || detConf)
                             ? jsxs('span', {
                                 style: {
                                   position: 'absolute', top: '-14px', left: '-1px',
-                                  background: 'rgba(59,130,246,0.85)', color: '#fff',
+                                  background: clr.bg, color: '#fff',
                                   fontSize: '8px', fontWeight: '600', padding: '1px 4px',
                                   borderRadius: '2px', whiteSpace: 'nowrap', fontFamily: 'monospace'
                                 },
@@ -1203,48 +1289,16 @@ var NE101CameraPanel = (function () {
   function AdvancedPanel(props) {
     var config = props.config || {};
     var onChange = props.onChange;
-    console.log('[NE101 AdvancedPanel] render, config=', JSON.stringify(config).substring(0, 300));
-    console.log('[NE101 AdvancedPanel] onChange exists=', typeof onChange);
 
-    // Helper: update a single config key via props.onChange (standard pattern)
     function update(key, value) {
-      console.log('[NE101 AdvancedPanel] update', key, value);
       if (onChange) onChange(key, value);
     }
 
-    // Auto-switch template when extension changes and current template is unavailable
-    function updateExtension(id) {
-      update('processingExtensionId', id);
-      if (id) {
-        var modes = getExtModes(id);
-        if (modes.length > 0) {
-          var currentTemplate = config.processingTemplate || 'object_detection';
-          var found = false;
-          for (var i = 0; i < modes.length; i++) {
-            if (modes[i].id === currentTemplate) { found = true; break; }
-          }
-          if (!found) update('processingTemplate', modes[0].id);
-        }
-      }
-    }
-
-    // Derived values from config (no local state — config is the source of truth)
+    // Derived values
     var enabled = config.processingEnabled === true;
-    var rawTemplate = config.processingTemplate || 'object_detection';
-    var template = rawTemplate === 'object_detection_roi' ? 'object_detection' : rawTemplate;
-    var roiEnabled = config.processingRoiEnabled === true || rawTemplate === 'object_detection_roi';
-    var roiAction = config.processingRoiAction || 'count';
-    var selectedExtId = config.processingExtensionId || '';
-    var roiX = config.processingRoiX != null ? config.processingRoiX : 0.1;
-    var roiY = config.processingRoiY != null ? config.processingRoiY : 0.1;
-    var roiW = config.processingRoiW != null ? config.processingRoiW : 0.8;
-    var roiH = config.processingRoiH != null ? config.processingRoiH : 0.8;
+    var pipelines = migrateToPipelines(config);
 
-    // ROI editor refs
-    var roiRef = React.useRef(null);
-    var dragRef = React.useRef(null);
-
-    // Extension list (auto-fetched, filtered to AI extensions only)
+    // Extension list (auto-fetched, filtered to AI extensions)
     var extState = React.useState({ list: [], loading: false, error: null });
     var extLoading = extState[0].loading;
 
@@ -1252,8 +1306,10 @@ var NE101CameraPanel = (function () {
       if (!enabled) return;
       var neomind = window.neomind;
       if (!neomind || typeof neomind.listExtensions !== 'function') return;
+      var cancelled = false;
       extState[1]({ list: [], loading: true, error: null });
       neomind.listExtensions().then(function (exts) {
+        if (cancelled) return;
         var arr = Array.isArray(exts) ? exts : [];
         var filtered = [];
         for (var i = 0; i < arr.length; i++) {
@@ -1261,64 +1317,72 @@ var NE101CameraPanel = (function () {
         }
         extState[1]({ list: filtered, loading: false, error: null });
       }).catch(function () {
-        extState[1]({ list: [], loading: false, error: 'Failed to load extensions' });
+        if (!cancelled) {
+          extState[1]({ list: [], loading: false, error: 'Failed to load extensions' });
+        }
       });
+      return function () { cancelled = true; };
     }, [enabled]);
 
     var extensions = extState[0].list;
 
-    // Available modes for the selected extension
-    var availableModes = selectedExtId ? getExtModes(selectedExtId) : [];
-    var validTemplate = template;
-    if (availableModes.length > 0) {
-      var found = false;
-      for (var mi = 0; mi < availableModes.length; mi++) {
-        if (availableModes[mi].id === template) { found = true; break; }
-      }
-      if (!found) validTemplate = availableModes[0].id;
+    // Pipeline management helpers
+    // Only set processingPipelines — do NOT clear legacy keys one by one
+    // because each update() call triggers a separate React state update,
+    // causing race conditions where intermediate states overwrite each other.
+    // migrateToPipelines() already prioritizes processingPipelines array over legacy keys.
+    function updatePipelines(newPipelines) {
+      update('processingPipelines', newPipelines);
     }
 
-    // ROI drag handler — calls onChange for each position update
-    function handleRoiMouseDown(e) {
-      var el = roiRef.current; if (!el) return;
-      var rect = el.getBoundingClientRect();
-      var nx = (e.clientX - rect.left) / rect.width;
-      var ny = (e.clientY - rect.top) / rect.height;
-      var hs = 0.06;
-      var atL = Math.abs(nx - roiX) < hs, atR = Math.abs(nx - (roiX + roiW)) < hs;
-      var atT = Math.abs(ny - roiY) < hs, atB = Math.abs(ny - (roiY + roiH)) < hs;
-      var inside = nx >= roiX && nx <= roiX + roiW && ny >= roiY && ny <= roiY + roiH;
-      var mode = null;
-      if (atR && atB) mode = 'se'; else if (atL && atB) mode = 'sw';
-      else if (atR && atT) mode = 'ne'; else if (atL && atT) mode = 'nw';
-      else if (inside) mode = 'move';
-      if (!mode) return;
-      e.preventDefault();
-      dragRef.current = { mode: mode, sx: nx, sy: ny, ox: roiX, oy: roiY, ow: roiW, oh: roiH };
-      function onMove(ev) {
-        var d = dragRef.current; if (!d) return;
-        var r = roiRef.current.getBoundingClientRect();
-        var cx = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
-        var cy = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height));
-        var dx = cx - d.sx, dy = cy - d.sy;
-        var nx2 = d.ox, ny2 = d.oy, nw = d.ow, nh = d.oh;
-        if (d.mode === 'move') { nx2 += dx; ny2 += dy; }
-        else if (d.mode === 'se') { nw += dx; nh += dy; }
-        else if (d.mode === 'sw') { nx2 += dx; nw -= dx; nh += dy; }
-        else if (d.mode === 'ne') { nw += dx; ny2 += dy; nh -= dy; }
-        else if (d.mode === 'nw') { nx2 += dx; ny2 += dy; nw -= dx; nh -= dy; }
-        nw = Math.max(0.05, nw); nh = Math.max(0.05, nh);
-        nx2 = Math.max(0, Math.min(1 - nw, nx2));
-        ny2 = Math.max(0, Math.min(1 - nh, ny2));
-        update('processingRoiX', Math.round(nx2 * 100) / 100);
-        update('processingRoiY', Math.round(ny2 * 100) / 100);
-        update('processingRoiW', Math.round(nw * 100) / 100);
-        update('processingRoiH', Math.round(nh * 100) / 100);
-      }
-      function onUp() { dragRef.current = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+    function addPipeline() {
+      var newPipe = {
+        id: nextPipeId(),
+        extId: '',
+        template: 'object_detection',
+        categories: '',
+        phrase: '',
+        classFilter: '',
+        roiEnabled: false,
+        roiAction: 'count',
+        roiX: 0.1, roiY: 0.1, roiW: 0.8, roiH: 0.8
+      };
+      updatePipelines(pipelines.concat([newPipe]));
     }
+
+    function removePipeline(pipeId) {
+      updatePipelines(pipelines.filter(function (p) { return p.id !== pipeId; }));
+    }
+
+    function updatePipeline(pipeId, key, value) {
+      var newPipes = pipelines.map(function (p) {
+        if (p.id !== pipeId) return p;
+        var updated = Object.assign({}, p);
+        updated[key] = value;
+        // Auto-switch template when extension changes
+        if (key === 'extId' && value) {
+          var modes = getExtModes(value);
+          if (modes.length > 0) {
+            var found = false;
+            for (var i = 0; i < modes.length; i++) {
+              if (modes[i].id === updated.template) { found = true; break; }
+            }
+            if (!found) updated.template = modes[0].id;
+          }
+        }
+        return updated;
+      });
+      updatePipelines(newPipes);
+    }
+
+    // Pipeline colors for visual identification
+    var pipeColors = [
+      { bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.3)', dot: 'bg-blue-500' },
+      { bg: 'rgba(34,197,94,0.1)', border: 'rgba(34,197,94,0.3)', dot: 'bg-green-500' },
+      { bg: 'rgba(249,115,22,0.1)', border: 'rgba(249,115,22,0.3)', dot: 'bg-orange-500' },
+      { bg: 'rgba(168,85,247,0.1)', border: 'rgba(168,85,247,0.3)', dot: 'bg-purple-500' },
+      { bg: 'rgba(236,72,153,0.1)', border: 'rgba(236,72,153,0.3)', dot: 'bg-pink-500' }
+    ];
 
     var items = [];
 
@@ -1331,154 +1395,186 @@ var NE101CameraPanel = (function () {
     );
 
     if (enabled) {
-      // Extension selector
-      items.push(
-        jsxs('div', { key: 'ext', className: FIELD_CLS, children: [
-          jsx('label', { className: LABEL_CLS, children: 'AI Extension' }),
-          jsx(ExtDropdown, {
-            extensions: extensions,
-            value: selectedExtId,
-            onChange: function (id) { updateExtension(id); },
-            loading: extLoading
-          }),
-          extensions.length === 0 && !extLoading
-            ? jsx('p', { className: DESC_CLS, children: 'No AI extensions installed' })
-            : null
-        ]})
-      );
+      // Pipeline list
+      for (var pi = 0; pi < pipelines.length; pi++) {
+        (function (pipe, idx) {
+          var clr = pipeColors[idx % pipeColors.length];
+          var availableModes = pipe.extId ? getExtModes(pipe.extId) : [];
+          var validTemplate = pipe.template;
+          if (availableModes.length > 0) {
+            var found = false;
+            for (var mi = 0; mi < availableModes.length; mi++) {
+              if (availableModes[mi].id === validTemplate) { found = true; break; }
+            }
+            if (!found) validTemplate = availableModes[0].id;
+          }
 
-      // Mode cards
-      if (availableModes.length > 0) {
-        var tplCards = availableModes.map(function (m) {
-          var selected = validTemplate === m.id;
-          return jsx('button', {
-            key: m.id,
-            type: 'button',
-            onClick: function () { update('processingTemplate', m.id); },
-            className: 'flex flex-col items-start gap-1 p-3 rounded-lg border text-left transition-colors ' +
-              (selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-muted-foreground/30'),
-            children: jsxs('div', { className: 'flex items-center gap-2', children: [
-              jsx('span', { className: 'text-base', children: m.icon }),
-              jsxs('div', { className: 'flex flex-col', children: [
-                jsx('span', { className: 'text-sm font-medium ' + (selected ? 'text-primary' : ''), children: m.label }),
-                jsx('span', { className: 'text-xs text-muted-foreground', children: m.desc })
-              ]})
+          var currentMode = null;
+          for (var cmi = 0; cmi < availableModes.length; cmi++) {
+            if (availableModes[cmi].id === validTemplate) { currentMode = availableModes[cmi]; break; }
+          }
+          var modeArgs = currentMode ? (currentMode.args || []) : [];
+
+          var pipeItems = [];
+
+          // Header: color dot + title + delete button
+          pipeItems.push(
+            jsxs('div', { key: 'hdr', className: 'flex items-center justify-between', children: [
+              jsxs('div', { className: 'flex items-center gap-2', children: [
+                jsx('div', { className: 'h-2.5 w-2.5 rounded-full shrink-0 ' + clr.dot }),
+                jsx('span', { className: 'text-sm font-medium', children: 'Pipeline ' + (idx + 1) }),
+                pipe.extId ? jsx('span', { className: 'text-xs text-muted-foreground', children: pipe.extId }) : null
+              ]}),
+              pipelines.length > 1
+                ? jsx('button', {
+                    type: 'button',
+                    className: 'text-xs text-muted-foreground hover:text-red-500 transition-colors',
+                    onClick: function () { removePipeline(pipe.id); },
+                    children: 'Remove'
+                  })
+                : null
             ]})
-          });
-        });
-        items.push(
-          jsxs('div', { key: 'tpl', className: FIELD_CLS, children: [
-            jsx('label', { className: LABEL_CLS, children: 'Working Mode' }),
-            jsx('div', { className: 'grid grid-cols-1 gap-2', children: tplCards })
-          ]})
-        );
-      }
+          );
 
-      // Mode-specific fields
-      var currentMode = null;
-      for (var cmi = 0; cmi < availableModes.length; cmi++) {
-        if (availableModes[cmi].id === validTemplate) { currentMode = availableModes[cmi]; break; }
-      }
-      var modeArgs = currentMode ? (currentMode.args || []) : [];
-      if (modeArgs.indexOf('categories') >= 0) {
-        items.push(
-          jsxs('div', { key: 'cat', className: FIELD_CLS, children: [
-            jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Detection Categories', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
-            jsx('input', { className: INPUT_CLS, value: config.processingCategories || '', placeholder: 'person, car, dog', onChange: function (e) { update('processingCategories', e.target.value); } }),
-            jsx('p', { className: DESC_CLS, children: 'Required for this mode (comma-separated)' })
-          ]})
-        );
-      }
-      if (modeArgs.indexOf('phrase') >= 0) {
-        items.push(
-          jsxs('div', { key: 'phrase', className: FIELD_CLS, children: [
-            jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Search Phrase', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
-            jsx('input', { className: INPUT_CLS, value: config.processingPhrase || '', placeholder: 'Describe what to find', onChange: function (e) { update('processingPhrase', e.target.value); } }),
-            jsx('p', { className: DESC_CLS, children: 'Required for this mode' })
-          ]})
-        );
-      }
+          // Extension selector
+          pipeItems.push(
+            jsxs('div', { key: 'ext', className: FIELD_CLS, children: [
+              jsx('label', { className: LABEL_CLS, children: 'AI Extension' }),
+              jsx(ExtDropdown, {
+                extensions: extensions,
+                value: pipe.extId,
+                onChange: function (id) { updatePipeline(pipe.id, 'extId', id); },
+                loading: extLoading
+              })
+            ]})
+          );
 
-      // Class filter
-      items.push(
-        jsxs('div', { key: 'cf', className: FIELD_CLS, children: [
-          jsx('label', { className: LABEL_CLS, children: 'Class Filter' }),
-          jsx('input', { className: INPUT_CLS, value: config.processingClassFilter || '', placeholder: 'Empty = all classes', onChange: function (e) { update('processingClassFilter', e.target.value); } }),
-          jsx('p', { className: DESC_CLS, children: 'Comma-separated class names to include' })
-        ]})
-      );
+          // Mode cards
+          if (availableModes.length > 0) {
+            var tplCards = availableModes.map(function (m) {
+              var selected = validTemplate === m.id;
+              return jsx('button', {
+                key: m.id,
+                type: 'button',
+                onClick: function () { updatePipeline(pipe.id, 'template', m.id); },
+                className: 'flex items-center gap-2 p-2 rounded-md border text-left transition-colors text-xs ' +
+                  (selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-muted-foreground/30'),
+                children: jsxs('div', { className: 'flex items-center gap-1.5', children: [
+                  jsx('div', { className: 'flex-shrink-0', children: ModeIcon(m.icon) }),
+                  jsx('span', { className: 'font-medium ' + (selected ? 'text-primary' : ''), children: m.label })
+                ]})
+              });
+            });
+            pipeItems.push(
+              jsxs('div', { key: 'tpl', className: FIELD_CLS, children: [
+                jsx('label', { className: LABEL_CLS, children: 'Working Mode' }),
+                jsx('div', { className: 'grid grid-cols-2 gap-1.5', children: tplCards })
+              ]})
+            );
+          }
 
-      // ROI toggle
-      items.push(
-        jsxs('div', { key: 'roi-div', className: 'flex items-center justify-between pt-3 border-t', children: [
-          jsx('label', { className: LABEL_CLS + ' cursor-pointer', children: 'Region of Interest (ROI)' }),
-          SwitchControl(roiEnabled, function () { update('processingRoiEnabled', !roiEnabled); })
-        ]})
-      );
+          // Mode-specific fields
+          if (modeArgs.indexOf('categories') >= 0) {
+            pipeItems.push(
+              jsxs('div', { key: 'cat', className: FIELD_CLS, children: [
+                jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Categories', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
+                jsx('input', { className: INPUT_CLS, value: pipe.categories || '', placeholder: 'person, car, dog', onChange: function (e) { updatePipeline(pipe.id, 'categories', e.target.value); } })
+              ]})
+            );
+          }
+          if (modeArgs.indexOf('phrase') >= 0) {
+            pipeItems.push(
+              jsxs('div', { key: 'phrase', className: FIELD_CLS, children: [
+                jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Search Phrase', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
+                jsx('input', { className: INPUT_CLS, value: pipe.phrase || '', placeholder: 'Describe what to find', onChange: function (e) { updatePipeline(pipe.id, 'phrase', e.target.value); } })
+              ]})
+            );
+          }
 
-      if (roiEnabled) {
-        var actionChips = ROI_ACTIONS.map(function (a) {
-          var selected = roiAction === a.id;
-          return jsx('button', {
-            key: a.id,
-            type: 'button',
-            onClick: function () { update('processingRoiAction', a.id); },
-            className: 'px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ' +
-              (selected ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-muted-foreground/30'),
-            children: a.label
-          });
-        });
-        items.push(
-          jsxs('div', { key: 'roi-act', className: FIELD_CLS, children: [
-            jsx('label', { className: LABEL_CLS, children: 'ROI Action' }),
-            jsx('div', { className: 'flex gap-2', children: actionChips })
-          ]})
-        );
+          // Class filter
+          pipeItems.push(
+            jsxs('div', { key: 'cf', className: FIELD_CLS, children: [
+              jsx('label', { className: LABEL_CLS, children: 'Class Filter' }),
+              jsx('input', { className: INPUT_CLS, value: pipe.classFilter || '', placeholder: 'Empty = all classes', onChange: function (e) { updatePipeline(pipe.id, 'classFilter', e.target.value); } })
+            ]})
+          );
 
-        // ROI visual editor
-        items.push(
-          jsxs('div', { key: 'roi-editor', className: 'space-y-2', children: [
-            jsx('p', { className: DESC_CLS, children: 'Drag to move, corners to resize' }),
+          // ROI toggle
+          pipeItems.push(
+            jsxs('div', { key: 'roi-div', className: 'flex items-center justify-between pt-2 border-t mt-1', children: [
+              jsx('label', { className: 'text-xs font-medium cursor-pointer', children: 'ROI' }),
+              SwitchControl(pipe.roiEnabled, function () { updatePipeline(pipe.id, 'roiEnabled', !pipe.roiEnabled); })
+            ]})
+          );
+
+          if (pipe.roiEnabled) {
+            // ROI action chips
+            var actionChips = ROI_ACTIONS.map(function (a) {
+              var selected = pipe.roiAction === a.id;
+              return jsx('button', {
+                key: a.id,
+                type: 'button',
+                onClick: function () { updatePipeline(pipe.id, 'roiAction', a.id); },
+                className: 'px-2 py-1 rounded-md border text-xs font-medium transition-colors ' +
+                  (selected ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-muted-foreground/30'),
+                children: a.label
+              });
+            });
+            pipeItems.push(
+              jsxs('div', { key: 'roi-act', className: FIELD_CLS, children: [
+                jsx('label', { className: 'text-xs font-medium', children: 'ROI Action' }),
+                jsx('div', { className: 'flex gap-1.5', children: actionChips })
+              ]})
+            );
+
+            // ROI sliders
+            pipeItems.push(
+              jsxs('div', { key: 'roi-sliders', className: 'grid grid-cols-2 gap-x-3 gap-y-1', children: [
+                jsxs('div', { key: 'x', className: FIELD_CLS, children: [
+                  jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'X' }), jsx('span', { className: DESC_CLS + ' font-mono', children: pipe.roiX.toFixed(2) }) ]}),
+                  jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: pipe.roiX, onChange: function (e) { updatePipeline(pipe.id, 'roiX', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+                ]}),
+                jsxs('div', { key: 'y', className: FIELD_CLS, children: [
+                  jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Y' }), jsx('span', { className: DESC_CLS + ' font-mono', children: pipe.roiY.toFixed(2) }) ]}),
+                  jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: pipe.roiY, onChange: function (e) { updatePipeline(pipe.id, 'roiY', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+                ]}),
+                jsxs('div', { key: 'w', className: FIELD_CLS, children: [
+                  jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'W' }), jsx('span', { className: DESC_CLS + ' font-mono', children: pipe.roiW.toFixed(2) }) ]}),
+                  jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: pipe.roiW, onChange: function (e) { updatePipeline(pipe.id, 'roiW', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+                ]}),
+                jsxs('div', { key: 'h', className: FIELD_CLS, children: [
+                  jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'H' }), jsx('span', { className: DESC_CLS + ' font-mono', children: pipe.roiH.toFixed(2) }) ]}),
+                  jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: pipe.roiH, onChange: function (e) { updatePipeline(pipe.id, 'roiH', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+                ]})
+              ]})
+            );
+          }
+
+          items.push(
             jsxs('div', {
-              ref: roiRef,
-              className: 'relative w-full rounded-md overflow-hidden select-none',
-              style: { aspectRatio: '4/3', background: '#18181b', backgroundImage: 'linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '10% 10%', cursor: 'crosshair' },
-              onMouseDown: handleRoiMouseDown,
-              children: [
-                jsxs('div', {
-                  key: 'rect',
-                  className: 'absolute',
-                  style: { left: (roiX*100)+'%', top: (roiY*100)+'%', width: (roiW*100)+'%', height: (roiH*100)+'%', border: '2px dashed rgba(250,204,21,0.8)', backgroundColor: 'rgba(250,204,21,0.06)', borderRadius: '2px', cursor: 'move' },
-                  children: [
-                    jsx('span', { key: 'lbl', style: { position: 'absolute', top: '-16px', left: '0', background: 'rgba(250,204,21,0.9)', color: '#000', fontSize: '9px', fontWeight: '700', padding: '1px 4px', borderRadius: '2px', fontFamily: 'monospace', whiteSpace: 'nowrap' }, children: 'ROI' }),
-                    jsx('div', { key: 'nw', style: { position: 'absolute', top: '-4px', left: '-4px', width: '8px', height: '8px', background: '#facc15', borderRadius: '50%', cursor: 'nw-resize' } }),
-                    jsx('div', { key: 'ne', style: { position: 'absolute', top: '-4px', right: '-4px', width: '8px', height: '8px', background: '#facc15', borderRadius: '50%', cursor: 'ne-resize' } }),
-                    jsx('div', { key: 'sw', style: { position: 'absolute', bottom: '-4px', left: '-4px', width: '8px', height: '8px', background: '#facc15', borderRadius: '50%', cursor: 'sw-resize' } }),
-                    jsx('div', { key: 'se', style: { position: 'absolute', bottom: '-4px', right: '-4px', width: '8px', height: '8px', background: '#facc15', borderRadius: '50%', cursor: 'se-resize' } })
-                  ]
-                })
-              ]
-            }),
-            // Fine-tuning sliders
-            jsxs('div', { key: 'sliders', className: 'grid grid-cols-2 gap-x-4 gap-y-2', children: [
-              jsxs('div', { key: 'x', className: FIELD_CLS, children: [
-                jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'X' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiX.toFixed(2) }) ]}),
-                jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiX, onChange: function (e) { update('processingRoiX', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
-              ]}),
-              jsxs('div', { key: 'y', className: FIELD_CLS, children: [
-                jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Y' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiY.toFixed(2) }) ]}),
-                jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiY, onChange: function (e) { update('processingRoiY', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
-              ]}),
-              jsxs('div', { key: 'w', className: FIELD_CLS, children: [
-                jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Width' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiW.toFixed(2) }) ]}),
-                jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiW, onChange: function (e) { update('processingRoiW', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
-              ]}),
-              jsxs('div', { key: 'h', className: FIELD_CLS, children: [
-                jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Height' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiH.toFixed(2) }) ]}),
-                jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiH, onChange: function (e) { update('processingRoiH', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
-              ]})
-            ]})
-          ]})
+              key: 'pipe-' + pipe.id,
+              className: 'rounded-lg p-3 space-y-2',
+              style: { background: clr.bg, border: '1px solid ' + clr.border },
+              children: pipeItems
+            })
+          );
+        })(pipelines[pi], pi);
+      }
+
+      // Add pipeline button
+      items.push(
+        jsx('button', {
+          key: 'add',
+          type: 'button',
+          onClick: addPipeline,
+          className: 'w-full py-2 rounded-md border border-dashed border-border text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors',
+          children: '+ Add AI Pipeline'
+        })
+      );
+
+      if (extensions.length === 0 && !extLoading) {
+        items.push(
+          jsx('p', { key: 'no-ext', className: DESC_CLS, children: 'No AI extensions installed. Install one from the Extensions page.' })
         );
       }
     }
