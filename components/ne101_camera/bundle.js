@@ -464,9 +464,9 @@ var NE101CameraPanel = (function () {
     // Track transform ID for cleanup
     var transformIdRef = React.useRef(null); // single transform ID
 
-    // Cache last known detections — platform store may wipe virtual metrics
-    // on batch telemetry updates (_applyCurrentValuesBatch replaces entire entry).
+    // Cache last known detections + their source timestamp
     var lastDetsRef = React.useRef([]);
+    var lastDetsTsRef = React.useRef(null);
 
     // WS-triggered fetch: platform WS delivers small metrics (battery, ts) in real-time,
     // but large base64 images may exceed WS message size limits.
@@ -571,7 +571,16 @@ var NE101CameraPanel = (function () {
     // Single-extension Transform lifecycle
     // One Transform per component instance. Persist ID in config for reuse across remounts.
     var _storedTid = config._transformId || '';
+    // Compute a config hash that covers ALL fields affecting Transform JS code
+    var _configHash = processingExtId + ':' + processingTemplate + ':' +
+      (processingCategories || '') + ':' + (processingPhrase || '') + ':' + (processingClassFilter || '') + ':' +
+      (processingRoiEnabled ? '1' : '0') + ':' + (processingRoiAction || '') + ':' +
+      processingRoiX + ':' + processingRoiY + ':' + processingRoiW + ':' + processingRoiH + ':' +
+      JSON.stringify(processingRois);
     var _storedKey = config._transformKey || '';
+    // Keep latest config in ref to avoid stale closure in async callbacks
+    var configRef = React.useRef(config);
+    configRef.current = config;
     React.useEffect(function () {
       if (!processingEnabled || !processingExtId || !device) {
         // Processing disabled — delete stored Transform and clear config
@@ -580,7 +589,8 @@ var NE101CameraPanel = (function () {
           if (nm && nm.deleteTransform) {
             nm.deleteTransform(_storedTid).catch(function () {});
           }
-          if (props.onConfigChange) props.onConfigChange(Object.assign({}, config, { _transformId: '', _transformKey: '' }));
+          var curCfg = configRef.current;
+          if (props.onConfigChange) props.onConfigChange(Object.assign({}, curCfg, { _transformId: '', _transformKey: '' }));
         }
         transformIdRef.current = null;
         setExtStatus('idle');
@@ -593,11 +603,11 @@ var NE101CameraPanel = (function () {
         return;
       }
 
-      var currentKey = processingExtId + ':' + processingTemplate;
+      var currentKey = _configHash;
       // Use ref as fallback — protects against race where onCfgChange hasn't propagated yet
       var activeId = _storedTid || transformIdRef.current || '';
 
-      // Fast path: same Transform, same config — just set ref, no API call
+      // Fast path: same Transform, same full config — just set ref, no API call
       if (activeId && _storedKey === currentKey) {
         transformIdRef.current = activeId;
         setExtStatus('active');
@@ -687,7 +697,7 @@ var NE101CameraPanel = (function () {
         // Helper: persist Transform ID to config
         var persistId = function (id) {
           transformIdRef.current = id;
-          if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: id, _transformKey: currentKey }));
+          if (onCfgChange) onCfgChange(Object.assign({}, configRef.current, { _transformId: id, _transformKey: currentKey }));
         };
 
         // Helper: clean up ALL stale ne101 transforms except the active one
@@ -771,7 +781,7 @@ var NE101CameraPanel = (function () {
               // Transform deleted externally — search + reuse or create
               activeId = '';
               transformIdRef.current = null;
-              if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: '', _transformKey: '' }));
+              if (onCfgChange) onCfgChange(Object.assign({}, configRef.current, { _transformId: '', _transformKey: '' }));
               // Fall through to Case 2
               searchOrCreate();
             });
@@ -787,7 +797,7 @@ var NE101CameraPanel = (function () {
       return function () {
         cancelled = true;
       };
-    }, [device ? device.id : null, processingEnabled, processingExtId, processingTemplate, _storedTid, _storedKey]);
+    }, [device ? device.id : null, processingEnabled, _configHash, _storedTid, _storedKey]);
 
     if (!device) return jsx(NoDevice, {});
 
@@ -826,11 +836,14 @@ var NE101CameraPanel = (function () {
       if (Array.isArray(vDet) && vDet.length > 0 && tsMatch) {
         detections = vDet;
         lastDetsRef.current = vDet;
+        lastDetsTsRef.current = imgTsVal;
       } else if (Array.isArray(vDet) && vDet.length > 0) {
         // Detections exist but from a different image — cache but don't display
         lastDetsRef.current = vDet;
-      } else if (lastDetsRef.current.length > 0) {
-        // No detections in store — check if cached ones match current image
+        lastDetsTsRef.current = vSourceTs;
+      } else if (lastDetsRef.current.length > 0 && lastDetsTsRef.current != null &&
+                 String(lastDetsTsRef.current) === String(imgTsVal)) {
+        // No detections in store — use cache only if it matches current image
         detections = lastDetsRef.current;
       }
     } else {
