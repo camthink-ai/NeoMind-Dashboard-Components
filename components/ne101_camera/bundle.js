@@ -661,14 +661,16 @@ var NE101CameraPanel = (function () {
             transformIdRef.current = result.id;
             // Persist ID to component config for reuse on remount
             if (onCfgChange) onCfgChange(Object.assign({}, config, { processingTransformId: result.id, processingTransformKey: currentKey }));
-            // Dedup: clean any stale transforms for this device (handles race conditions)
+            // Dedup: only remove duplicates with SAME bizId (same device+ext+template)
             if (neomind.listTransforms) {
+              var bizPrefix = 'ne101:' + device.id + ':' + processingExtId + ':' + processingTemplate;
               neomind.listTransforms({ scope: device.id }).then(function (fresh) {
                 if (cancelled) return;
                 var fList = Array.isArray(fresh) ? fresh : [];
                 for (var fi = 0; fi < fList.length; fi++) {
-                  if (fList[fi].id !== result.id) {
-                    console.log('[ne101] Removing stale transform:', fList[fi].id);
+                  var fDesc = (fList[fi].description || '');
+                  if (fDesc.indexOf(bizPrefix) === 0 && fList[fi].id !== result.id) {
+                    console.log('[ne101] Removing duplicate transform:', fList[fi].id);
                     neomind.deleteTransform(fList[fi].id).catch(function () {});
                   }
                 }
