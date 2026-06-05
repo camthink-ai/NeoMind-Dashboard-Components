@@ -360,7 +360,8 @@ var NE101CameraPanel = (function () {
     var jsCode = generateTransformJsCode(pipe);
     return {
       js_code: jsCode,
-      output_prefix: 'virtual'
+      output_prefix: 'virtual',
+      rule: { device_id: pipe.deviceId || '', device_type: 'ne101_camera' }
     };
   }
 
@@ -539,6 +540,7 @@ var NE101CameraPanel = (function () {
 
         var pipe = {
           id: 'main',
+          deviceId: device.id,
           extId: processingExtId,
           template: processingTemplate,
           categories: processingCategories,
