@@ -345,6 +345,7 @@ var NE101CameraPanel = (function () {
     }
 
     L.push('out[\'' + pfx + 'inference_time_ms\'] = r.inference_time_ms || r.processing_time_ms || null;');
+    L.push('out[\'' + pfx + 'source_ts\'] = input_raw && (input_raw.ts || input_raw.timestamp) || null;');
 
     L.push('');
     L.push('return out;');
@@ -746,16 +747,23 @@ var NE101CameraPanel = (function () {
     var hasImage = !!imageSrc;
 
     // Virtual metrics (from processing pipeline)
+    // Only show detections when source_ts matches the current image's timestamp
     var detections = [];
     if (processingEnabled && processingExtId) {
-      // Read detections from virtual metrics (backend transform results)
       var pfx = 'virtual.' + processingExtId.replace(/-/g, '_') + '.';
       var vDet = getFirst(vals, [pfx + 'detections', 'values.' + pfx + 'detections']);
-      if (Array.isArray(vDet) && vDet.length > 0) {
+      var vSourceTs = getFirst(vals, [pfx + 'source_ts', 'values.' + pfx + 'source_ts']);
+      // Match: detections' source_ts must align with the current image timestamp
+      var imgTsVal = imgTs;
+      var tsMatch = !vSourceTs || !imgTsVal || String(vSourceTs) === String(imgTsVal);
+      if (Array.isArray(vDet) && vDet.length > 0 && tsMatch) {
         detections = vDet;
         lastDetsRef.current = vDet;
-      } else {
-        // Fallback to cached detections — platform store may have wiped virtual metrics
+      } else if (Array.isArray(vDet) && vDet.length > 0) {
+        // Detections exist but from a different image — cache but don't display
+        lastDetsRef.current = vDet;
+      } else if (lastDetsRef.current.length > 0) {
+        // No detections in store — check if cached ones match current image
         detections = lastDetsRef.current;
       }
     } else {
