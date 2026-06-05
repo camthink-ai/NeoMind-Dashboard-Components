@@ -958,6 +958,29 @@ var NE101CameraPanel = (function () {
       );
     }
 
+    // Calculate ROI polygons for overlay display (used in both summary and image overlay)
+    var roiPolygons = [];
+    if (processingRoiEnabled) {
+      if (processingRois.length > 0) {
+        for (var rpIdx = 0; rpIdx < processingRois.length; rpIdx++) {
+          var rpPts = processingRois[rpIdx].points;
+          if (rpPts && rpPts.length >= 3) roiPolygons.push(rpPts);
+        }
+      }
+      if (roiPolygons.length === 0) {
+        var lx = Number(processingRoiX) || 0;
+        var ly = Number(processingRoiY) || 0;
+        var lw = Number(processingRoiW) || 0.8;
+        var lh = Number(processingRoiH) || 0.8;
+        roiPolygons.push([
+          { x: lx, y: ly },
+          { x: lx + lw, y: ly },
+          { x: lx + lw, y: ly + lh },
+          { x: lx, y: ly + lh }
+        ]);
+      }
+    }
+
     // Detection summary — read from single extension
     var hasAnySummary = processingEnabled && processingExtId && (
       detections.length > 0 ||
@@ -975,29 +998,7 @@ var NE101CameraPanel = (function () {
       var vTexts = getFirst(vals, [pfx + 'texts', 'values.' + pfx + 'texts']);
       var maxInfTime = getFirst(vals, [pfx + 'inference_time_ms', 'values.' + pfx + 'inference_time_ms']);
 
-      // Calculate ROI polygons for overlay display
-      var roiPolygons = [];
-      if (processingRoiEnabled) {
-        if (processingRois.length > 0) {
-          for (var rpIdx = 0; rpIdx < processingRois.length; rpIdx++) {
-            var rpPts = processingRois[rpIdx].points;
-            if (rpPts && rpPts.length >= 3) roiPolygons.push(rpPts);
-          }
-        }
-        // Fallback to legacy rectangle
-        if (roiPolygons.length === 0) {
-          var lx = Number(processingRoiX) || 0;
-          var ly = Number(processingRoiY) || 0;
-          var lw = Number(processingRoiW) || 0.8;
-          var lh = Number(processingRoiH) || 0.8;
-          roiPolygons.push([
-            { x: lx, y: ly },
-            { x: lx + lw, y: ly },
-            { x: lx + lw, y: ly + lh },
-            { x: lx, y: ly + lh }
-          ]);
-        }
-      }
+
 
       var displayCount = vTotalCount != null ? vTotalCount : detections.length;
       var detLabels = detections.slice(0, 4).map(function (d) { return d.label || '?'; });
