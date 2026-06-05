@@ -3,11 +3,6 @@ var NE101CameraPanel = (function () {
   var jsx = window.jsxRuntime.jsx;
   var jsxs = window.jsxRuntime.jsxs;
 
-  // Pending Transform delete timers — shared across all component instances.
-  // Key: transformId, Value: timerId. Used to delay deletion on unmount;
-  // remount (page switch) cancels the timer, component deletion lets it fire.
-  var _pendingDeletes = {};
-
   // Helpers
   function batteryMeta(level) {
     if (level == null) return { bar: 'rgba(128,128,128,0.3)' };
@@ -605,12 +600,6 @@ var NE101CameraPanel = (function () {
 
         // Case 1: Stored ID matches current key — reuse existing Transform
         if (storedId && storedKey === currentKey) {
-          // Cancel pending delete from previous unmount (page switch back)
-          if (_pendingDeletes[storedId]) {
-            clearTimeout(_pendingDeletes[storedId]);
-            delete _pendingDeletes[storedId];
-            console.log('[ne101] Cancelled pending delete for:', storedId);
-          }
           console.log('[ne101] Reusing stored transform:', storedId);
           transformIdRef.current = storedId;
           // Sync config (ROI, categories, etc. may have changed)
@@ -699,19 +688,6 @@ var NE101CameraPanel = (function () {
 
       return function () {
         cancelled = true;
-        // Delayed delete: if component remounts within 3s (page switch), it cancels the timer.
-        // If no remount (component truly deleted from dashboard), Transform is cleaned up.
-        var tid = transformIdRef.current;
-        if (tid) {
-          var nm = window.neomind;
-          _pendingDeletes[tid] = setTimeout(function () {
-            delete _pendingDeletes[tid];
-            if (nm && nm.deleteTransform) {
-              console.log('[ne101] Deleting transform (component removed):', tid);
-              nm.deleteTransform(tid).catch(function () {});
-            }
-          }, 3000);
-        }
       };
     }, [device ? device.id : null, processingEnabled, processingExtId, processingTemplate]);
 
