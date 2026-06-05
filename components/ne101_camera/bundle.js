@@ -210,7 +210,14 @@ var NE101CameraPanel = (function () {
   function pipeRoi(pipe) {
     if (!pipe.roiEnabled) return null;
     if (pipe.roiX == null || pipe.roiY == null) return null;
-    return { x: pipe.roiX, y: pipe.roiY, w: pipe.roiW || 0.8, h: pipe.roiH || 0.8 };
+    // Ensure all required values are valid numbers
+    var x = Number(pipe.roiX) || 0;
+    var y = Number(pipe.roiY) || 0;
+    var w = Number(pipe.roiW) || 0.8;
+    var h = Number(pipe.roiH) || 0.8;
+    if (w <= 0) w = 0.8;
+    if (h <= 0) h = 0.8;
+    return { x: x, y: y, w: w, h: h };
   }
 
   /**
