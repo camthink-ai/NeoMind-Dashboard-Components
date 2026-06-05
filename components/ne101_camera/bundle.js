@@ -571,7 +571,9 @@ var NE101CameraPanel = (function () {
         };
 
         var tplConfig = fillTemplate(pipe);
-        var tName = 'ne101-' + (device.name || device.id).replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '').substring(0, 20) + '-' + processingTemplate;
+        var _extLabel = (getExtMode(processingExtId, processingTemplate) || {}).label || processingExtId;
+        var _tTs = new Date().toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/[\/:]/g, '');
+        var tName = (device.name || device.id).replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '').substring(0, 16) + '-' + _extLabel.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '').substring(0, 12) + '-' + processingTemplate + '-' + _tTs;
         var fp = JSON.stringify({ js_code: tplConfig.js_code });
         var payload = Object.assign({}, tplConfig, {
           name: tName,
