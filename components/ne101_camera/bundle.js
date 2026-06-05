@@ -980,16 +980,16 @@ var NE101CameraPanel = (function () {
                   className: 'absolute inset-0',
                   style: { background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.1) 40%, rgba(0,0,0,0.45) 100%)' }
                 }),
-                // ROI rectangle overlay
+                // ROI rectangle overlay — apply same object-cover transform as detection boxes
                 processingEnabled && roi
                   ? jsxs('div', {
                       key: 'roi-rect',
                       className: 'absolute',
                       style: {
-                        left: (roi.x * 100) + '%',
-                        top: (roi.y * 100) + '%',
-                        width: (roi.w * 100) + '%',
-                        height: (roi.h * 100) + '%',
+                        left: (ovTf ? ((roi.x * ovTf.sx + ovTf.ox) * 100) : (roi.x * 100)) + '%',
+                        top: (ovTf ? ((roi.y * ovTf.sy + ovTf.oy) * 100) : (roi.y * 100)) + '%',
+                        width: (ovTf ? (roi.w * ovTf.sx * 100) : (roi.w * 100)) + '%',
+                        height: (ovTf ? (roi.h * ovTf.sy * 100) : (roi.h * 100)) + '%',
                         border: '1.5px dashed rgba(255,200,50,0.7)',
                         borderRadius: '2px',
                         pointerEvents: 'none'
