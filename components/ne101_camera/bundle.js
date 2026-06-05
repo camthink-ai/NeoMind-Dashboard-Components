@@ -178,18 +178,35 @@ var NE101CameraPanel = (function () {
     return EXT_MODES[extensionId] || [{ id: 'object_detection', command: 'detect', imageArg: 'image', responseType: 'boxes_x1y1x2y2', label: 'Object Detection', desc: 'Generic detection', icon: 'search' }];
   }
 
-  /** Build ROI object from a pipeline config */
-  function pipeRoi(pipe) {
-    if (!pipe.roiEnabled) return null;
-    if (pipe.roiX == null || pipe.roiY == null) return null;
-    // Ensure all required values are valid numbers
+  /** Build ROI polygons array from a pipeline config.
+   *  Returns an array of polygon point arrays: [[{x,y},...], ...]
+   *  Supports both new format (pipe.rois = [{points:[...]}]) and legacy (pipe.roiX/Y/W/H).
+   */
+  function pipeRois(pipe) {
+    if (!pipe.roiEnabled) return [];
+    // New format: array of polygons
+    if (pipe.rois && Array.isArray(pipe.rois) && pipe.rois.length > 0) {
+      var result = [];
+      for (var i = 0; i < pipe.rois.length; i++) {
+        var pts = pipe.rois[i].points;
+        if (pts && pts.length >= 3) result.push(pts);
+      }
+      if (result.length > 0) return result;
+    }
+    // Legacy: single rectangle from sliders
+    if (pipe.roiX == null || pipe.roiY == null) return [];
     var x = Number(pipe.roiX) || 0;
     var y = Number(pipe.roiY) || 0;
     var w = Number(pipe.roiW) || 0.8;
     var h = Number(pipe.roiH) || 0.8;
     if (w <= 0) w = 0.8;
     if (h <= 0) h = 0.8;
-    return { x: x, y: y, w: w, h: h };
+    return [[
+      { x: x, y: y },
+      { x: x + w, y: y },
+      { x: x + w, y: y + h },
+      { x: x, y: y + h }
+    ]];
   }
 
   /**
@@ -215,7 +232,7 @@ var NE101CameraPanel = (function () {
     var imageArg = mode.imageArg;
     var hasCats = (mode.args || []).indexOf('categories') >= 0 && pipe.categories;
     var hasPhrase = (mode.args || []).indexOf('phrase') >= 0 && pipe.phrase;
-    var roi = pipeRoi(pipe);
+    var rois = pipeRois(pipe);
     var roiAction = pipe.roiAction || 'count';
     var classFilter = pipe.classFilter;
 
@@ -288,21 +305,42 @@ var NE101CameraPanel = (function () {
     }
     L.push('');
 
-    // ROI filter
-    if (roi) {
-      L.push('// ROI: {x:' + roi.x + ', y:' + roi.y + ', w:' + roi.w + ', h:' + roi.h + '}');
-      L.push('var roi = {x:' + roi.x + ', y:' + roi.y + ', w:' + roi.w + ', h:' + roi.h + '};');
-      L.push('var inRoi = function(d) {');
+    // ROI filter (supports multiple polygons via ray-casting point-in-polygon)
+    if (rois.length > 0) {
+      L.push('// ROI polygons: ' + rois.length + ' region(s)');
+      // Serialize polygons: [[{x,y},...], ...] => [[[x,y],...], ...]
+      var roiSer = rois.map(function(poly) {
+        return poly.map(function(p) { return [p.x, p.y]; });
+      });
+      L.push('var roiPolygons = ' + JSON.stringify(roiSer) + ';');
+      // Ray-casting point-in-polygon
+      L.push('var pointInPoly = function(px, py, poly) {');
+      L.push('  var inside = false;');
+      L.push('  for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {');
+      L.push('    var xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];');
+      L.push('    if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {');
+      L.push('      inside = !inside;');
+      L.push('    }');
+      L.push('  }');
+      L.push('  return inside;');
+      L.push('};');
+      L.push('var inAnyRoi = function(d) {');
       L.push('  var cx = (d.bbox[0] + d.bbox[2]) / 2;');
       L.push('  var cy = (d.bbox[1] + d.bbox[3]) / 2;');
-      L.push('  return cx >= roi.x && cx <= roi.x + roi.w && cy >= roi.y && cy <= roi.y + roi.h;');
+      L.push('  for (var r = 0; r < roiPolygons.length; r++) {');
+      L.push('    if (pointInPoly(cx, cy, roiPolygons[r])) return true;');
+      L.push('  }');
+      L.push('  return false;');
       L.push('};');
       if (roiAction === 'filter') {
-        L.push('var filtered = dets.filter(inRoi);');
+        L.push('var filtered = dets.filter(inAnyRoi);');
         L.push('var roiCount = filtered.length;');
+      } else if (roiAction === 'filter_outside') {
+        L.push('var filtered = dets.filter(function(d) { return !inAnyRoi(d); });');
+        L.push('var roiCount = dets.filter(inAnyRoi).length;');
       } else {
         L.push('var filtered = dets;');
-        L.push('var roiCount = dets.filter(inRoi).length;');
+        L.push('var roiCount = dets.filter(inAnyRoi).length;');
       }
     } else {
       L.push('var filtered = dets;');
@@ -333,10 +371,10 @@ var NE101CameraPanel = (function () {
       L.push('out[\'' + pfx + 'count_by_class\'] = outputDets.reduce(function(a, d) { a[d.label] = (a[d.label]||0)+1; return a; }, {});');
     }
 
-    if (roi) {
+    if (rois.length > 0) {
       L.push('out[\'' + pfx + 'roi_count\'] = roiCount;');
       if (roiAction === 'count_by_class') {
-        L.push('out[\'' + pfx + 'roi_count_by_class\'] = dets.filter(inRoi).reduce(function(a, d) { a[d.label] = (a[d.label]||0)+1; return a; }, {});');
+        L.push('out[\'' + pfx + 'roi_count_by_class\'] = dets.filter(inAnyRoi).reduce(function(a, d) { a[d.label] = (a[d.label]||0)+1; return a; }, {});');
       }
     }
 
@@ -410,6 +448,7 @@ var NE101CameraPanel = (function () {
     var processingRoiY = config.processingRoiY != null ? config.processingRoiY : 0.1;
     var processingRoiW = config.processingRoiW != null ? config.processingRoiW : 0.8;
     var processingRoiH = config.processingRoiH != null ? config.processingRoiH : 0.8;
+    var processingRois = Array.isArray(config.processingRois) ? config.processingRois : [];
 
     var extStatusState = React.useState('idle');
     var extStatus = extStatusState[0];
@@ -615,7 +654,8 @@ var NE101CameraPanel = (function () {
           roiX: processingRoiX,
           roiY: processingRoiY,
           roiW: processingRoiW,
-          roiH: processingRoiH
+          roiH: processingRoiH,
+          rois: processingRois
         };
 
         var tplConfig = fillTemplate(pipe);
@@ -935,13 +975,29 @@ var NE101CameraPanel = (function () {
       var vTexts = getFirst(vals, [pfx + 'texts', 'values.' + pfx + 'texts']);
       var maxInfTime = getFirst(vals, [pfx + 'inference_time_ms', 'values.' + pfx + 'inference_time_ms']);
 
-      // Calculate ROI from config (for overlay display)
-      var roi = processingRoiEnabled ? {
-        x: Number(processingRoiX) || 0,
-        y: Number(processingRoiY) || 0,
-        w: Number(processingRoiW) || 0.8,
-        h: Number(processingRoiH) || 0.8
-      } : null;
+      // Calculate ROI polygons for overlay display
+      var roiPolygons = [];
+      if (processingRoiEnabled) {
+        if (processingRois.length > 0) {
+          for (var rpIdx = 0; rpIdx < processingRois.length; rpIdx++) {
+            var rpPts = processingRois[rpIdx].points;
+            if (rpPts && rpPts.length >= 3) roiPolygons.push(rpPts);
+          }
+        }
+        // Fallback to legacy rectangle
+        if (roiPolygons.length === 0) {
+          var lx = Number(processingRoiX) || 0;
+          var ly = Number(processingRoiY) || 0;
+          var lw = Number(processingRoiW) || 0.8;
+          var lh = Number(processingRoiH) || 0.8;
+          roiPolygons.push([
+            { x: lx, y: ly },
+            { x: lx + lw, y: ly },
+            { x: lx + lw, y: ly + lh },
+            { x: lx, y: ly + lh }
+          ]);
+        }
+      }
 
       var displayCount = vTotalCount != null ? vTotalCount : detections.length;
       var detLabels = detections.slice(0, 4).map(function (d) { return d.label || '?'; });
@@ -1044,32 +1100,39 @@ var NE101CameraPanel = (function () {
                   className: 'absolute inset-0',
                   style: { background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.1) 40%, rgba(0,0,0,0.45) 100%)' }
                 }),
-                // ROI rectangle overlay — apply same object-cover transform as detection boxes
-                processingEnabled && roi
-                  ? jsxs('div', {
-                      key: 'roi-rect',
-                      className: 'absolute',
-                      style: {
-                        left: (ovTf ? ((roi.x * ovTf.sx + ovTf.ox) * 100) : (roi.x * 100)) + '%',
-                        top: (ovTf ? ((roi.y * ovTf.sy + ovTf.oy) * 100) : (roi.y * 100)) + '%',
-                        width: (ovTf ? (roi.w * ovTf.sx * 100) : (roi.w * 100)) + '%',
-                        height: (ovTf ? (roi.h * ovTf.sy * 100) : (roi.h * 100)) + '%',
-                        border: '1.5px dashed rgba(255,200,50,0.7)',
-                        borderRadius: '2px',
-                        pointerEvents: 'none'
-                      },
-                      children: [
-                        jsx('span', {
-                          key: 'roi-label',
-                          style: {
-                            position: 'absolute', top: '-13px', left: '-1px',
-                            background: 'rgba(255,200,50,0.85)', color: '#000',
-                            fontSize: '7px', fontWeight: '700', padding: '1px 4px',
-                            borderRadius: '2px', whiteSpace: 'nowrap', fontFamily: 'monospace'
-                          },
-                          children: 'ROI'
-                        })
-                      ]
+                // ROI polygon overlays — SVG for proper polygon rendering
+                processingEnabled && roiPolygons.length > 0
+                  ? jsx('svg', {
+                      key: 'roi-svg',
+                      className: 'absolute inset-0 w-full h-full',
+                      style: { pointerEvents: 'none' },
+                      viewBox: '0 0 100 100',
+                      preserveAspectRatio: 'none',
+                      children: roiPolygons.map(function (poly, ri) {
+                        // Apply object-cover transform to each point
+                        var pts = poly.map(function (p) {
+                          var tx = ovTf ? ((p.x * ovTf.sx + ovTf.ox) * 100) : (p.x * 100);
+                          var ty = ovTf ? ((p.y * ovTf.sy + ovTf.oy) * 100) : (p.y * 100);
+                          return tx.toFixed(2) + ',' + ty.toFixed(2);
+                        }).join(' ');
+                        return jsxs('g', { key: 'roi-' + ri, children: [
+                          jsx('polygon', {
+                            points: pts,
+                            fill: 'rgba(255,200,50,0.08)',
+                            stroke: 'rgba(255,200,50,0.7)',
+                            strokeWidth: '0.4',
+                            strokeDasharray: '1.5,1'
+                          }),
+                          jsx('text', {
+                            x: (ovTf ? ((poly[0].x * ovTf.sx + ovTf.ox) * 100) : (poly[0].x * 100)).toFixed(2),
+                            y: (ovTf ? ((poly[0].y * ovTf.sy + ovTf.oy) * 100) : (poly[0].y * 100)).toFixed(2) - 1,
+                            fill: 'rgba(255,200,50,0.9)',
+                            fontSize: '2.5',
+                            fontFamily: 'monospace',
+                            fontWeight: '700'
+                          })
+                        ]});
+                      })
                     })
                   : null,
                 // Detection boxes overlay — adjusted for object-cover image scaling
@@ -1215,7 +1278,8 @@ var NE101CameraPanel = (function () {
   var ROI_ACTIONS = [
     { id: 'count', label: 'Count', desc: 'Count objects in ROI' },
     { id: 'count_by_class', label: 'Count by Class', desc: 'Per-class count in ROI' },
-    { id: 'filter', label: 'Filter', desc: 'Only show detections in ROI' }
+    { id: 'filter', label: 'Inside', desc: 'Only show detections inside ROI' },
+    { id: 'filter_outside', label: 'Outside', desc: 'Only show detections outside ROI' }
   ];
 
   // shadcn-style dropdown (replaces native <select>)
@@ -1302,6 +1366,25 @@ var NE101CameraPanel = (function () {
 
     function update(key, value) {
       if (onChange) onChange(key, value);
+    }
+
+    // IME-safe input: tracks composition state so Chinese/Japanese/Korean input
+    // methods work correctly with React controlled inputs.
+    var composingRef = React.useRef(false);
+    function imeInput(key, value, placeholder) {
+      return jsx('input', {
+        className: INPUT_CLS,
+        value: value,
+        placeholder: placeholder,
+        onChange: function (e) {
+          if (!composingRef.current) update(key, e.target.value);
+        },
+        onCompositionStart: function () { composingRef.current = true; },
+        onCompositionEnd: function (e) {
+          composingRef.current = false;
+          update(key, e.target.value);
+        }
+      });
     }
 
     // Derived values
@@ -1416,7 +1499,7 @@ var NE101CameraPanel = (function () {
         items.push(
           jsxs('div', { key: 'cat', className: FIELD_CLS, children: [
             jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Categories', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
-            jsx('input', { className: INPUT_CLS, value: config.processingCategories || '', placeholder: 'person, car, dog', onChange: function (e) { update('processingCategories', e.target.value); } })
+            imeInput('processingCategories', config.processingCategories || '', 'person, car, dog')
           ]})
         );
       }
@@ -1424,7 +1507,7 @@ var NE101CameraPanel = (function () {
         items.push(
           jsxs('div', { key: 'phrase', className: FIELD_CLS, children: [
             jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Search Phrase', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
-            jsx('input', { className: INPUT_CLS, value: config.processingPhrase || '', placeholder: 'Describe what to find', onChange: function (e) { update('processingPhrase', e.target.value); } })
+            imeInput('processingPhrase', config.processingPhrase || '', 'Describe what to find')
           ]})
         );
       }
@@ -1433,7 +1516,7 @@ var NE101CameraPanel = (function () {
       items.push(
         jsxs('div', { key: 'cf', className: FIELD_CLS, children: [
           jsx('label', { className: LABEL_CLS, children: 'Class Filter' }),
-          jsx('input', { className: INPUT_CLS, value: config.processingClassFilter || '', placeholder: 'Empty = all classes', onChange: function (e) { update('processingClassFilter', e.target.value); } })
+          imeInput('processingClassFilter', config.processingClassFilter || '', 'Empty = all classes')
         ]})
       );
 
@@ -1463,35 +1546,235 @@ var NE101CameraPanel = (function () {
         items.push(
           jsxs('div', { key: 'roi-act', className: FIELD_CLS, children: [
             jsx('label', { className: 'text-xs font-medium', children: 'ROI Action' }),
-            jsx('div', { className: 'flex gap-1.5', children: actionChips })
+            jsx('div', { className: 'flex flex-wrap gap-1.5', children: actionChips })
           ]})
         );
 
-        // ROI sliders
-        var roiX = config.processingRoiX != null ? config.processingRoiX : 0.1;
-        var roiY = config.processingRoiY != null ? config.processingRoiY : 0.1;
-        var roiW = config.processingRoiW != null ? config.processingRoiW : 0.8;
-        var roiH = config.processingRoiH != null ? config.processingRoiH : 0.8;
-        items.push(
-          jsxs('div', { key: 'roi-sliders', className: 'grid grid-cols-2 gap-x-3 gap-y-1', children: [
-            jsxs('div', { key: 'x', className: FIELD_CLS, children: [
-              jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'X' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiX.toFixed(2) }) ]}),
-              jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiX, onChange: function (e) { update('processingRoiX', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
-            ]}),
-            jsxs('div', { key: 'y', className: FIELD_CLS, children: [
-              jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Y' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiY.toFixed(2) }) ]}),
-              jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiY, onChange: function (e) { update('processingRoiY', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
-            ]}),
-            jsxs('div', { key: 'w', className: FIELD_CLS, children: [
-              jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'W' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiW.toFixed(2) }) ]}),
-              jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiW, onChange: function (e) { update('processingRoiW', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
-            ]}),
-            jsxs('div', { key: 'h', className: FIELD_CLS, children: [
-              jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'H' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiH.toFixed(2) }) ]}),
-              jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiH, onChange: function (e) { update('processingRoiH', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+        // ROI drawing canvas — visual polygon drawing on top of the camera image
+        var rois = Array.isArray(config.processingRois) ? config.processingRois : [];
+        // Current drawing state: points being placed for the current polygon
+        var drawState = React.useState([]);
+        var currentPts = drawState[0];
+        var setCurrentPts = drawState[1];
+
+        var canvasRef = React.useRef(null);
+        var imgRef = React.useRef(null);
+
+        // Redraw canvas overlay
+        React.useEffect(function () {
+          var canvas = canvasRef.current;
+          if (!canvas) return;
+          var ctx = canvas.getContext('2d');
+          var dpr = window.devicePixelRatio || 1;
+          var rect = canvas.getBoundingClientRect();
+          canvas.width = rect.width * dpr;
+          canvas.height = rect.height * dpr;
+          ctx.scale(dpr, dpr);
+          ctx.clearRect(0, 0, rect.width, rect.height);
+
+          var cw = rect.width;
+          var ch = rect.height;
+
+          // Draw existing polygons
+          for (var ri = 0; ri < rois.length; ri++) {
+            var pts = rois[ri].points || [];
+            if (pts.length < 2) continue;
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x * cw, pts[0].y * ch);
+            for (var pi = 1; pi < pts.length; pi++) {
+              ctx.lineTo(pts[pi].x * cw, pts[pi].y * ch);
+            }
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(255, 200, 50, 0.15)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 200, 50, 0.8)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            // Label
+            ctx.fillStyle = 'rgba(255, 200, 50, 0.9)';
+            ctx.font = '10px monospace';
+            ctx.fillText('ROI ' + (ri + 1), pts[0].x * cw + 4, pts[0].y * ch - 4);
+          }
+
+          // Draw current polygon being drawn
+          if (currentPts.length > 0) {
+            ctx.beginPath();
+            ctx.moveTo(currentPts[0].x * cw, currentPts[0].y * ch);
+            for (var cpi = 1; cpi < currentPts.length; cpi++) {
+              ctx.lineTo(currentPts[cpi].x * cw, currentPts[cpi].y * ch);
+            }
+            ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 3]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Draw points
+            for (var dotI = 0; dotI < currentPts.length; dotI++) {
+              ctx.beginPath();
+              ctx.arc(currentPts[dotI].x * cw, currentPts[dotI].y * ch, 3, 0, Math.PI * 2);
+              ctx.fillStyle = dotI === 0 ? 'rgba(59, 130, 246, 1)' : 'rgba(59, 130, 246, 0.7)';
+              ctx.fill();
+            }
+          }
+        }, [rois, currentPts]);
+
+        // Camera image for background — fetch latest from bound device via neomind API
+        var deviceId = config.deviceBinding && config.deviceBinding.deviceId;
+        var previewImgState = React.useState('');
+        var previewSrc = previewImgState[0];
+        React.useEffect(function () {
+          if (!deviceId) { previewImgState[1](''); return; }
+          var neomind = window.neomind;
+          if (!neomind || typeof neomind.fetchDeviceValues !== 'function') return;
+          var cancelled = false;
+          neomind.fetchDeviceValues(deviceId).then(function (v) {
+            if (cancelled || !v) return;
+            var img = getFirst(v, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
+            if (img && typeof img === 'string') {
+              var src = img.indexOf('data:') === 0 ? img : 'data:image/jpeg;base64,' + img;
+              if (!cancelled) previewImgState[1](src);
+            }
+          }).catch(function () {});
+          return function () { cancelled = true; };
+        }, [deviceId]);
+
+        var canvasContainer = jsxs('div', { key: 'roi-canvas-wrap', className: FIELD_CLS, children: [
+          jsx('label', { className: 'text-xs font-medium', children:
+            currentPts.length > 0
+              ? 'Click to add points (' + currentPts.length + '/3+). Click first point or "Done" to close.'
+              : 'Click on image to draw ROI polygon'
+          }),
+          jsxs('div', {
+            className: 'relative w-full rounded-md border border-border overflow-hidden cursor-crosshair',
+            style: { height: '180px', background: '#1a1a2e' },
+            children: [
+              previewSrc
+                ? jsx('img', {
+                    ref: imgRef,
+                    src: previewSrc,
+                    style: { width: '100%', height: '100%', objectFit: 'contain', opacity: 0.5 },
+                    crossOrigin: 'anonymous'
+                  })
+                : jsx('div', {
+                    style: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+                    children: jsx('span', { style: { color: '#666', fontSize: '10px' }, children: 'No camera image for reference' })
+                  }),
+              jsx('canvas', {
+                ref: canvasRef,
+                className: 'absolute inset-0 w-full h-full',
+                onClick: function (e) {
+                  var canvas = canvasRef.current;
+                  if (!canvas) return;
+                  var rect = canvas.getBoundingClientRect();
+                  var x = (e.clientX - rect.left) / rect.width;
+                  var y = (e.clientY - rect.top) / rect.height;
+                  // Clamp to [0,1]
+                  x = Math.max(0, Math.min(1, x));
+                  y = Math.max(0, Math.min(1, y));
+
+                  // If clicking near first point and we have 3+ pts, close polygon
+                  if (currentPts.length >= 3) {
+                    var dx = x - currentPts[0].x;
+                    var dy = y - currentPts[0].y;
+                    if (Math.sqrt(dx * dx + dy * dy) < 0.03) {
+                      // Close polygon
+                      var newRois = rois.concat([{ points: currentPts.slice() }]);
+                      update('processingRois', newRois);
+                      setCurrentPts([]);
+                      return;
+                    }
+                  }
+                  setCurrentPts(currentPts.concat([{ x: x, y: y }]));
+                }
+              })
+            ]
+          }),
+          // Action buttons row
+          jsxs('div', { className: 'flex gap-1.5 mt-1', children: [
+            currentPts.length >= 3
+              ? jsx('button', {
+                  type: 'button',
+                  onClick: function () {
+                    var newRois = rois.concat([{ points: currentPts.slice() }]);
+                    update('processingRois', newRois);
+                    setCurrentPts([]);
+                  },
+                  className: 'px-2 py-1 rounded-md border border-primary bg-primary/10 text-primary text-xs font-medium',
+                  children: 'Done'
+                })
+              : null,
+            currentPts.length > 0
+              ? jsx('button', {
+                  type: 'button',
+                  onClick: function () { setCurrentPts([]); },
+                  className: 'px-2 py-1 rounded-md border border-border text-muted-foreground text-xs',
+                  children: 'Cancel'
+                })
+              : null,
+            jsx('button', {
+              type: 'button',
+              onClick: function () {
+                update('processingRois', []);
+                setCurrentPts([]);
+              },
+              className: 'px-2 py-1 rounded-md border border-border text-muted-foreground text-xs' +
+                (rois.length === 0 ? ' opacity-50 cursor-not-allowed' : ''),
+              children: 'Clear All'
+            })
+          ]}),
+          // ROI list
+          rois.length > 0
+            ? jsx('div', { className: 'flex flex-wrap gap-1 mt-1', children:
+                rois.map(function (roi, ri) {
+                  return jsxs('span', {
+                    className: 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs',
+                    style: { borderColor: 'rgba(255,200,50,0.5)', color: 'rgba(255,200,50,0.9)' },
+                    children: [
+                      'ROI ' + (ri + 1) + ' (' + (roi.points || []).length + ' pts)',
+                      jsx('button', {
+                        type: 'button',
+                        onClick: function () {
+                          var updated = rois.filter(function (_, i) { return i !== ri; });
+                          update('processingRois', updated);
+                        },
+                        style: { color: 'rgba(239,68,68,0.8)', fontSize: '10px', lineHeight: '1', cursor: 'pointer', border: 'none', background: 'none', padding: '0 2px' },
+                        children: '\u00D7'
+                      })
+                    ]
+                  });
+                })
+              })
+            : null
+        ]});
+        items.push(canvasContainer);
+
+        // Fallback: show legacy sliders if no polygon ROIs exist and no new-format rois
+        if (rois.length === 0 && currentPts.length === 0) {
+          var roiX = config.processingRoiX != null ? config.processingRoiX : 0.1;
+          var roiY = config.processingRoiY != null ? config.processingRoiY : 0.1;
+          var roiW = config.processingRoiW != null ? config.processingRoiW : 0.8;
+          var roiH = config.processingRoiH != null ? config.processingRoiH : 0.8;
+          items.push(
+            jsxs('div', { key: 'roi-legacy', className: 'grid grid-cols-2 gap-x-3 gap-y-1 mt-1', children: [
+              jsxs('div', { key: 'x', className: FIELD_CLS, children: [
+                jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'X' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiX.toFixed(2) }) ]}),
+                jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiX, onChange: function (e) { update('processingRoiX', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+              ]}),
+              jsxs('div', { key: 'y', className: FIELD_CLS, children: [
+                jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Y' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiY.toFixed(2) }) ]}),
+                jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiY, onChange: function (e) { update('processingRoiY', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+              ]}),
+              jsxs('div', { key: 'w', className: FIELD_CLS, children: [
+                jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'W' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiW.toFixed(2) }) ]}),
+                jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiW, onChange: function (e) { update('processingRoiW', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+              ]}),
+              jsxs('div', { key: 'h', className: FIELD_CLS, children: [
+                jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'H' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiH.toFixed(2) }) ]}),
+                jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiH, onChange: function (e) { update('processingRoiH', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+              ]})
             ]})
-          ]})
-        );
+          );
+        }
       }
 
       if (extensions.length === 0 && !extLoading) {
