@@ -713,6 +713,8 @@ var NE101CameraPanel = (function () {
       return function () { cancelled = true; };
     }, [device ? device.id : null, processingEnabled, _configHash, _storedTid, _storedHash]);
 
+    if (!device) return jsx(NoDevice, {});
+
     var vals = _vals;
     var online = device.status === 'online';
     var batteryVal = getFirst(vals, ['values.battery', 'battery']);
