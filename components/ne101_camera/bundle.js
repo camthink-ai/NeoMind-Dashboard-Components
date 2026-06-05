@@ -428,6 +428,23 @@ var NE101CameraPanel = (function () {
     var lastFetchTsRef = React.useRef(null);
     var fetchingRef = React.useRef(false);
 
+    // Image layout tracking for correct detection box positioning with object-cover
+    var imgNatState = React.useState({ w: 0, h: 0 });
+    var setImgNat = imgNatState[1];
+    var mediaRef = React.useRef(null);
+    var ctrSizeState = React.useState({ w: 0, h: 0 });
+    var setCtrSize = ctrSizeState[1];
+    React.useEffect(function () {
+      var el = mediaRef.current;
+      if (!el) return;
+      var ro = new ResizeObserver(function (entries) {
+        var e = entries[0];
+        if (e && e.contentRect) setCtrSize({ w: e.contentRect.width, h: e.contentRect.height });
+      });
+      ro.observe(el);
+      return function () { ro.disconnect(); };
+    }, []);
+
     // Track latest device.currentValues (updated by WS via ComponentRenderer)
     var wsValues = device ? (device.currentValues || {}) : {};
     var wsTs = getFirst(wsValues, ['ts', 'values.ts', 'timestamp', 'values.timestamp']);
@@ -475,7 +492,6 @@ var NE101CameraPanel = (function () {
         // Clean up transform if processing is disabled
         var nm = window.neomind;
         if (transformIdRef.current && nm && nm.deleteTransform) {
-          console.log('[ne101] Cleaning up transform', transformIdRef.current);
           nm.deleteTransform(transformIdRef.current).catch(function () {});
           transformIdRef.current = null;
         }
@@ -631,12 +647,9 @@ var NE101CameraPanel = (function () {
 
       return function () {
         cancelled = true;
-        // Cleanup transform when unmounting or deps change
-        var nm = window.neomind;
-        if (transformIdRef.current && nm && nm.deleteTransform) {
-          nm.deleteTransform(transformIdRef.current).catch(function () {});
-          transformIdRef.current = null;
-        }
+        // Don't delete Transform on unmount — it should persist and keep processing data.
+        // Transform is updated/replaced when config changes (fingerprint comparison above),
+        // and deleted only when processing is explicitly disabled (early return above).
       };
     }, [device ? device.id : null, processingEnabled, processingExtId, processingTemplate]);
 
@@ -671,6 +684,25 @@ var NE101CameraPanel = (function () {
       var pfx = 'virtual.' + processingExtId.replace(/-/g, '_') + '.';
       var vDet = getFirst(vals, [pfx + 'detections', 'values.' + pfx + 'detections']);
       if (Array.isArray(vDet)) detections = vDet;
+    }
+
+    // Object-cover transform: map normalized bbox coords to container coords
+    // object-cover scales by max(cW/iW, cH/iH) and centers, so boxes need offset adjustment
+    var imgNat = imgNatState[0];
+    var ctrSize = ctrSizeState[0];
+    var ovTf = null;
+    if (imgNat.w > 0 && imgNat.h > 0 && ctrSize.w > 0 && ctrSize.h > 0) {
+      var imgAsp = imgNat.w / imgNat.h;
+      var cAsp = ctrSize.w / ctrSize.h;
+      if (imgAsp > cAsp) {
+        // Image wider than container: cropped on left/right
+        var scX = (ctrSize.h / imgNat.h * imgNat.w) / ctrSize.w;
+        ovTf = { sx: scX, sy: 1, ox: (1 - scX) / 2, oy: 0 };
+      } else {
+        // Image taller than container: cropped on top/bottom
+        var scY = (ctrSize.w / imgNat.w * imgNat.h) / ctrSize.h;
+        ovTf = { sx: 1, sy: scY, ox: 0, oy: (1 - scY) / 2 };
+      }
     }
 
     // Badge/chip background styles
@@ -909,6 +941,7 @@ var NE101CameraPanel = (function () {
         hasImage
           ? jsxs('div', {
               key: 'media',
+              ref: mediaRef,
               className: 'relative w-full h-full',
               children: [
                 jsx('img', {
@@ -916,7 +949,11 @@ var NE101CameraPanel = (function () {
                   alt: 'Latest capture',
                   className: 'w-full h-full object-cover',
                   loading: 'lazy',
-                  style: { imageRendering: 'auto' }
+                  style: { imageRendering: 'auto' },
+                  onLoad: function (e) {
+                    var img = e.target;
+                    if (img && img.naturalWidth) setImgNat({ w: img.naturalWidth, h: img.naturalHeight });
+                  }
                 }),
                 jsx('div', {
                   key: 'scrim',
@@ -951,7 +988,7 @@ var NE101CameraPanel = (function () {
                       ]
                     })
                   : null,
-                // Detection boxes overlay — color-coded per pipeline
+                // Detection boxes overlay — adjusted for object-cover image scaling
                 processingEnabled && detections.length > 0
                   ? jsx('div', {
                       key: 'det-boxes',
@@ -962,14 +999,26 @@ var NE101CameraPanel = (function () {
                         var bx1 = det.bbox[0], by1 = det.bbox[1], bx2 = det.bbox[2], by2 = det.bbox[3];
                         var detLabel = det.label || '';
                         var detConf = typeof det.confidence === 'number' ? Math.round(det.confidence * 100) : '';
-                        // Single extension: use first color
+                        // Compute box position accounting for object-cover crop
+                        var bxL, bxT, bxW, bxH;
+                        if (ovTf) {
+                          bxL = ((bx1 * ovTf.sx + ovTf.ox) * 100) + '%';
+                          bxT = ((by1 * ovTf.sy + ovTf.oy) * 100) + '%';
+                          bxW = ((bx2 - bx1) * ovTf.sx * 100) + '%';
+                          bxH = ((by2 - by1) * ovTf.sy * 100) + '%';
+                        } else {
+                          bxL = (bx1 * 100) + '%';
+                          bxT = (by1 * 100) + '%';
+                          bxW = ((bx2 - bx1) * 100) + '%';
+                          bxH = ((by2 - by1) * 100) + '%';
+                        }
                         var clr = { border: 'rgba(59,130,246,0.8)', bg: 'rgba(59,130,246,0.85)', shadow: 'rgba(59,130,246,0.3)' };
                         return jsxs('div', {
                           key: 'dbox-' + i,
                           className: 'absolute',
                           style: {
-                            left: (bx1 * 100) + '%', top: (by1 * 100) + '%',
-                            width: ((bx2 - bx1) * 100) + '%', height: ((by2 - by1) * 100) + '%',
+                            left: bxL, top: bxT,
+                            width: bxW, height: bxH,
                             border: '1.5px solid ' + clr.border, borderRadius: '2px',
                             boxShadow: '0 0 4px ' + clr.shadow
                           },
