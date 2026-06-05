@@ -571,7 +571,7 @@ var NE101CameraPanel = (function () {
         };
 
         var tplConfig = fillTemplate(pipe);
-        var tName = 'ne101-' + device.id + '-main';
+        var tName = 'ne101-' + (device.name || device.id).replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '').substring(0, 20) + '-' + processingTemplate;
         var fp = JSON.stringify({ js_code: tplConfig.js_code });
         var payload = Object.assign({}, tplConfig, {
           name: tName,
