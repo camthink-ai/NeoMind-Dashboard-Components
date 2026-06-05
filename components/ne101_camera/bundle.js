@@ -417,6 +417,10 @@ var NE101CameraPanel = (function () {
     // Track transform ID for cleanup
     var transformIdRef = React.useRef(null); // single transform ID
 
+    // Cache last known detections — platform store may wipe virtual metrics
+    // on batch telemetry updates (_applyCurrentValuesBatch replaces entire entry).
+    var lastDetsRef = React.useRef([]);
+
     // WS-triggered fetch: platform WS delivers small metrics (battery, ts) in real-time,
     // but large base64 images may exceed WS message size limits.
     // Strategy: when WS updates device.currentValues (detected by ts change),
@@ -685,7 +689,15 @@ var NE101CameraPanel = (function () {
       // Read detections from virtual metrics (backend transform results)
       var pfx = 'virtual.' + processingExtId.replace(/-/g, '_') + '.';
       var vDet = getFirst(vals, [pfx + 'detections', 'values.' + pfx + 'detections']);
-      if (Array.isArray(vDet)) detections = vDet;
+      if (Array.isArray(vDet) && vDet.length > 0) {
+        detections = vDet;
+        lastDetsRef.current = vDet;
+      } else {
+        // Fallback to cached detections — platform store may have wiped virtual metrics
+        detections = lastDetsRef.current;
+      }
+    } else {
+      lastDetsRef.current = [];
     }
 
     // Object-cover transform: map normalized bbox coords to container coords
