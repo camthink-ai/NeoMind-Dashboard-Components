@@ -184,16 +184,17 @@ var NE101CameraPanel = (function () {
    */
   function pipeRois(pipe) {
     if (!pipe.roiEnabled) return [];
-    // New format: array of polygons
     if (pipe.rois && Array.isArray(pipe.rois) && pipe.rois.length > 0) {
       var result = [];
       for (var i = 0; i < pipe.rois.length; i++) {
-        var pts = pipe.rois[i].points;
-        if (pts && pts.length >= 3) result.push(pts);
+        var r = pipe.rois[i];
+        var pts = r.points;
+        if (pts && pts.length >= 3) {
+          result.push({ name: (r.name || 'ROI ' + (i + 1)).replace(/[^a-zA-Z0-9_\u4e00-\u9fff]/g, '_'), points: pts });
+        }
       }
       if (result.length > 0) return result;
     }
-    // Legacy: single rectangle from sliders
     if (pipe.roiX == null || pipe.roiY == null) return [];
     var x = Number(pipe.roiX) || 0;
     var y = Number(pipe.roiY) || 0;
@@ -201,12 +202,12 @@ var NE101CameraPanel = (function () {
     var h = Number(pipe.roiH) || 0.8;
     if (w <= 0) w = 0.8;
     if (h <= 0) h = 0.8;
-    return [[
+    return [{ name: 'default', points: [
       { x: x, y: y },
       { x: x + w, y: y },
       { x: x + w, y: y + h },
       { x: x, y: y + h }
-    ]];
+    ]}];
   }
 
   /**
@@ -305,15 +306,14 @@ var NE101CameraPanel = (function () {
     }
     L.push('');
 
-    // ROI filter (supports multiple polygons via ray-casting point-in-polygon)
+    // ROI filter (supports multiple named polygons via ray-casting point-in-polygon)
     if (rois.length > 0) {
-      L.push('// ROI polygons: ' + rois.length + ' region(s)');
-      // Serialize polygons: [[{x,y},...], ...] => [[[x,y],...], ...]
-      var roiSer = rois.map(function(poly) {
-        return poly.map(function(p) { return [p.x, p.y]; });
+      L.push('// ROI regions: ' + rois.length);
+      // Serialize: [{ name, poly: [[x,y],...] }, ...]
+      var roiSer = rois.map(function(roi) {
+        return { name: roi.name, poly: roi.points.map(function(p) { return [p.x, p.y]; }) };
       });
-      L.push('var roiPolygons = ' + JSON.stringify(roiSer) + ';');
-      // Ray-casting point-in-polygon
+      L.push('var roiRegions = ' + JSON.stringify(roiSer) + ';');
       L.push('var pointInPoly = function(px, py, poly) {');
       L.push('  var inside = false;');
       L.push('  for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {');
@@ -324,23 +324,20 @@ var NE101CameraPanel = (function () {
       L.push('  }');
       L.push('  return inside;');
       L.push('};');
+      L.push('var detCenter = function(d) { return { cx: (d.bbox[0] + d.bbox[2]) / 2, cy: (d.bbox[1] + d.bbox[3]) / 2 }; };');
       L.push('var inAnyRoi = function(d) {');
-      L.push('  var cx = (d.bbox[0] + d.bbox[2]) / 2;');
-      L.push('  var cy = (d.bbox[1] + d.bbox[3]) / 2;');
-      L.push('  for (var r = 0; r < roiPolygons.length; r++) {');
-      L.push('    if (pointInPoly(cx, cy, roiPolygons[r])) return true;');
+      L.push('  var c = detCenter(d);');
+      L.push('  for (var r = 0; r < roiRegions.length; r++) {');
+      L.push('    if (pointInPoly(c.cx, c.cy, roiRegions[r].poly)) return true;');
       L.push('  }');
       L.push('  return false;');
       L.push('};');
       if (roiAction === 'filter') {
         L.push('var filtered = dets.filter(inAnyRoi);');
-        L.push('var roiCount = filtered.length;');
       } else if (roiAction === 'filter_outside') {
         L.push('var filtered = dets.filter(function(d) { return !inAnyRoi(d); });');
-        L.push('var roiCount = dets.filter(inAnyRoi).length;');
       } else {
         L.push('var filtered = dets;');
-        L.push('var roiCount = dets.filter(inAnyRoi).length;');
       }
     } else {
       L.push('var filtered = dets;');
@@ -372,10 +369,19 @@ var NE101CameraPanel = (function () {
     }
 
     if (rois.length > 0) {
-      L.push('out[\'' + pfx + 'roi_count\'] = roiCount;');
-      if (roiAction === 'count_by_class') {
-        L.push('out[\'' + pfx + 'roi_count_by_class\'] = dets.filter(inAnyRoi).reduce(function(a, d) { a[d.label] = (a[d.label]||0)+1; return a; }, {});');
+      // Global ROI count (detections in any ROI, before filter action)
+      L.push('out[\'' + pfx + 'roi_count\'] = dets.filter(inAnyRoi).length;');
+      // Per-ROI named metrics
+      L.push('for (var ri = 0; ri < roiRegions.length; ri++) {');
+      L.push('  var rn = roiRegions[ri].name;');
+      L.push('  var rp = roiRegions[ri].poly;');
+      L.push('  var rd = dets.filter(function(d) { var c = detCenter(d); return pointInPoly(c.cx, c.cy, rp); });');
+      L.push('  out[\'' + pfx + '\' + rn + \'_count\'] = rd.length;');
+      L.push('  out[\'' + pfx + '\' + rn + \'_detections\'] = rd;');
+      if (templateName === 'object_detection') {
+        L.push('  out[\'' + pfx + '\' + rn + \'_count_by_class\'] = rd.reduce(function(a, d) { a[d.label] = (a[d.label]||0)+1; return a; }, {});');
       }
+      L.push('}');
     }
 
     if (mode.responseType === 'ocr_text_blocks') {
@@ -963,8 +969,9 @@ var NE101CameraPanel = (function () {
     if (processingRoiEnabled) {
       if (processingRois.length > 0) {
         for (var rpIdx = 0; rpIdx < processingRois.length; rpIdx++) {
-          var rpPts = processingRois[rpIdx].points;
-          if (rpPts && rpPts.length >= 3) roiPolygons.push(rpPts);
+          var rpRoi = processingRois[rpIdx];
+          var rpPts = rpRoi.points;
+          if (rpPts && rpPts.length >= 3) roiPolygons.push({ name: rpRoi.name || 'ROI ' + (rpIdx + 1), points: rpPts });
         }
       }
       if (roiPolygons.length === 0) {
@@ -972,12 +979,12 @@ var NE101CameraPanel = (function () {
         var ly = Number(processingRoiY) || 0;
         var lw = Number(processingRoiW) || 0.8;
         var lh = Number(processingRoiH) || 0.8;
-        roiPolygons.push([
+        roiPolygons.push({ name: 'default', points: [
           { x: lx, y: ly },
           { x: lx + lw, y: ly },
           { x: lx + lw, y: ly + lh },
           { x: lx, y: ly + lh }
-        ]);
+        ]});
       }
     }
 
@@ -1109,9 +1116,8 @@ var NE101CameraPanel = (function () {
                       style: { pointerEvents: 'none' },
                       viewBox: '0 0 100 100',
                       preserveAspectRatio: 'none',
-                      children: roiPolygons.map(function (poly, ri) {
-                        // Apply object-cover transform to each point
-                        var pts = poly.map(function (p) {
+                      children: roiPolygons.map(function (roi, ri) {
+                        var pts = roi.points.map(function (p) {
                           var tx = ovTf ? ((p.x * ovTf.sx + ovTf.ox) * 100) : (p.x * 100);
                           var ty = ovTf ? ((p.y * ovTf.sy + ovTf.oy) * 100) : (p.y * 100);
                           return tx.toFixed(2) + ',' + ty.toFixed(2);
@@ -1125,12 +1131,13 @@ var NE101CameraPanel = (function () {
                             strokeDasharray: '1.5,1'
                           }),
                           jsx('text', {
-                            x: (ovTf ? ((poly[0].x * ovTf.sx + ovTf.ox) * 100) : (poly[0].x * 100)).toFixed(2),
-                            y: (ovTf ? ((poly[0].y * ovTf.sy + ovTf.oy) * 100) : (poly[0].y * 100)).toFixed(2) - 1,
+                            x: (ovTf ? ((roi.points[0].x * ovTf.sx + ovTf.ox) * 100) : (roi.points[0].x * 100)).toFixed(2),
+                            y: (ovTf ? ((roi.points[0].y * ovTf.sy + ovTf.oy) * 100) : (roi.points[0].y * 100)).toFixed(2) - 1,
                             fill: 'rgba(255,200,50,0.9)',
                             fontSize: '2.5',
                             fontFamily: 'monospace',
-                            fontWeight: '700'
+                            fontWeight: '700',
+                            children: roi.name
                           })
                         ]});
                       })
@@ -1480,7 +1487,7 @@ var NE101CameraPanel = (function () {
         ctx.stroke();
         ctx.fillStyle = 'rgba(255, 200, 50, 0.9)';
         ctx.font = '10px monospace';
-        ctx.fillText('ROI ' + (ri + 1), pts[0].x * cw + 4, pts[0].y * ch - 4);
+        ctx.fillText(rois[ri].name || 'ROI ' + (ri + 1), pts[0].x * cw + 4, pts[0].y * ch - 4);
       }
       if (currentPts.length > 0) {
         ctx.beginPath();
@@ -1506,6 +1513,7 @@ var NE101CameraPanel = (function () {
     var deviceId = config.deviceBinding && config.deviceBinding.deviceId;
     var previewImgState = React.useState('');
     var previewSrc = previewImgState[0];
+    var imgNatState2 = React.useState({ w: 1, h: 1 });
     React.useEffect(function () {
       if (!deviceId) { previewImgState[1](''); return; }
       var neomind = window.neomind;
@@ -1633,6 +1641,16 @@ var NE101CameraPanel = (function () {
         );
 
         // ROI drawing canvas — visual polygon drawing on top of the camera image
+        var imgNat2 = imgNatState2[0];
+        var canvasAspect = imgNat2.w > 0 && imgNat2.h > 0 ? (imgNat2.w / imgNat2.h) : (16 / 9);
+        // Max height 200px, width auto based on aspect
+        var canvasH = 180;
+        var canvasW = canvasH * canvasAspect;
+        // If canvas is wider than container, constrain to container width
+        var canvasStyle = canvasW > 400
+          ? { width: '100%', aspectRatio: String(canvasAspect), maxHeight: '200px', background: '#1a1a2e' }
+          : { width: Math.round(canvasW) + 'px', height: canvasH + 'px', background: '#1a1a2e' };
+
         var canvasContainer = jsxs('div', { key: 'roi-canvas-wrap', className: FIELD_CLS, children: [
           jsx('label', { className: 'text-xs font-medium', children:
             currentPts.length > 0
@@ -1640,15 +1658,19 @@ var NE101CameraPanel = (function () {
               : 'Click on image to draw ROI polygon'
           }),
           jsxs('div', {
-            className: 'relative w-full rounded-md border border-border overflow-hidden cursor-crosshair',
-            style: { height: '180px', background: '#1a1a2e' },
+            className: 'relative rounded-md border border-border overflow-hidden cursor-crosshair',
+            style: canvasStyle,
             children: [
               previewSrc
                 ? jsx('img', {
                     ref: imgRef,
                     src: previewSrc,
                     style: { width: '100%', height: '100%', objectFit: 'contain', opacity: 0.5 },
-                    crossOrigin: 'anonymous'
+                    crossOrigin: 'anonymous',
+                    onLoad: function (e) {
+                      var img = e.target;
+                      if (img && img.naturalWidth) imgNatState2[1]({ w: img.naturalWidth, h: img.naturalHeight });
+                    }
                   })
                 : jsx('div', {
                     style: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
@@ -1663,17 +1685,15 @@ var NE101CameraPanel = (function () {
                   var rect = canvas.getBoundingClientRect();
                   var x = (e.clientX - rect.left) / rect.width;
                   var y = (e.clientY - rect.top) / rect.height;
-                  // Clamp to [0,1]
                   x = Math.max(0, Math.min(1, x));
                   y = Math.max(0, Math.min(1, y));
 
-                  // If clicking near first point and we have 3+ pts, close polygon
                   if (currentPts.length >= 3) {
                     var dx = x - currentPts[0].x;
                     var dy = y - currentPts[0].y;
                     if (Math.sqrt(dx * dx + dy * dy) < 0.03) {
-                      // Close polygon
-                      var newRois = rois.concat([{ points: currentPts.slice() }]);
+                      var defaultName = 'ROI_' + (rois.length + 1);
+                      var newRois = rois.concat([{ name: defaultName, points: currentPts.slice() }]);
                       update('processingRois', newRois);
                       setCurrentPts([]);
                       return;
@@ -1690,7 +1710,8 @@ var NE101CameraPanel = (function () {
               ? jsx('button', {
                   type: 'button',
                   onClick: function () {
-                    var newRois = rois.concat([{ points: currentPts.slice() }]);
+                    var defaultName = 'ROI_' + (rois.length + 1);
+                    var newRois = rois.concat([{ name: defaultName, points: currentPts.slice() }]);
                     update('processingRois', newRois);
                     setCurrentPts([]);
                   },
@@ -1717,22 +1738,36 @@ var NE101CameraPanel = (function () {
               children: 'Clear All'
             })
           ]}),
-          // ROI list
+          // ROI list with name editing
           rois.length > 0
-            ? jsx('div', { className: 'flex flex-wrap gap-1 mt-1', children:
+            ? jsx('div', { className: 'space-y-1.5 mt-1.5', children:
                 rois.map(function (roi, ri) {
-                  return jsxs('span', {
-                    className: 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs',
-                    style: { borderColor: 'rgba(255,200,50,0.5)', color: 'rgba(255,200,50,0.9)' },
+                  return jsxs('div', {
+                    className: 'flex items-center gap-1.5',
                     children: [
-                      'ROI ' + (ri + 1) + ' (' + (roi.points || []).length + ' pts)',
+                      jsx('div', {
+                        className: 'w-2.5 h-2.5 rounded-sm flex-shrink-0',
+                        style: { background: 'rgba(255,200,50,0.6)', border: '1px solid rgba(255,200,50,0.8)' }
+                      }),
+                      jsx('input', {
+                        className: 'h-6 px-1.5 rounded border border-border bg-background text-xs font-medium flex-1 min-w-0',
+                        style: { maxWidth: '120px' },
+                        value: roi.name || '',
+                        placeholder: 'ROI name',
+                        onChange: function (e) {
+                          var updated = rois.slice();
+                          updated[ri] = Object.assign({}, updated[ri], { name: e.target.value });
+                          update('processingRois', updated);
+                        }
+                      }),
+                      jsx('span', { className: 'text-xs text-muted-foreground', children: (roi.points || []).length + ' pts' }),
                       jsx('button', {
                         type: 'button',
                         onClick: function () {
                           var updated = rois.filter(function (_, i) { return i !== ri; });
                           update('processingRois', updated);
                         },
-                        style: { color: 'rgba(239,68,68,0.8)', fontSize: '10px', lineHeight: '1', cursor: 'pointer', border: 'none', background: 'none', padding: '0 2px' },
+                        className: 'text-red-400 hover:text-red-500 text-xs px-0.5',
                         children: '\u00D7'
                       })
                     ]
