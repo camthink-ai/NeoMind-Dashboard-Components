@@ -503,7 +503,7 @@ var NE101CameraPanel = (function () {
             console.log('[ne101] Processing disabled, deleting transform:', storedTid);
             nm.deleteTransform(storedTid).catch(function () {});
           }
-          if (props.onConfigChange) props.onConfigChange({ processingTransformId: '', processingTransformKey: '' });
+          if (props.onConfigChange) props.onConfigChange(Object.assign({}, config, { processingTransformId: '', processingTransformKey: '' }));
         }
         transformIdRef.current = null;
         setExtStatus('idle');
@@ -615,13 +615,13 @@ var NE101CameraPanel = (function () {
               // Transform may have been deleted externally — recreate
               console.error('[ne101] Stored transform invalid, recreating:', err);
               neomind.deleteTransform(storedId).catch(function () {});
-              if (onCfgChange) onCfgChange({ processingTransformId: '', processingTransformKey: '' });
+              if (onCfgChange) onCfgChange(Object.assign({}, config, { processingTransformId: '', processingTransformKey: '' }));
               neomind.createTransform(payload).then(function (result) {
                 if (cancelled) return;
                 if (result && result.id) {
                   console.log('[ne101] Transform recreated:', result.id);
                   transformIdRef.current = result.id;
-                  if (onCfgChange) onCfgChange({ processingTransformId: result.id, processingTransformKey: currentKey });
+                  if (onCfgChange) onCfgChange(Object.assign({}, config, { processingTransformId: result.id, processingTransformKey: currentKey }));
                 }
               }).catch(function (err2) {
                 console.error('[ne101] Transform creation error:', err2);
@@ -660,7 +660,7 @@ var NE101CameraPanel = (function () {
             console.log('[ne101] Transform created:', result.id);
             transformIdRef.current = result.id;
             // Persist ID to component config for reuse on remount
-            if (onCfgChange) onCfgChange({ processingTransformId: result.id, processingTransformKey: currentKey });
+            if (onCfgChange) onCfgChange(Object.assign({}, config, { processingTransformId: result.id, processingTransformKey: currentKey }));
             // Dedup: clean any stale transforms for this device (handles race conditions)
             if (neomind.listTransforms) {
               neomind.listTransforms({ scope: device.id }).then(function (fresh) {
