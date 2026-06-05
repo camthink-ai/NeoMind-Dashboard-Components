@@ -472,8 +472,39 @@ var NE101CameraPanel = (function () {
       });
     }, [device ? device.id : null, wsTs]);
 
-    // Merge: WS values as base (real-time small metrics), REST image data overlay
-    var _vals = Object.assign({}, wsValues, imageData || {});
+    // Fetch virtual metrics (from transforms) on mount and when processing config changes.
+    // Platform store may not include virtual metrics after page switch (batch refresh replaces telemetry).
+    var virtualDataState = React.useState(null);
+    var setVirtualData = virtualDataState[1];
+    React.useEffect(function () {
+      if (!device || !processingEnabled || !processingExtId) {
+        setVirtualData(null);
+        return;
+      }
+      var neomind = window.neomind;
+      if (!neomind || typeof neomind.fetchDeviceValues !== 'function') return;
+
+      neomind.fetchDeviceValues(device.id).then(function (v) {
+        if (!v) return;
+        // Extract virtual metrics for our extension
+        var pfx = 'virtual.' + processingExtId.replace(/-/g, '_') + '.';
+        var dets = null;
+        // Try nested path
+        var virt = v.virtual;
+        if (virt && typeof virt === 'object') {
+          var extKey = processingExtId.replace(/-/g, '_');
+          if (virt[extKey] && virt[extKey].detections) {
+            dets = virt[extKey].detections;
+          }
+        }
+        if (dets && Array.isArray(dets) && dets.length > 0) {
+          setVirtualData(v);
+        }
+      }).catch(function () {});
+    }, [device ? device.id : null, processingEnabled, processingExtId]);
+
+    // Merge: WS values as base (real-time small metrics), REST image data overlay, virtual metrics
+    var _vals = Object.assign({}, wsValues, imageData || {}, virtualDataState[0] || {});
 
     // Early-extract imageSrc — device may send URL or base64
     var rawImageSrc = getFirst(_vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
