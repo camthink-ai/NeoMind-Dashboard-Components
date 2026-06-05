@@ -492,19 +492,11 @@ var NE101CameraPanel = (function () {
 
     // Single-extension Transform lifecycle
     React.useEffect(function () {
-      // Cancel pending delete if component remounted (page switch)
-      var pending = transformIdRef.current;
-      if (pending && pending._pendingDelete) {
-        clearTimeout(pending._timer);
-        transformIdRef.current = pending._pendingDelete; // restore ID
-      }
-
       if (!processingEnabled || !processingExtId || !device) {
         // Clean up transform if processing is disabled
         var nm = window.neomind;
         if (transformIdRef.current && nm && nm.deleteTransform) {
-          var tid = typeof transformIdRef.current === 'string' ? transformIdRef.current : null;
-          if (tid) nm.deleteTransform(tid).catch(function () {});
+          nm.deleteTransform(transformIdRef.current).catch(function () {});
           transformIdRef.current = null;
         }
         setExtStatus('idle');
@@ -583,9 +575,7 @@ var NE101CameraPanel = (function () {
         };
 
         var tplConfig = fillTemplate(pipe);
-        var _extLabel = (getExtMode(processingExtId, processingTemplate) || {}).label || processingExtId;
-        var _tTs = new Date().toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/[\/:]/g, '');
-        var tName = (device.name || device.id).replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, '').substring(0, 16) + '-' + _extLabel.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '').substring(0, 12) + '-' + processingTemplate + '-' + _tTs;
+        var tName = 'ne101-' + device.id + '-' + processingExtId.replace(/-/g, '_') + '-' + processingTemplate;
         var fp = JSON.stringify({ js_code: tplConfig.js_code });
         var payload = Object.assign({}, tplConfig, {
           name: tName,
@@ -661,17 +651,13 @@ var NE101CameraPanel = (function () {
 
       return function () {
         cancelled = true;
-        // Delayed cleanup: if component remounts quickly (page switch), cancel deletion.
-        // If component is truly removed, Transform is cleaned up after timeout.
+        // Delete Transform on unmount (page switch, component deletion, config change).
+        // On remount, effect re-runs and creates/reuses Transform by stable name.
         var tid = transformIdRef.current;
-        if (tid) {
+        if (tid && typeof tid === 'string') {
           transformIdRef.current = null;
-          var deleteTimer = setTimeout(function () {
-            var nm = window.neomind;
-            if (nm && nm.deleteTransform) nm.deleteTransform(tid).catch(function () {});
-          }, 5000);
-          // Store timer so next mount can cancel it
-          transformIdRef.current = { _pendingDelete: tid, _timer: deleteTimer };
+          var nm = window.neomind;
+          if (nm && nm.deleteTransform) nm.deleteTransform(tid).catch(function () {});
         }
       };
     }, [device ? device.id : null, processingEnabled, processingExtId, processingTemplate]);
