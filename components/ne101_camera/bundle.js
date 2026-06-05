@@ -1522,6 +1522,88 @@ var NE101CameraPanel = (function () {
 
       // ROI toggle
       var roiEnabled = config.processingRoiEnabled === true;
+
+      // ROI hooks — MUST be called unconditionally (React rules of hooks)
+      var rois = Array.isArray(config.processingRois) ? config.processingRois : [];
+      var drawState = React.useState([]);
+      var currentPts = drawState[0];
+      var setCurrentPts = drawState[1];
+      var canvasRef = React.useRef(null);
+      var imgRef = React.useRef(null);
+
+      // Canvas redraw effect
+      React.useEffect(function () {
+        if (!roiEnabled) return;
+        var canvas = canvasRef.current;
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+        var dpr = window.devicePixelRatio || 1;
+        var rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        var cw = rect.width;
+        var ch = rect.height;
+
+        for (var ri = 0; ri < rois.length; ri++) {
+          var pts = rois[ri].points || [];
+          if (pts.length < 2) continue;
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x * cw, pts[0].y * ch);
+          for (var pi = 1; pi < pts.length; pi++) {
+            ctx.lineTo(pts[pi].x * cw, pts[pi].y * ch);
+          }
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(255, 200, 50, 0.15)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255, 200, 50, 0.8)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(255, 200, 50, 0.9)';
+          ctx.font = '10px monospace';
+          ctx.fillText('ROI ' + (ri + 1), pts[0].x * cw + 4, pts[0].y * ch - 4);
+        }
+        if (currentPts.length > 0) {
+          ctx.beginPath();
+          ctx.moveTo(currentPts[0].x * cw, currentPts[0].y * ch);
+          for (var cpi = 1; cpi < currentPts.length; cpi++) {
+            ctx.lineTo(currentPts[cpi].x * cw, currentPts[cpi].y * ch);
+          }
+          ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 3]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          for (var dotI = 0; dotI < currentPts.length; dotI++) {
+            ctx.beginPath();
+            ctx.arc(currentPts[dotI].x * cw, currentPts[dotI].y * ch, 3, 0, Math.PI * 2);
+            ctx.fillStyle = dotI === 0 ? 'rgba(59, 130, 246, 1)' : 'rgba(59, 130, 246, 0.7)';
+            ctx.fill();
+          }
+        }
+      }, [roiEnabled, rois, currentPts]);
+
+      // Fetch preview image from bound device
+      var deviceId = config.deviceBinding && config.deviceBinding.deviceId;
+      var previewImgState = React.useState('');
+      var previewSrc = previewImgState[0];
+      React.useEffect(function () {
+        if (!deviceId) { previewImgState[1](''); return; }
+        var neomind = window.neomind;
+        if (!neomind || typeof neomind.fetchDeviceValues !== 'function') return;
+        var cancelled = false;
+        neomind.fetchDeviceValues(deviceId).then(function (v) {
+          if (cancelled || !v) return;
+          var img = getFirst(v, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
+          if (img && typeof img === 'string') {
+            var src = img.indexOf('data:') === 0 ? img : 'data:image/jpeg;base64,' + img;
+            if (!cancelled) previewImgState[1](src);
+          }
+        }).catch(function () {});
+        return function () { cancelled = true; };
+      }, [deviceId]);
+
       items.push(
         jsxs('div', { key: 'roi-div', className: 'flex items-center justify-between pt-2 border-t mt-1', children: [
           jsx('label', { className: 'text-xs font-medium cursor-pointer', children: 'ROI' }),
@@ -1551,93 +1633,6 @@ var NE101CameraPanel = (function () {
         );
 
         // ROI drawing canvas — visual polygon drawing on top of the camera image
-        var rois = Array.isArray(config.processingRois) ? config.processingRois : [];
-        // Current drawing state: points being placed for the current polygon
-        var drawState = React.useState([]);
-        var currentPts = drawState[0];
-        var setCurrentPts = drawState[1];
-
-        var canvasRef = React.useRef(null);
-        var imgRef = React.useRef(null);
-
-        // Redraw canvas overlay
-        React.useEffect(function () {
-          var canvas = canvasRef.current;
-          if (!canvas) return;
-          var ctx = canvas.getContext('2d');
-          var dpr = window.devicePixelRatio || 1;
-          var rect = canvas.getBoundingClientRect();
-          canvas.width = rect.width * dpr;
-          canvas.height = rect.height * dpr;
-          ctx.scale(dpr, dpr);
-          ctx.clearRect(0, 0, rect.width, rect.height);
-
-          var cw = rect.width;
-          var ch = rect.height;
-
-          // Draw existing polygons
-          for (var ri = 0; ri < rois.length; ri++) {
-            var pts = rois[ri].points || [];
-            if (pts.length < 2) continue;
-            ctx.beginPath();
-            ctx.moveTo(pts[0].x * cw, pts[0].y * ch);
-            for (var pi = 1; pi < pts.length; pi++) {
-              ctx.lineTo(pts[pi].x * cw, pts[pi].y * ch);
-            }
-            ctx.closePath();
-            ctx.fillStyle = 'rgba(255, 200, 50, 0.15)';
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(255, 200, 50, 0.8)';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-            // Label
-            ctx.fillStyle = 'rgba(255, 200, 50, 0.9)';
-            ctx.font = '10px monospace';
-            ctx.fillText('ROI ' + (ri + 1), pts[0].x * cw + 4, pts[0].y * ch - 4);
-          }
-
-          // Draw current polygon being drawn
-          if (currentPts.length > 0) {
-            ctx.beginPath();
-            ctx.moveTo(currentPts[0].x * cw, currentPts[0].y * ch);
-            for (var cpi = 1; cpi < currentPts.length; cpi++) {
-              ctx.lineTo(currentPts[cpi].x * cw, currentPts[cpi].y * ch);
-            }
-            ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)';
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([4, 3]);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            // Draw points
-            for (var dotI = 0; dotI < currentPts.length; dotI++) {
-              ctx.beginPath();
-              ctx.arc(currentPts[dotI].x * cw, currentPts[dotI].y * ch, 3, 0, Math.PI * 2);
-              ctx.fillStyle = dotI === 0 ? 'rgba(59, 130, 246, 1)' : 'rgba(59, 130, 246, 0.7)';
-              ctx.fill();
-            }
-          }
-        }, [rois, currentPts]);
-
-        // Camera image for background — fetch latest from bound device via neomind API
-        var deviceId = config.deviceBinding && config.deviceBinding.deviceId;
-        var previewImgState = React.useState('');
-        var previewSrc = previewImgState[0];
-        React.useEffect(function () {
-          if (!deviceId) { previewImgState[1](''); return; }
-          var neomind = window.neomind;
-          if (!neomind || typeof neomind.fetchDeviceValues !== 'function') return;
-          var cancelled = false;
-          neomind.fetchDeviceValues(deviceId).then(function (v) {
-            if (cancelled || !v) return;
-            var img = getFirst(v, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
-            if (img && typeof img === 'string') {
-              var src = img.indexOf('data:') === 0 ? img : 'data:image/jpeg;base64,' + img;
-              if (!cancelled) previewImgState[1](src);
-            }
-          }).catch(function () {});
-          return function () { cancelled = true; };
-        }, [deviceId]);
-
         var canvasContainer = jsxs('div', { key: 'roi-canvas-wrap', className: FIELD_CLS, children: [
           jsx('label', { className: 'text-xs font-medium', children:
             currentPts.length > 0
