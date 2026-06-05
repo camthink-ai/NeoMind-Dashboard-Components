@@ -496,14 +496,14 @@ var NE101CameraPanel = (function () {
     React.useEffect(function () {
       if (!processingEnabled || !processingExtId || !device) {
         // Processing disabled — delete stored Transform and clear config
-        var storedTid = config.processingTransformId;
+        var storedTid = config._transformId;
         if (storedTid) {
           var nm = window.neomind;
           if (nm && nm.deleteTransform) {
             console.log('[ne101] Processing disabled, deleting transform:', storedTid);
             nm.deleteTransform(storedTid).catch(function () {});
           }
-          if (props.onConfigChange) props.onConfigChange(Object.assign({}, config, { processingTransformId: '', processingTransformKey: '' }));
+          if (props.onConfigChange) props.onConfigChange(Object.assign({}, config, { _transformId: '', _transformKey: '' }));
         }
         transformIdRef.current = null;
         setExtStatus('idle');
@@ -595,8 +595,8 @@ var NE101CameraPanel = (function () {
           description: 'ne101:' + device.id + ':' + processingExtId + ':' + processingTemplate
         });
 
-        var storedId = config.processingTransformId || '';
-        var storedKey = config.processingTransformKey || '';
+        var storedId = config._transformId || '';
+        var storedKey = config._transformKey || '';
 
         // Case 1: Stored ID matches current key — reuse existing Transform
         if (storedId && storedKey === currentKey) {
@@ -615,13 +615,13 @@ var NE101CameraPanel = (function () {
               // Transform may have been deleted externally — recreate
               console.error('[ne101] Stored transform invalid, recreating:', err);
               neomind.deleteTransform(storedId).catch(function () {});
-              if (onCfgChange) onCfgChange(Object.assign({}, config, { processingTransformId: '', processingTransformKey: '' }));
+              if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: '', _transformKey: '' }));
               neomind.createTransform(payload).then(function (result) {
                 if (cancelled) return;
                 if (result && result.id) {
                   console.log('[ne101] Transform recreated:', result.id);
                   transformIdRef.current = result.id;
-                  if (onCfgChange) onCfgChange(Object.assign({}, config, { processingTransformId: result.id, processingTransformKey: currentKey }));
+                  if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: result.id, _transformKey: currentKey }));
                 }
               }).catch(function (err2) {
                 console.error('[ne101] Transform creation error:', err2);
@@ -660,7 +660,7 @@ var NE101CameraPanel = (function () {
             console.log('[ne101] Transform created:', result.id);
             transformIdRef.current = result.id;
             // Persist ID to component config for reuse on remount
-            if (onCfgChange) onCfgChange(Object.assign({}, config, { processingTransformId: result.id, processingTransformKey: currentKey }));
+            if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: result.id, _transformKey: currentKey }));
             // Dedup: only remove duplicates with SAME bizId (same device+ext+template)
             if (neomind.listTransforms) {
               var bizPrefix = 'ne101:' + device.id + ':' + processingExtId + ':' + processingTemplate;
