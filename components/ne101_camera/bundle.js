@@ -598,11 +598,10 @@ var NE101CameraPanel = (function () {
         var storedId = config._transformId || '';
         var storedKey = config._transformKey || '';
 
-        // Case 1: Stored ID matches current key — reuse existing Transform
-        if (storedId && storedKey === currentKey) {
-          console.log('[ne101] Reusing stored transform:', storedId);
+        // Case 1: Stored ID exists — update Transform in place (same ID, new code)
+        if (storedId) {
+          console.log('[ne101] Updating stored transform:', storedId);
           transformIdRef.current = storedId;
-          // Sync config (ROI, categories, etc. may have changed)
           if (neomind.updateTransform) {
             neomind.updateTransform(storedId, {
               name: payload.name,
@@ -610,6 +609,12 @@ var NE101CameraPanel = (function () {
               scope: payload.scope,
               js_code: payload.js_code,
               output_prefix: payload.output_prefix
+            }).then(function () {
+              if (cancelled) return;
+              // Update stored key if extension/template changed
+              if (storedKey !== currentKey && onCfgChange) {
+                onCfgChange(Object.assign({}, config, { _transformId: storedId, _transformKey: currentKey }));
+              }
             }).catch(function (err) {
               if (cancelled) return;
               // Transform may have been deleted externally — recreate
@@ -631,14 +636,8 @@ var NE101CameraPanel = (function () {
           return;
         }
 
-        // Case 2: Key changed — delete old Transform
-        if (storedId && storedKey !== currentKey) {
-          console.log('[ne101] Extension/template changed, deleting old transform:', storedId);
-          neomind.deleteTransform(storedId).catch(function () {});
-        }
-
-        // Case 3: No stored ID (first time) — clean orphaned transforms from old versions
-        if (!storedId && neomind.listTransforms) {
+        // Case 2: No stored ID (first time) — clean orphaned transforms, then create
+        if (neomind.listTransforms) {
           neomind.listTransforms({ scope: device.id }).then(function (transforms) {
             if (cancelled) return;
             var tList = Array.isArray(transforms) ? transforms : [];
