@@ -569,11 +569,7 @@ var NE101CameraPanel = (function () {
     }
 
     // Single-extension Transform lifecycle
-    // Stores Transform ID in component config via onConfigChange for persistence across page switches.
-    // - Component added → create Transform
-    // - Config changed (ext/template) → update existing Transform
-    // - Menu switch (remount) → reuse stored Transform, no API call if unchanged
-    // - Processing disabled → delete Transform
+    // One Transform per component instance. Persist ID in config for reuse across remounts.
     var _storedTid = config._transformId || '';
     var _storedKey = config._transformKey || '';
     React.useEffect(function () {
@@ -582,7 +578,6 @@ var NE101CameraPanel = (function () {
         if (_storedTid) {
           var nm = window.neomind;
           if (nm && nm.deleteTransform) {
-            console.log('[ne101] Processing disabled, deleting transform:', _storedTid);
             nm.deleteTransform(_storedTid).catch(function () {});
           }
           if (props.onConfigChange) props.onConfigChange(Object.assign({}, config, { _transformId: '', _transformKey: '' }));
@@ -594,17 +589,32 @@ var NE101CameraPanel = (function () {
 
       var neomind = window.neomind;
       if (!neomind || typeof neomind.listExtensions !== 'function') {
-        console.error('[ne101] NeoMind API not available');
         setExtStatus('unavailable');
         return;
       }
 
       var currentKey = processingExtId + ':' + processingTemplate;
+      // Use ref as fallback — protects against race where onCfgChange hasn't propagated yet
+      var activeId = _storedTid || transformIdRef.current || '';
 
-      // Fast path: stored ID exists and same ext+template — just set ref, no API call
-      if (_storedTid && _storedKey === currentKey) {
-        transformIdRef.current = _storedTid;
+      // Fast path: same Transform, same config — just set ref, no API call
+      if (activeId && _storedKey === currentKey) {
+        transformIdRef.current = activeId;
         setExtStatus('active');
+        // Clean up stale ne101 transforms (from previous extension/template)
+        if (neomind.listTransforms) {
+          neomind.listTransforms({ scope: device.id }).then(function (transforms) {
+            if (!transforms) return;
+            var tList = Array.isArray(transforms) ? transforms : [];
+            var devicePrefix = 'ne101:' + device.id + ':';
+            for (var i = 0; i < tList.length; i++) {
+              var desc = tList[i].description || '';
+              if (desc.indexOf(devicePrefix) === 0 && tList[i].id !== activeId) {
+                neomind.deleteTransform(tList[i].id).catch(function () {});
+              }
+            }
+          }).catch(function () {});
+        }
         return;
       }
 
@@ -616,50 +626,36 @@ var NE101CameraPanel = (function () {
         if (cancelled) return;
         var extList = Array.isArray(exts) ? exts : [];
 
-        // Find the selected extension
         var matched = null;
         for (var ei = 0; ei < extList.length; ei++) {
           if (extList[ei].id === processingExtId) { matched = extList[ei]; break; }
         }
 
         if (!matched) {
-          console.error('[ne101] Extension not found:', processingExtId);
           setExtStatus('not_installed');
           return;
         }
 
         var stateLower = (matched.state || '').toLowerCase();
         if (stateLower.indexOf('stopped') >= 0 || stateLower.indexOf('failed') >= 0 || stateLower.indexOf('error') >= 0) {
-          console.error('[ne101] Extension not active:', matched.state);
           setExtStatus('offline');
           return;
         }
 
         setExtStatus('active');
 
-        // Build transform config
         var mode = getExtMode(processingExtId, processingTemplate);
-        if (!mode) {
-          console.error('[ne101] No mode found for', processingExtId, processingTemplate);
-          return;
-        }
+        if (!mode) return;
 
-        // Validate required args (only if mode specifies them)
         var reqArgs = mode.args || [];
         var missing = false;
         for (var ai = 0; ai < reqArgs.length; ai++) {
           if (reqArgs[ai] === 'categories' && !(processingCategories || '').trim()) { missing = true; break; }
           if (reqArgs[ai] === 'phrase' && !(processingPhrase || '').trim()) { missing = true; break; }
         }
-        if (missing) {
-          console.warn('[ne101] Missing required args for transform');
-          return;
-        }
+        if (missing) return;
 
-        if (!neomind.createTransform) {
-          console.error('[ne101] NeoMind Transform API not available');
-          return;
-        }
+        if (!neomind.createTransform) return;
 
         var pipe = {
           id: 'main',
@@ -686,12 +682,81 @@ var NE101CameraPanel = (function () {
           description: 'ne101:' + device.id + ':' + processingExtId + ':' + processingTemplate
         });
 
-        // Case 1: Stored ID exists but key changed — update in place
-        if (_storedTid) {
-          console.log('[ne101] Config changed, updating transform:', _storedTid);
-          transformIdRef.current = _storedTid;
+        var bizPrefix = 'ne101:' + device.id + ':' + processingExtId + ':' + processingTemplate;
+        var devicePrefix = 'ne101:' + device.id + ':';
+
+        // Helper: persist Transform ID to config
+        var persistId = function (id) {
+          transformIdRef.current = id;
+          if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: id, _transformKey: currentKey }));
+        };
+
+        // Helper: clean up ALL stale ne101 transforms except the active one
+        var cleanupStale = function (keepId) {
+          if (!neomind.listTransforms) return;
+          neomind.listTransforms({ scope: device.id }).then(function (transforms) {
+            if (cancelled) return;
+            var tList = Array.isArray(transforms) ? transforms : [];
+            for (var i = 0; i < tList.length; i++) {
+              var desc = tList[i].description || '';
+              if (desc.indexOf(devicePrefix) === 0 && tList[i].id !== keepId) {
+                neomind.deleteTransform(tList[i].id).catch(function () {});
+              }
+            }
+          }).catch(function () {});
+        };
+
+        // Helper: create new Transform
+        var doCreate = function () {
+          neomind.createTransform(payload).then(function (result) {
+            if (cancelled) return;
+            if (result && result.id) {
+              persistId(result.id);
+              cleanupStale(result.id);
+            }
+          }).catch(function (err) {
+            console.error('[ne101] Transform creation error:', err);
+          });
+        };
+
+        // Helper: search existing or create new
+        var searchOrCreate = function () {
+          if (neomind.listTransforms) {
+            neomind.listTransforms({ scope: device.id }).then(function (transforms) {
+              if (cancelled) return;
+              var tList = Array.isArray(transforms) ? transforms : [];
+              var found = null;
+              for (var ci = 0; ci < tList.length; ci++) {
+                if ((tList[ci].description || '').indexOf(bizPrefix) === 0) {
+                  found = tList[ci];
+                }
+              }
+              if (found) {
+                persistId(found.id);
+                if (neomind.updateTransform) {
+                  neomind.updateTransform(found.id, {
+                    name: payload.name,
+                    description: payload.description,
+                    scope: payload.scope,
+                    js_code: payload.js_code,
+                    output_prefix: payload.output_prefix
+                  }).catch(function () {});
+                }
+                cleanupStale(found.id);
+              } else {
+                doCreate();
+              }
+            }).catch(function () { if (!cancelled) doCreate(); });
+          } else {
+            doCreate();
+          }
+        };
+
+        // Case 1: Stored ID exists (from config or ref) — update in place
+        if (activeId) {
+          transformIdRef.current = activeId;
           if (neomind.updateTransform) {
-            neomind.updateTransform(_storedTid, {
+            neomind.updateTransform(activeId, {
               name: payload.name,
               description: payload.description,
               scope: payload.scope,
@@ -699,84 +764,22 @@ var NE101CameraPanel = (function () {
               output_prefix: payload.output_prefix
             }).then(function () {
               if (cancelled) return;
-              if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: _storedTid, _transformKey: currentKey }));
-            }).catch(function (err) {
+              persistId(activeId);
+              cleanupStale(activeId);
+            }).catch(function () {
               if (cancelled) return;
-              // Transform may have been deleted externally — recreate
-              console.error('[ne101] Stored transform invalid, recreating:', err);
-              neomind.deleteTransform(_storedTid).catch(function () {});
+              // Transform deleted externally — search + reuse or create
+              activeId = '';
+              transformIdRef.current = null;
               if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: '', _transformKey: '' }));
-              neomind.createTransform(payload).then(function (result) {
-                if (cancelled) return;
-                if (result && result.id) {
-                  console.log('[ne101] Transform recreated:', result.id);
-                  transformIdRef.current = result.id;
-                  if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: result.id, _transformKey: currentKey }));
-                }
-              }).catch(function (err2) {
-                console.error('[ne101] Transform creation error:', err2);
-              });
+              // Fall through to Case 2
+              searchOrCreate();
             });
           }
           return;
         }
 
-        // Case 2: No stored ID — search for existing Transform with same biz key, or create new
-        var bizPrefix = 'ne101:' + device.id + ':' + processingExtId + ':' + processingTemplate;
-        var doCreate = function () {
-          console.log('[ne101] Creating new transform...');
-          neomind.createTransform(payload).then(function (result) {
-            if (cancelled) return;
-            if (result && result.id) {
-              console.log('[ne101] Transform created:', result.id);
-              transformIdRef.current = result.id;
-              if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: result.id, _transformKey: currentKey }));
-            } else {
-              console.error('[ne101] Transform creation failed, no result');
-            }
-          }).catch(function (err) {
-            console.error('[ne101] Transform creation error:', err);
-          });
-        };
-
-        if (neomind.listTransforms) {
-          neomind.listTransforms({ scope: device.id }).then(function (transforms) {
-            if (cancelled) return;
-            var tList = Array.isArray(transforms) ? transforms : [];
-            var found = null;
-            for (var ci = 0; ci < tList.length; ci++) {
-              if ((tList[ci].description || '').indexOf(bizPrefix) === 0) {
-                found = tList[ci];
-              }
-            }
-            if (found) {
-              // Reuse existing Transform — update its code and persist ID
-              console.log('[ne101] Reusing existing transform:', found.id);
-              transformIdRef.current = found.id;
-              if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: found.id, _transformKey: currentKey }));
-              if (neomind.updateTransform) {
-                neomind.updateTransform(found.id, {
-                  name: payload.name,
-                  description: payload.description,
-                  scope: payload.scope,
-                  js_code: payload.js_code,
-                  output_prefix: payload.output_prefix
-                }).catch(function () {});
-              }
-              // Remove any other duplicates with same biz prefix
-              for (var di = 0; di < tList.length; di++) {
-                if (tList[di].id !== found.id && (tList[di].description || '').indexOf(bizPrefix) === 0) {
-                  console.log('[ne101] Removing duplicate transform:', tList[di].id);
-                  neomind.deleteTransform(tList[di].id).catch(function () {});
-                }
-              }
-            } else {
-              doCreate();
-            }
-          }).catch(function () { if (!cancelled) doCreate(); });
-        } else {
-          doCreate();
-        }
+        searchOrCreate();
       }).catch(function () {
         if (!cancelled) setExtStatus('error');
       });
