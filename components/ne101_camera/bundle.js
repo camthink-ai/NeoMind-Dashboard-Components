@@ -3,6 +3,11 @@ var NE101CameraPanel = (function () {
   var jsx = window.jsxRuntime.jsx;
   var jsxs = window.jsxRuntime.jsxs;
 
+  // Pending Transform delete timers — shared across all component instances.
+  // Key: transformId, Value: timerId. Used to delay deletion on unmount;
+  // remount (page switch) cancels the timer, component deletion lets it fire.
+  var _pendingDeletes = {};
+
   // Helpers
   function batteryMeta(level) {
     if (level == null) return { bar: 'rgba(128,128,128,0.3)' };
@@ -416,10 +421,6 @@ var NE101CameraPanel = (function () {
 
     // Track transform ID for cleanup
     var transformIdRef = React.useRef(null); // single transform ID
-    // Pending delete timers: { transformId: timerId }
-    // Used to delay Transform deletion on unmount — remount (page switch) cancels the timer.
-    // If no remount within 3s (component truly deleted), delete proceeds.
-    var pendingDeletes = React.useRef({});
 
     // Cache last known detections — platform store may wipe virtual metrics
     // on batch telemetry updates (_applyCurrentValuesBatch replaces entire entry).
@@ -605,9 +606,9 @@ var NE101CameraPanel = (function () {
         // Case 1: Stored ID matches current key — reuse existing Transform
         if (storedId && storedKey === currentKey) {
           // Cancel pending delete from previous unmount (page switch back)
-          if (pendingDeletes.current[storedId]) {
-            clearTimeout(pendingDeletes.current[storedId]);
-            delete pendingDeletes.current[storedId];
+          if (_pendingDeletes[storedId]) {
+            clearTimeout(_pendingDeletes[storedId]);
+            delete _pendingDeletes[storedId];
             console.log('[ne101] Cancelled pending delete for:', storedId);
           }
           console.log('[ne101] Reusing stored transform:', storedId);
@@ -703,8 +704,8 @@ var NE101CameraPanel = (function () {
         var tid = transformIdRef.current;
         if (tid) {
           var nm = window.neomind;
-          pendingDeletes.current[tid] = setTimeout(function () {
-            delete pendingDeletes.current[tid];
+          _pendingDeletes[tid] = setTimeout(function () {
+            delete _pendingDeletes[tid];
             if (nm && nm.deleteTransform) {
               console.log('[ne101] Deleting transform (component removed):', tid);
               nm.deleteTransform(tid).catch(function () {});
