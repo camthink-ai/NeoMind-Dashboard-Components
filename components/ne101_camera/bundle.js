@@ -159,7 +159,18 @@ var NE101CameraPanel = (function () {
         if (modes[i].id === templateName) return modes[i];
       }
     }
-    return null;
+    // Fallback: return default object_detection mode for unknown extensions
+    // This allows Transform creation to proceed even for unlisted extensions
+    return {
+      id: templateName || 'object_detection',
+      command: 'detect',
+      imageArg: 'image',
+      responseType: 'boxes_x1y1x2y2',
+      label: 'Object Detection',
+      desc: 'Generic detection',
+      icon: 'search',
+      args: []
+    };
   }
 
   /** Get available modes for an extension */
@@ -506,14 +517,17 @@ var NE101CameraPanel = (function () {
         var mode = getExtMode(processingExtId, processingTemplate);
         if (!mode) return;
 
-        // Validate required args
+        // Validate required args (only if mode specifies them)
         var reqArgs = mode.args || [];
         var missing = false;
         for (var ai = 0; ai < reqArgs.length; ai++) {
           if (reqArgs[ai] === 'categories' && !(processingCategories || '').trim()) { missing = true; break; }
           if (reqArgs[ai] === 'phrase' && !(processingPhrase || '').trim()) { missing = true; break; }
         }
-        if (missing) return;
+        if (missing) {
+          console.warn('[ne101] Missing required args for transform', { extId: processingExtId, template: processingTemplate, reqArgs: reqArgs, categories: processingCategories, phrase: processingPhrase });
+          return;
+        }
 
         var pipe = {
           id: 'main',
