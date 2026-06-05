@@ -577,10 +577,12 @@ var NE101CameraPanel = (function () {
         var tplConfig = fillTemplate(pipe);
         var tName = 'ne101-' + device.id + '-' + processingExtId.replace(/-/g, '_') + '-' + processingTemplate;
         var fp = JSON.stringify({ js_code: tplConfig.js_code });
+        // Business identifier: device + extension + template (stable, not name-based)
+        var bizId = 'ne101:' + device.id + ':' + processingExtId + ':' + processingTemplate;
         var payload = Object.assign({}, tplConfig, {
           name: tName,
           scope: device.id,
-          description: 'fp:' + fp
+          description: bizId + '\nfp:' + fp
         });
 
         console.log('[ne101] Creating transform:', tName);
@@ -596,13 +598,14 @@ var NE101CameraPanel = (function () {
           var tList = Array.isArray(transforms) ? transforms : [];
           var existing = null;
           for (var ti = 0; ti < tList.length; ti++) {
-            if (tList[ti].name === tName) { existing = tList[ti]; break; }
+            // Match by business identifier (device+extension+template), not by name
+            var desc = (tList[ti].description || '');
+            if (desc.indexOf(bizId) === 0) { existing = tList[ti]; break; }
           }
 
           if (existing) {
-            // Check fingerprint
-            var oldDesc = existing.description || '';
-            var oldFp = oldDesc.indexOf('fp:') === 0 ? oldDesc.substring(3) : '';
+            // Check fingerprint for config changes
+            var oldFp = desc.split('\nfp:')[1] || '';
             if (oldFp === fp) {
               // Same config — reuse
               console.log('[ne101] Transform exists with same config, reusing:', existing.id);
