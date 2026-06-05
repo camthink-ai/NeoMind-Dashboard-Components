@@ -642,22 +642,28 @@ var NE101CameraPanel = (function () {
         return;
       }
 
+      // Use ref as fallback — protects against StrictMode double-invoke where
+      // first effect created Transform but persist was cancelled before config updated
+      var activeId = _storedTid || transformIdRef.current || '';
+
       // --- Tier 2: Have ID, config changed — updateTransform by ID ---
-      if (_storedTid) {
-        transformIdRef.current = _storedTid;
+      if (activeId) {
+        transformIdRef.current = activeId;
         setExtStatus('active');
         if (neomind.updateTransform) {
-          neomind.updateTransform(_storedTid, {
+          neomind.updateTransform(activeId, {
             name: payload.name, description: payload.description,
             scope: payload.scope, js_code: payload.js_code, output_prefix: payload.output_prefix
           }).then(function () {
-            if (!cancelled) persist(_storedTid);
+            if (!cancelled) persist(activeId);
           }).catch(function () {
             if (cancelled) return;
             // ID invalid (deleted externally) — clear and create new
             transformIdRef.current = null;
             if (onCfgChange) onCfgChange(Object.assign({}, configRef.current, { _transformId: '', _transformHash: '' }));
             neomind.createTransform(payload).then(function (r) {
+              // Always set ref so concurrent effect can find it
+              if (r && r.id) transformIdRef.current = r.id;
               if (!cancelled && r && r.id) persist(r.id);
             }).catch(function () {});
           });
@@ -668,13 +674,26 @@ var NE101CameraPanel = (function () {
       // --- Tier 3: No ID — check extension, then create ---
       setExtStatus('checking');
       if (!neomind.listExtensions) {
-        // No extension check possible — create directly
         neomind.createTransform(payload).then(function (r) {
+          if (r && r.id) transformIdRef.current = r.id;
           if (!cancelled && r && r.id) { persist(r.id); setExtStatus('active'); }
         }).catch(function () { if (!cancelled) setExtStatus('error'); });
         return;
       }
       neomind.listExtensions().then(function (exts) {
+        // StrictMode: first effect's create may have set ref by now — upgrade to update
+        if (transformIdRef.current) {
+          var existingId = transformIdRef.current;
+          if (neomind.updateTransform) {
+            neomind.updateTransform(existingId, {
+              name: payload.name, description: payload.description,
+              scope: payload.scope, js_code: payload.js_code, output_prefix: payload.output_prefix
+            }).then(function () {
+              if (!cancelled) persist(existingId);
+            }).catch(function () {});
+          }
+          return;
+        }
         if (cancelled) return;
         var extList = Array.isArray(exts) ? exts : [];
         var matched = null;
@@ -686,6 +705,7 @@ var NE101CameraPanel = (function () {
         if (st.indexOf('stopped') >= 0 || st.indexOf('failed') >= 0 || st.indexOf('error') >= 0) { setExtStatus('offline'); return; }
         setExtStatus('active');
         neomind.createTransform(payload).then(function (r) {
+          if (r && r.id) transformIdRef.current = r.id;
           if (!cancelled && r && r.id) persist(r.id);
         }).catch(function () {});
       }).catch(function () { if (!cancelled) setExtStatus('error'); });
