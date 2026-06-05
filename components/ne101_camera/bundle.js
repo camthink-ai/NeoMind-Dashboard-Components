@@ -251,6 +251,7 @@ var NE101CameraPanel = (function () {
     // Image dimensions for coordinate normalization
     L.push('var W = (imageMeta && imageMeta.width) || 1;');
     L.push('var H = (imageMeta && imageMeta.height) || 1;');
+    L.push('console.log("[ne101-tf] imageMeta:", JSON.stringify(imageMeta), "W:", W, "H:", H);');
     L.push('');
 
     // Extension invocation — params use __imageData (injected by platform)
@@ -816,8 +817,9 @@ var NE101CameraPanel = (function () {
       lastDetsRef.current = [];
     }
 
-    // Object-cover transform: map normalized bbox coords to container coords
-    // object-cover scales by max(cW/iW, cH/iH) and centers, so boxes need offset adjustment
+    // Object-cover transform: map normalized image coords (0-1) to container coords (0-1)
+    // object-cover scales image to cover container, cropping excess.
+    // In image space, only a portion is visible. We map image coords → container coords.
     var imgNat = imgNatState[0];
     var ctrSize = ctrSizeState[0];
     var ovTf = null;
@@ -825,11 +827,14 @@ var NE101CameraPanel = (function () {
       var imgAsp = imgNat.w / imgNat.h;
       var cAsp = ctrSize.w / ctrSize.h;
       if (imgAsp > cAsp) {
-        // Image wider than container: cropped on left/right
+        // Image wider than container → sides cropped, image fills container height
+        // Container shows center portion of image width
+        // scale = cH / iH, displayed image width = iW * cH / iH
+        // sx = displayed_width / cW, ox = (cW - displayed_width) / (2 * cW)
         var scX = (ctrSize.h / imgNat.h * imgNat.w) / ctrSize.w;
         ovTf = { sx: scX, sy: 1, ox: (1 - scX) / 2, oy: 0 };
       } else {
-        // Image taller than container: cropped on top/bottom
+        // Image taller than container → top/bottom cropped, image fills container width
         var scY = (ctrSize.w / imgNat.w * imgNat.h) / ctrSize.h;
         ovTf = { sx: 1, sy: scY, ox: 0, oy: (1 - scY) / 2 };
       }
@@ -1144,12 +1149,18 @@ var NE101CameraPanel = (function () {
                     })
                   : null,
                 // Detection boxes overlay — adjusted for object-cover image scaling
-                processingEnabled && detections.length > 0
+                (processingEnabled && detections.length > 0)
                   ? jsx('div', {
                       key: 'det-boxes',
                       className: 'absolute inset-0',
                       style: { pointerEvents: 'none' },
-                      children: detections.map(function (det, i) {
+                      children: (function () {
+                        if (!window._ne101DetLogged) {
+                          window._ne101DetLogged = true;
+                          console.log('[ne101] imgNat:', imgNat, 'ctrSize:', ctrSize, 'ovTf:', ovTf);
+                          console.log('[ne101] first det bbox:', JSON.stringify(detections[0].bbox));
+                        }
+                        return detections.map(function (det, i) {
                         if (!det.bbox || det.bbox.length < 4) return null;
                         var bx1 = det.bbox[0], by1 = det.bbox[1], bx2 = det.bbox[2], by2 = det.bbox[3];
                         var detLabel = det.label || '';
@@ -1189,9 +1200,10 @@ var NE101CameraPanel = (function () {
                               })
                             : null
                         });
-                      })
+                      });
+                      })()
                     })
-                  : null
+                  : null,
               ]
             })
           : jsxs('div', {
