@@ -544,7 +544,7 @@ var NE101CameraPanel = (function () {
             dets = virt[extKey].detections;
           }
         }
-        if (dets && Array.isArray(dets) && dets.length > 0) {
+        if (virt && typeof virt === 'object') {
           setVirtualData(v);
         }
       }).catch(function () {});
@@ -571,12 +571,6 @@ var NE101CameraPanel = (function () {
     // Single-extension Transform lifecycle
     // One Transform per component instance. Persist ID in config for reuse across remounts.
     var _storedTid = config._transformId || '';
-    // Compute a config hash that covers ALL fields affecting Transform JS code
-    var _configHash = processingExtId + ':' + processingTemplate + ':' +
-      (processingCategories || '') + ':' + (processingPhrase || '') + ':' + (processingClassFilter || '') + ':' +
-      (processingRoiEnabled ? '1' : '0') + ':' + (processingRoiAction || '') + ':' +
-      processingRoiX + ':' + processingRoiY + ':' + processingRoiW + ':' + processingRoiH + ':' +
-      JSON.stringify(processingRois);
     var _storedKey = config._transformKey || '';
     // Keep latest config in ref to avoid stale closure in async callbacks
     var configRef = React.useRef(config);
@@ -603,11 +597,11 @@ var NE101CameraPanel = (function () {
         return;
       }
 
-      var currentKey = _configHash;
+      var currentKey = processingExtId + ':' + processingTemplate;
       // Use ref as fallback — protects against race where onCfgChange hasn't propagated yet
       var activeId = _storedTid || transformIdRef.current || '';
 
-      // Fast path: same Transform, same full config — just set ref, no API call
+      // Fast path: same ext+template — just set ref, dedup, no update
       if (activeId && _storedKey === currentKey) {
         transformIdRef.current = activeId;
         setExtStatus('active');
@@ -737,7 +731,7 @@ var NE101CameraPanel = (function () {
               var tList = Array.isArray(transforms) ? transforms : [];
               var found = null;
               for (var ci = 0; ci < tList.length; ci++) {
-                if ((tList[ci].description || '').indexOf(bizPrefix) === 0) {
+                if (!found && (tList[ci].description || '').indexOf(bizPrefix) === 0) {
                   found = tList[ci];
                 }
               }
@@ -797,7 +791,7 @@ var NE101CameraPanel = (function () {
       return function () {
         cancelled = true;
       };
-    }, [device ? device.id : null, processingEnabled, _configHash, _storedTid, _storedKey]);
+    }, [device ? device.id : null, processingEnabled, processingExtId, processingTemplate, _storedTid, _storedKey]);
 
     if (!device) return jsx(NoDevice, {});
 
