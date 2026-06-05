@@ -167,45 +167,6 @@ var NE101CameraPanel = (function () {
     return EXT_MODES[extensionId] || [{ id: 'object_detection', command: 'detect', imageArg: 'image', responseType: 'boxes_x1y1x2y2', label: 'Object Detection', desc: 'Generic detection', icon: 'search' }];
   }
 
-  /**
-   * Migrate legacy single-extension config to multi-pipeline format.
-   * Returns array of pipeline objects:
-   *   { id, extId, template, categories, phrase, classFilter, roiEnabled, roiAction, roiX, roiY, roiW, roiH }
-   */
-  function migrateToPipelines(config) {
-    // Already migrated
-    if (Array.isArray(config.processingPipelines)) return config.processingPipelines;
-
-    // Legacy single-extension config
-    var extId = config.processingExtensionId;
-    if (!extId) return [];
-
-    var rawTemplate = config.processingTemplate || 'object_detection';
-    var template = rawTemplate === 'object_detection_roi' ? 'object_detection' : rawTemplate;
-    var roiEnabled = config.processingRoiEnabled === true || rawTemplate === 'object_detection_roi';
-
-    return [{
-      id: 'p0',
-      extId: extId,
-      template: template,
-      categories: config.processingCategories || '',
-      phrase: config.processingPhrase || '',
-      classFilter: config.processingClassFilter || '',
-      roiEnabled: roiEnabled,
-      roiAction: config.processingRoiAction || 'count',
-      roiX: config.processingRoiX != null ? config.processingRoiX : 0.1,
-      roiY: config.processingRoiY != null ? config.processingRoiY : 0.1,
-      roiW: config.processingRoiW != null ? config.processingRoiW : 0.8,
-      roiH: config.processingRoiH != null ? config.processingRoiH : 0.8
-    }];
-  }
-
-  /** Generate a unique pipeline ID */
-  var _pipeIdCounter = 0;
-  function nextPipeId() {
-    return 'p' + (++_pipeIdCounter) + '_' + Date.now();
-  }
-
   /** Build ROI object from a pipeline config */
   function pipeRoi(pipe) {
     if (!pipe.roiEnabled) return null;
@@ -392,15 +353,6 @@ var NE101CameraPanel = (function () {
     };
   }
 
-  /**
-   * Build transform name for a pipeline.
-   * Format: ne101-{deviceId}-{pipeId}
-   * Uses pipeId to guarantee uniqueness even when multiple pipelines use the same extension+template.
-   */
-  function transformNameForPipe(deviceId, pipe) {
-    return 'ne101-' + deviceId + '-' + pipe.id;
-  }
-
   // No device placeholder
   function NoDevice() {
     return jsxs('div', {
@@ -432,22 +384,26 @@ var NE101CameraPanel = (function () {
     var cmdLoading = cmdState[0];
     var setCmdLoading = cmdState[1];
 
-    // -- Processing pipeline state (must be declared before early return) --
+    // -- Processing config (single extension) --
     var processingEnabled = config.processingEnabled === true;
-    // Multi-pipeline: migrate legacy config if needed
-    var pipelines = processingEnabled ? migrateToPipelines(config) : [];
-    // Extension IDs referenced by active pipelines (for status checking)
-    var pipelineExtIds = [];
-    for (var pi = 0; pi < pipelines.length; pi++) {
-      if (pipelineExtIds.indexOf(pipelines[pi].extId) < 0) pipelineExtIds.push(pipelines[pi].extId);
-    }
+    var processingExtId = config.processingExtensionId || '';
+    var processingTemplate = config.processingTemplate || 'object_detection';
+    var processingCategories = config.processingCategories || '';
+    var processingPhrase = config.processingPhrase || '';
+    var processingClassFilter = config.processingClassFilter || '';
+    var processingRoiEnabled = config.processingRoiEnabled === true;
+    var processingRoiAction = config.processingRoiAction || 'count';
+    var processingRoiX = config.processingRoiX != null ? config.processingRoiX : 0.1;
+    var processingRoiY = config.processingRoiY != null ? config.processingRoiY : 0.1;
+    var processingRoiW = config.processingRoiW != null ? config.processingRoiW : 0.8;
+    var processingRoiH = config.processingRoiH != null ? config.processingRoiH : 0.8;
 
     var extStatusState = React.useState('idle');
     var extStatus = extStatusState[0];
     var setExtStatus = extStatusState[1];
 
-    // Track transform IDs per pipeline for proper cleanup
-    var transformIdsRef = React.useRef({}); // { pipelineName: transformId }
+    // Track transform ID for cleanup
+    var transformIdRef = React.useRef(null); // single transform ID
 
     // WS-triggered fetch: platform WS delivers small metrics (battery, ts) in real-time,
     // but large base64 images may exceed WS message size limits.
@@ -501,9 +457,18 @@ var NE101CameraPanel = (function () {
       imageSrc = rawImageSrc + (rawImageSrc.indexOf('?') >= 0 ? '&' : '?') + '_t=' + (imgTs || 0);
     }
 
-    // Extension check + multi-pipeline transform lifecycle
+    // Single-extension Transform lifecycle
     React.useEffect(function () {
-      if (!processingEnabled || pipelines.length === 0 || !device) return;
+      if (!processingEnabled || !processingExtId || !device) {
+        // Clean up transform if processing is disabled
+        var nm = window.neomind;
+        if (transformIdRef.current && nm && nm.deleteTransform) {
+          nm.deleteTransform(transformIdRef.current).catch(function () {});
+          transformIdRef.current = null;
+        }
+        setExtStatus('idle');
+        return;
+      }
 
       var neomind = window.neomind;
       if (!neomind || typeof neomind.listExtensions !== 'function') {
@@ -518,210 +483,119 @@ var NE101CameraPanel = (function () {
         if (cancelled) return;
         var extList = Array.isArray(exts) ? exts : [];
 
-        // Check all referenced extensions
-        var allActive = true;
-        for (var ci = 0; ci < pipelineExtIds.length; ci++) {
-          var matched = null;
-          for (var ei = 0; ei < extList.length; ei++) {
-            if (extList[ei].id === pipelineExtIds[ci]) { matched = extList[ei]; break; }
-          }
-          if (!matched) { allActive = false; setExtStatus('not_installed'); return; }
-          var stateLower = (matched.state || '').toLowerCase();
-          if (stateLower.indexOf('stopped') >= 0 || stateLower.indexOf('failed') >= 0 || stateLower.indexOf('error') >= 0) {
-            allActive = false; setExtStatus('offline'); return;
-          }
+        // Find the selected extension
+        var matched = null;
+        for (var ei = 0; ei < extList.length; ei++) {
+          if (extList[ei].id === processingExtId) { matched = extList[ei]; break; }
         }
-        if (!allActive) return;
+
+        if (!matched) {
+          setExtStatus('not_installed');
+          return;
+        }
+
+        var stateLower = (matched.state || '').toLowerCase();
+        if (stateLower.indexOf('stopped') >= 0 || stateLower.indexOf('failed') >= 0 || stateLower.indexOf('error') >= 0) {
+          setExtStatus('offline');
+          return;
+        }
+
         setExtStatus('active');
 
-        // Build desired transforms for each pipeline
-        var desiredTransforms = [];
-        for (var pi2 = 0; pi2 < pipelines.length; pi2++) {
-          var pipe = pipelines[pi2];
-          var mode = getExtMode(pipe.extId, pipe.template);
-          if (!mode) continue;
+        // Build transform config
+        var mode = getExtMode(processingExtId, processingTemplate);
+        if (!mode) return;
 
-          // Validate required args
-          var reqArgs = mode.args || [];
-          var missing = false;
-          for (var ai = 0; ai < reqArgs.length; ai++) {
-            if (reqArgs[ai] === 'categories' && !(pipe.categories || '').trim()) { missing = true; break; }
-            if (reqArgs[ai] === 'phrase' && !(pipe.phrase || '').trim()) { missing = true; break; }
-          }
-          if (missing) continue;
-
-          var tplConfig = fillTemplate(pipe);
-          var tName = transformNameForPipe(device.id, pipe);
-          var fp = JSON.stringify({ js_code: tplConfig.js_code });
-
-          desiredTransforms.push({
-            name: tName,
-            pipelineId: pipe.id,
-            fingerprint: fp,
-            payload: Object.assign({}, tplConfig, {
-              name: tName,
-              scope: device.id,
-              // Store fingerprint in description field so it persists through serde round-trip
-              // (rule, _fp fields are not part of TransformAutomation and get silently dropped)
-              description: 'fp:' + fp,
-            })
-          });
+        // Validate required args
+        var reqArgs = mode.args || [];
+        var missing = false;
+        for (var ai = 0; ai < reqArgs.length; ai++) {
+          if (reqArgs[ai] === 'categories' && !(processingCategories || '').trim()) { missing = true; break; }
+          if (reqArgs[ai] === 'phrase' && !(processingPhrase || '').trim()) { missing = true; break; }
         }
+        if (missing) return;
 
-        if (desiredTransforms.length === 0) return null;
+        var pipe = {
+          id: 'main',
+          extId: processingExtId,
+          template: processingTemplate,
+          categories: processingCategories,
+          phrase: processingPhrase,
+          classFilter: processingClassFilter,
+          roiEnabled: processingRoiEnabled,
+          roiAction: processingRoiAction,
+          roiX: processingRoiX,
+          roiY: processingRoiY,
+          roiW: processingRoiW,
+          roiH: processingRoiH
+        };
 
-        // Sync transforms: list existing, diff, create/update/delete
-        if (!neomind.listTransforms) return null;
+        var tplConfig = fillTemplate(pipe);
+        var tName = 'ne101-' + device.id + '-main';
+        var fp = JSON.stringify({ js_code: tplConfig.js_code });
+        var payload = Object.assign({}, tplConfig, {
+          name: tName,
+          scope: device.id,
+          description: 'fp:' + fp
+        });
+
+        // Sync transform: create or update
+        if (!neomind.listTransforms || !neomind.createTransform) return null;
+
         return neomind.listTransforms({ scope: device.id }).then(function (transforms) {
           if (cancelled) return;
           var tList = Array.isArray(transforms) ? transforms : [];
-          var existingMap = {};
+          var existing = null;
           for (var ti = 0; ti < tList.length; ti++) {
-            if (tList[ti].name.indexOf('ne101-' + device.id + '-') === 0) {
-              existingMap[tList[ti].name] = tList[ti];
+            if (tList[ti].name === tName) { existing = tList[ti]; break; }
+          }
+
+          if (existing) {
+            // Check fingerprint
+            var oldDesc = existing.description || '';
+            var oldFp = oldDesc.indexOf('fp:') === 0 ? oldDesc.substring(3) : '';
+            if (oldFp === fp) {
+              // Same config — reuse
+              transformIdRef.current = existing.id;
+              return;
             }
-          }
-
-          var ops = []; // array of promises
-          var desiredNames = {};
-
-          for (var di2 = 0; di2 < desiredTransforms.length; di2++) {
-            // IIFE to capture loop variable correctly in async callbacks
-            (function (dt) {
-              desiredNames[dt.name] = true;
-              var existing = existingMap[dt.name];
-
-              if (existing) {
-                // Check fingerprint from description field (format: "fp:...")
-                var oldDesc = existing.description || '';
-                var oldFp = oldDesc.indexOf('fp:') === 0 ? oldDesc.substring(3) : '';
-                var newFp = dt.fingerprint;
-                if (oldFp === newFp) {
-                  // Same config — reuse, record ID
-                  transformIdsRef.current[dt.name] = existing.id;
-                  return;
-                }
-                // Config changed — update in place, fallback to create if not found
-                if (neomind.updateTransform) {
-                  ops.push(
-                    neomind.updateTransform(existing.id, {
-                      name: dt.payload.name,
-                      description: dt.payload.description,
-                      scope: dt.payload.scope,
-                      js_code: dt.payload.js_code,
-                      output_prefix: dt.payload.output_prefix,
-                    }).catch(function () {
-                      // Transform may have been deleted externally — recreate
-                      if (cancelled) return null;
-                      return neomind.createTransform(dt.payload);
-                    })
-                  );
-                } else if (neomind.createTransform) {
-                  // No update API — create fresh (may produce duplicates if old one still exists)
-                  ops.push(neomind.createTransform(dt.payload));
-                }
-              } else {
-                // Create new
-                if (neomind.createTransform) {
-                  ops.push(neomind.createTransform(dt.payload));
-                }
-              }
-            })(desiredTransforms[di2]);
-          }
-
-          // Delete transforms for pipelines no longer configured
-          var existingNames = Object.keys(existingMap);
-          for (var eni = 0; eni < existingNames.length; eni++) {
-            if (!desiredNames[existingNames[eni]]) {
-              if (neomind.deleteTransform) {
-                ops.push(neomind.deleteTransform(existingMap[existingNames[eni]].id).catch(function (err) {
-                  console.warn('[ne101] Failed to delete stale transform:', existingMap[existingNames[eni]].id, err);
-                }));
-              }
+            // Config changed — update
+            if (neomind.updateTransform) {
+              return neomind.updateTransform(existing.id, {
+                name: payload.name,
+                description: payload.description,
+                scope: payload.scope,
+                js_code: payload.js_code,
+                output_prefix: payload.output_prefix
+              }).catch(function () {
+                // Transform may have been deleted — recreate
+                if (cancelled) return null;
+                return neomind.createTransform(payload);
+              }).then(function (result) {
+                if (result && result.id) transformIdRef.current = result.id;
+              });
             }
+          } else {
+            // Create new
+            return neomind.createTransform(payload).then(function (result) {
+              if (result && result.id) transformIdRef.current = result.id;
+            });
           }
-
-          return Promise.all(ops);
         });
-      }).then(function (results) {
-        if (cancelled || !results) return;
-        var flat = Array.isArray(results) ? results : [results];
-        for (var ri = 0; ri < flat.length; ri++) {
-          if (flat[ri] && flat[ri].id && flat[ri].name) {
-            transformIdsRef.current[flat[ri].name] = flat[ri].id;
-          }
-        }
       }).catch(function () {
         if (!cancelled) setExtStatus('error');
       });
 
       return function () {
         cancelled = true;
-        // Cleanup transforms when unmounting or deps change
+        // Cleanup transform when unmounting or deps change
         var nm = window.neomind;
-        var ids = transformIdsRef.current;
-        var keys = Object.keys(ids);
-        for (var ki = 0; ki < keys.length; ki++) {
-          if (ids[keys[ki]] && nm && nm.deleteTransform) {
-            nm.deleteTransform(ids[keys[ki]]).catch(function () {});
-          }
+        if (transformIdRef.current && nm && nm.deleteTransform) {
+          nm.deleteTransform(transformIdRef.current).catch(function () {});
+          transformIdRef.current = null;
         }
-        transformIdsRef.current = {};
       };
-    }, [device ? device.id : null, processingEnabled, JSON.stringify(pipelines)]);
-
-    // Cleanup: delete all ne101-* transforms when processing disabled
-    var prevPipelinesRef = React.useRef(pipelines);
-    React.useEffect(function () {
-      var neomind = window.neomind;
-      if (!neomind || !neomind.listTransforms || !neomind.deleteTransform || !device) return;
-
-      var prevPipes = prevPipelinesRef.current;
-      // Update ref AFTER capturing prevPipes so deletion detection works correctly
-
-      if (!processingEnabled) {
-        prevPipelinesRef.current = pipelines;
-        // Delete all ne101-* transforms for this device
-        neomind.listTransforms({ scope: device.id }).then(function (transforms) {
-          var tList = Array.isArray(transforms) ? transforms : [];
-          for (var i = 0; i < tList.length; i++) {
-            if (tList[i].name.indexOf('ne101-' + device.id + '-') === 0) {
-              neomind.deleteTransform(tList[i].id).catch(function (err) {
-                console.warn('[ne101] Failed to delete transform on disable:', tList[i].id, err);
-              });
-            }
-          }
-        }).catch(function () {});
-        return;
-      }
-
-      // Delete transforms for removed pipelines
-      var prevPipeNames = {};
-      for (var pp = 0; pp < prevPipes.length; pp++) {
-        prevPipeNames[transformNameForPipe(device.id, prevPipes[pp])] = true;
-      }
-      var curPipeNames = {};
-      for (var cp = 0; cp < pipelines.length; cp++) {
-        curPipeNames[transformNameForPipe(device.id, pipelines[cp])] = true;
-      }
-      var toDelete = Object.keys(prevPipeNames).filter(function (n) { return !curPipeNames[n]; });
-
-      // Update ref after diff computation is done
-      prevPipelinesRef.current = pipelines;
-
-      if (toDelete.length === 0) return;
-
-      neomind.listTransforms({ scope: device.id }).then(function (transforms) {
-        var tList = Array.isArray(transforms) ? transforms : [];
-        for (var i2 = 0; i2 < tList.length; i2++) {
-          if (toDelete.indexOf(tList[i2].name) >= 0) {
-            neomind.deleteTransform(tList[i2].id).catch(function (err) {
-              console.warn('[ne101] Failed to delete transform for removed pipeline:', err);
-            });
-          }
-        }
-      }).catch(function () {});
-    }, [processingEnabled, JSON.stringify(pipelines)]);
+    }, [device ? device.id : null, processingEnabled, processingExtId, processingTemplate, processingCategories, processingPhrase, processingClassFilter, processingRoiEnabled, processingRoiX, processingRoiY, processingRoiW, processingRoiH]);
 
     if (!device) return jsx(NoDevice, {});
 
@@ -747,23 +621,13 @@ var NE101CameraPanel = (function () {
     var batteryPct = batteryVal != null ? Math.max(0, Math.min(100, batteryVal)) : 0;
     var hasImage = !!imageSrc;
 
-    // Virtual metrics (from processing pipeline) + client-side detections
+    // Virtual metrics (from processing pipeline)
     var detections = [];
-    // Aggregate detections from all pipelines
-    if (processingEnabled && pipelines.length > 0) {
-      // Collect from virtual metrics (backend transform results)
-      for (var agi = 0; agi < pipelines.length; agi++) {
-        var pPipe = pipelines[agi];
-        var pPfx = 'virtual.' + pPipe.extId.replace(/-/g, '_') + '.';
-        var pDet = getFirst(vals, [pPfx + 'detections', 'values.' + pPfx + 'detections']);
-        if (Array.isArray(pDet) && pDet.length > 0) {
-          for (var pdi = 0; pdi < pDet.length; pdi++) {
-            pDet[pdi]._pipeId = pPipe.id;
-            pDet[pdi]._extId = pPipe.extId;
-          }
-          detections = detections.concat(pDet);
-        }
-      }
+    if (processingEnabled && processingExtId) {
+      // Read detections from virtual metrics (backend transform results)
+      var pfx = 'virtual.' + processingExtId.replace(/-/g, '_') + '.';
+      var vDet = getFirst(vals, [pfx + 'detections', 'values.' + pfx + 'detections']);
+      if (Array.isArray(vDet)) detections = vDet;
     }
 
     // Badge/chip background styles
@@ -895,61 +759,30 @@ var NE101CameraPanel = (function () {
       );
     }
 
-    // Detection summary — aggregate from all pipelines
-    var hasAnySummary = processingEnabled && pipelines.length > 0 && (
+    // Detection summary — read from single extension
+    var hasAnySummary = processingEnabled && processingExtId && (
       detections.length > 0 ||
       (function () {
-        for (var hsi = 0; hsi < pipelines.length; hsi++) {
-          var hPfx = 'virtual.' + pipelines[hsi].extId.replace(/-/g, '_') + '.';
-          if (getFirst(vals, [hPfx + 'total_count', 'values.' + hPfx + 'total_count']) != null) return true;
-        }
-        return false;
+        var pfx = 'virtual.' + processingExtId.replace(/-/g, '_') + '.';
+        return getFirst(vals, [pfx + 'total_count', 'values.' + pfx + 'total_count']) != null;
       })()
     );
     if (hasAnySummary) {
-      // Aggregate virtual metrics from all pipelines
-      var aggTotalCount = 0;
-      var aggRoiCount = 0;
-      var aggCountByClass = {};
-      var aggTexts = [];
+      // Read virtual metrics from single extension
+      var pfx = 'virtual.' + processingExtId.replace(/-/g, '_') + '.';
+      var vTotalCount = getFirst(vals, [pfx + 'total_count', 'values.' + pfx + 'total_count']);
+      var vRoiCount = getFirst(vals, [pfx + 'roi_count', 'values.' + pfx + 'roi_count']);
+      var vCountByClass = getFirst(vals, [pfx + 'count_by_class', 'values.' + pfx + 'count_by_class']);
+      var vTexts = getFirst(vals, [pfx + 'texts', 'values.' + pfx + 'texts']);
+      var maxInfTime = getFirst(vals, [pfx + 'inference_time_ms', 'values.' + pfx + 'inference_time_ms']);
 
-      for (var si = 0; si < pipelines.length; si++) {
-        var sPipe = pipelines[si];
-        var sPfx = 'virtual.' + sPipe.extId.replace(/-/g, '_') + '.';
-        var sTotal = getFirst(vals, [sPfx + 'total_count', 'values.' + sPfx + 'total_count']);
-        if (sTotal != null) aggTotalCount += sTotal;
-        var sRoi = getFirst(vals, [sPfx + 'roi_count', 'values.' + sPfx + 'roi_count']);
-        if (sRoi != null) aggRoiCount += sRoi;
-        var sCbc = getFirst(vals, [sPfx + 'count_by_class', 'values.' + sPfx + 'count_by_class']);
-        if (sCbc && typeof sCbc === 'object') {
-          var sKeys = Object.keys(sCbc);
-          for (var ski = 0; ski < sKeys.length; ski++) {
-            aggCountByClass[sKeys[ski]] = (aggCountByClass[sKeys[ski]] || 0) + sCbc[sKeys[ski]];
-          }
-        }
-        var sTexts = getFirst(vals, [sPfx + 'texts', 'values.' + sPfx + 'texts']);
-        if (Array.isArray(sTexts)) aggTexts = aggTexts.concat(sTexts);
-      }
-
-      var vTotalCount = aggTotalCount || detections.length;
-      var vRoiCount = aggRoiCount > 0 ? aggRoiCount : null;
-      var vCountByClass = Object.keys(aggCountByClass).length > 0 ? aggCountByClass : null;
-      var vTexts = aggTexts.length > 0 ? aggTexts : null;
-
-      // Read inference time from virtual metrics (max across all pipelines)
-      var maxInfTime = null;
-      for (var iti = 0; iti < pipelines.length; iti++) {
-        var itPfx = 'virtual.' + pipelines[iti].extId.replace(/-/g, '_') + '.';
-        var itMs = getFirst(vals, [itPfx + 'inference_time_ms', 'values.' + itPfx + 'inference_time_ms']);
-        if (itMs != null && (maxInfTime == null || itMs > maxInfTime)) maxInfTime = itMs;
-      }
-
-      // Calculate ROI from first pipeline with ROI enabled (for overlay display)
-      var roi = null;
-      for (var ri = 0; ri < pipelines.length; ri++) {
-        var r = pipeRoi(pipelines[ri]);
-        if (r != null) { roi = r; break; }
-      }
+      // Calculate ROI from config (for overlay display)
+      var roi = processingRoiEnabled ? {
+        x: Number(processingRoiX) || 0,
+        y: Number(processingRoiY) || 0,
+        w: Number(processingRoiW) || 0.8,
+        h: Number(processingRoiH) || 0.8
+      } : null;
 
       var displayCount = vTotalCount != null ? vTotalCount : detections.length;
       var detLabels = detections.slice(0, 4).map(function (d) { return d.label || '?'; });
@@ -1086,21 +919,8 @@ var NE101CameraPanel = (function () {
                         var bx1 = det.bbox[0], by1 = det.bbox[1], bx2 = det.bbox[2], by2 = det.bbox[3];
                         var detLabel = det.label || '';
                         var detConf = typeof det.confidence === 'number' ? Math.round(det.confidence * 100) : '';
-                        // Color per pipeline
-                        var pipeColors = [
-                          { border: 'rgba(59,130,246,0.8)', bg: 'rgba(59,130,246,0.85)', shadow: 'rgba(59,130,246,0.3)' },
-                          { border: 'rgba(34,197,94,0.8)', bg: 'rgba(34,197,94,0.85)', shadow: 'rgba(34,197,94,0.3)' },
-                          { border: 'rgba(249,115,22,0.8)', bg: 'rgba(249,115,22,0.85)', shadow: 'rgba(249,115,22,0.3)' },
-                          { border: 'rgba(168,85,247,0.8)', bg: 'rgba(168,85,247,0.85)', shadow: 'rgba(168,85,247,0.3)' },
-                          { border: 'rgba(236,72,153,0.8)', bg: 'rgba(236,72,153,0.85)', shadow: 'rgba(236,72,153,0.3)' }
-                        ];
-                        var pipeIdx = 0;
-                        if (det._pipeId) {
-                          for (var pci = 0; pci < pipelines.length; pci++) {
-                            if (pipelines[pci].id === det._pipeId) { pipeIdx = pci; break; }
-                          }
-                        }
-                        var clr = pipeColors[pipeIdx % pipeColors.length];
+                        // Single extension: use first color
+                        var clr = { border: 'rgba(59,130,246,0.8)', bg: 'rgba(59,130,246,0.85)', shadow: 'rgba(59,130,246,0.3)' };
                         return jsxs('div', {
                           key: 'dbox-' + i,
                           className: 'absolute',
@@ -1310,7 +1130,8 @@ var NE101CameraPanel = (function () {
 
     // Derived values
     var enabled = config.processingEnabled === true;
-    var pipelines = migrateToPipelines(config);
+    var extId = config.processingExtensionId || '';
+    var template = config.processingTemplate || 'object_detection';
 
     // Extension list (auto-fetched, filtered to AI extensions)
     var extState = React.useState({ list: [], loading: false, error: null });
@@ -1340,63 +1161,22 @@ var NE101CameraPanel = (function () {
 
     var extensions = extState[0].list;
 
-    // Pipeline management helpers
-    // Only set processingPipelines — do NOT clear legacy keys one by one
-    // because each update() call triggers a separate React state update,
-    // causing race conditions where intermediate states overwrite each other.
-    // migrateToPipelines() already prioritizes processingPipelines array over legacy keys.
-    function updatePipelines(newPipelines) {
-      update('processingPipelines', newPipelines);
+    // Get available modes for selected extension
+    var availableModes = extId ? getExtModes(extId) : [];
+    var validTemplate = template;
+    if (availableModes.length > 0) {
+      var found = false;
+      for (var mi = 0; mi < availableModes.length; mi++) {
+        if (availableModes[mi].id === validTemplate) { found = true; break; }
+      }
+      if (!found) validTemplate = availableModes[0].id;
     }
 
-    function addPipeline() {
-      var newPipe = {
-        id: nextPipeId(),
-        extId: '',
-        template: 'object_detection',
-        categories: '',
-        phrase: '',
-        classFilter: '',
-        roiEnabled: false,
-        roiAction: 'count',
-        roiX: 0.1, roiY: 0.1, roiW: 0.8, roiH: 0.8
-      };
-      updatePipelines(pipelines.concat([newPipe]));
+    var currentMode = null;
+    for (var cmi = 0; cmi < availableModes.length; cmi++) {
+      if (availableModes[cmi].id === validTemplate) { currentMode = availableModes[cmi]; break; }
     }
-
-    function removePipeline(pipeId) {
-      updatePipelines(pipelines.filter(function (p) { return p.id !== pipeId; }));
-    }
-
-    function updatePipeline(pipeId, key, value) {
-      var newPipes = pipelines.map(function (p) {
-        if (p.id !== pipeId) return p;
-        var updated = Object.assign({}, p);
-        updated[key] = value;
-        // Auto-switch template when extension changes
-        if (key === 'extId' && value) {
-          var modes = getExtModes(value);
-          if (modes.length > 0) {
-            var found = false;
-            for (var i = 0; i < modes.length; i++) {
-              if (modes[i].id === updated.template) { found = true; break; }
-            }
-            if (!found) updated.template = modes[0].id;
-          }
-        }
-        return updated;
-      });
-      updatePipelines(newPipes);
-    }
-
-    // Pipeline colors for visual identification
-    var pipeColors = [
-      { bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.3)', dot: 'bg-blue-500' },
-      { bg: 'rgba(34,197,94,0.1)', border: 'rgba(34,197,94,0.3)', dot: 'bg-green-500' },
-      { bg: 'rgba(249,115,22,0.1)', border: 'rgba(249,115,22,0.3)', dot: 'bg-orange-500' },
-      { bg: 'rgba(168,85,247,0.1)', border: 'rgba(168,85,247,0.3)', dot: 'bg-purple-500' },
-      { bg: 'rgba(236,72,153,0.1)', border: 'rgba(236,72,153,0.3)', dot: 'bg-pink-500' }
-    ];
+    var modeArgs = currentMode ? (currentMode.args || []) : [];
 
     var items = [];
 
@@ -1409,182 +1189,134 @@ var NE101CameraPanel = (function () {
     );
 
     if (enabled) {
-      // Pipeline list
-      for (var pi = 0; pi < pipelines.length; pi++) {
-        (function (pipe, idx) {
-          var clr = pipeColors[idx % pipeColors.length];
-          var availableModes = pipe.extId ? getExtModes(pipe.extId) : [];
-          var validTemplate = pipe.template;
-          if (availableModes.length > 0) {
-            var found = false;
-            for (var mi = 0; mi < availableModes.length; mi++) {
-              if (availableModes[mi].id === validTemplate) { found = true; break; }
-            }
-            if (!found) validTemplate = availableModes[0].id;
-          }
+      // AI Extension selector
+      items.push(
+        jsxs('div', { key: 'ext', className: FIELD_CLS, children: [
+          jsx('label', { className: LABEL_CLS, children: 'AI Extension' }),
+          jsx(ExtDropdown, {
+            extensions: extensions,
+            value: extId,
+            onChange: function (id) {
+              update('processingExtensionId', id);
+              // Auto-switch template when extension changes
+              if (id) {
+                var modes = getExtModes(id);
+                if (modes.length > 0) {
+                  update('processingTemplate', modes[0].id);
+                }
+              }
+            },
+            loading: extLoading
+          })
+        ]})
+      );
 
-          var currentMode = null;
-          for (var cmi = 0; cmi < availableModes.length; cmi++) {
-            if (availableModes[cmi].id === validTemplate) { currentMode = availableModes[cmi]; break; }
-          }
-          var modeArgs = currentMode ? (currentMode.args || []) : [];
-
-          var pipeItems = [];
-
-          // Header: color dot + title + delete button
-          pipeItems.push(
-            jsxs('div', { key: 'hdr', className: 'flex items-center justify-between', children: [
-              jsxs('div', { className: 'flex items-center gap-2', children: [
-                jsx('div', { className: 'h-2.5 w-2.5 rounded-full shrink-0 ' + clr.dot }),
-                jsx('span', { className: 'text-sm font-medium', children: 'Pipeline ' + (idx + 1) }),
-                pipe.extId ? jsx('span', { className: 'text-xs text-muted-foreground', children: pipe.extId }) : null
-              ]}),
-              pipelines.length > 1
-                ? jsx('button', {
-                    type: 'button',
-                    className: 'text-xs text-muted-foreground hover:text-red-500 transition-colors',
-                    onClick: function () { removePipeline(pipe.id); },
-                    children: 'Remove'
-                  })
-                : null
+      // Mode cards
+      if (availableModes.length > 0) {
+        var tplCards = availableModes.map(function (m) {
+          var selected = validTemplate === m.id;
+          return jsx('button', {
+            key: m.id,
+            type: 'button',
+            onClick: function () { update('processingTemplate', m.id); },
+            className: 'flex items-center gap-2 p-2 rounded-md border text-left transition-colors text-xs ' +
+              (selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-muted-foreground/30'),
+            children: jsxs('div', { className: 'flex items-center gap-1.5', children: [
+              jsx('div', { className: 'flex-shrink-0', children: ModeIcon(m.icon) }),
+              jsx('span', { className: 'font-medium ' + (selected ? 'text-primary' : ''), children: m.label })
             ]})
-          );
-
-          // Extension selector
-          pipeItems.push(
-            jsxs('div', { key: 'ext', className: FIELD_CLS, children: [
-              jsx('label', { className: LABEL_CLS, children: 'AI Extension' }),
-              jsx(ExtDropdown, {
-                extensions: extensions,
-                value: pipe.extId,
-                onChange: function (id) { updatePipeline(pipe.id, 'extId', id); },
-                loading: extLoading
-              })
-            ]})
-          );
-
-          // Mode cards
-          if (availableModes.length > 0) {
-            var tplCards = availableModes.map(function (m) {
-              var selected = validTemplate === m.id;
-              return jsx('button', {
-                key: m.id,
-                type: 'button',
-                onClick: function () { updatePipeline(pipe.id, 'template', m.id); },
-                className: 'flex items-center gap-2 p-2 rounded-md border text-left transition-colors text-xs ' +
-                  (selected ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-muted-foreground/30'),
-                children: jsxs('div', { className: 'flex items-center gap-1.5', children: [
-                  jsx('div', { className: 'flex-shrink-0', children: ModeIcon(m.icon) }),
-                  jsx('span', { className: 'font-medium ' + (selected ? 'text-primary' : ''), children: m.label })
-                ]})
-              });
-            });
-            pipeItems.push(
-              jsxs('div', { key: 'tpl', className: FIELD_CLS, children: [
-                jsx('label', { className: LABEL_CLS, children: 'Working Mode' }),
-                jsx('div', { className: 'grid grid-cols-2 gap-1.5', children: tplCards })
-              ]})
-            );
-          }
-
-          // Mode-specific fields
-          if (modeArgs.indexOf('categories') >= 0) {
-            pipeItems.push(
-              jsxs('div', { key: 'cat', className: FIELD_CLS, children: [
-                jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Categories', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
-                jsx('input', { className: INPUT_CLS, value: pipe.categories || '', placeholder: 'person, car, dog', onChange: function (e) { updatePipeline(pipe.id, 'categories', e.target.value); } })
-              ]})
-            );
-          }
-          if (modeArgs.indexOf('phrase') >= 0) {
-            pipeItems.push(
-              jsxs('div', { key: 'phrase', className: FIELD_CLS, children: [
-                jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Search Phrase', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
-                jsx('input', { className: INPUT_CLS, value: pipe.phrase || '', placeholder: 'Describe what to find', onChange: function (e) { updatePipeline(pipe.id, 'phrase', e.target.value); } })
-              ]})
-            );
-          }
-
-          // Class filter
-          pipeItems.push(
-            jsxs('div', { key: 'cf', className: FIELD_CLS, children: [
-              jsx('label', { className: LABEL_CLS, children: 'Class Filter' }),
-              jsx('input', { className: INPUT_CLS, value: pipe.classFilter || '', placeholder: 'Empty = all classes', onChange: function (e) { updatePipeline(pipe.id, 'classFilter', e.target.value); } })
-            ]})
-          );
-
-          // ROI toggle
-          pipeItems.push(
-            jsxs('div', { key: 'roi-div', className: 'flex items-center justify-between pt-2 border-t mt-1', children: [
-              jsx('label', { className: 'text-xs font-medium cursor-pointer', children: 'ROI' }),
-              SwitchControl(pipe.roiEnabled, function () { updatePipeline(pipe.id, 'roiEnabled', !pipe.roiEnabled); })
-            ]})
-          );
-
-          if (pipe.roiEnabled) {
-            // ROI action chips
-            var actionChips = ROI_ACTIONS.map(function (a) {
-              var selected = pipe.roiAction === a.id;
-              return jsx('button', {
-                key: a.id,
-                type: 'button',
-                onClick: function () { updatePipeline(pipe.id, 'roiAction', a.id); },
-                className: 'px-2 py-1 rounded-md border text-xs font-medium transition-colors ' +
-                  (selected ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-muted-foreground/30'),
-                children: a.label
-              });
-            });
-            pipeItems.push(
-              jsxs('div', { key: 'roi-act', className: FIELD_CLS, children: [
-                jsx('label', { className: 'text-xs font-medium', children: 'ROI Action' }),
-                jsx('div', { className: 'flex gap-1.5', children: actionChips })
-              ]})
-            );
-
-            // ROI sliders
-            pipeItems.push(
-              jsxs('div', { key: 'roi-sliders', className: 'grid grid-cols-2 gap-x-3 gap-y-1', children: [
-                jsxs('div', { key: 'x', className: FIELD_CLS, children: [
-                  jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'X' }), jsx('span', { className: DESC_CLS + ' font-mono', children: pipe.roiX.toFixed(2) }) ]}),
-                  jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: pipe.roiX, onChange: function (e) { updatePipeline(pipe.id, 'roiX', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
-                ]}),
-                jsxs('div', { key: 'y', className: FIELD_CLS, children: [
-                  jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Y' }), jsx('span', { className: DESC_CLS + ' font-mono', children: pipe.roiY.toFixed(2) }) ]}),
-                  jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: pipe.roiY, onChange: function (e) { updatePipeline(pipe.id, 'roiY', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
-                ]}),
-                jsxs('div', { key: 'w', className: FIELD_CLS, children: [
-                  jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'W' }), jsx('span', { className: DESC_CLS + ' font-mono', children: pipe.roiW.toFixed(2) }) ]}),
-                  jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: pipe.roiW, onChange: function (e) { updatePipeline(pipe.id, 'roiW', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
-                ]}),
-                jsxs('div', { key: 'h', className: FIELD_CLS, children: [
-                  jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'H' }), jsx('span', { className: DESC_CLS + ' font-mono', children: pipe.roiH.toFixed(2) }) ]}),
-                  jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: pipe.roiH, onChange: function (e) { updatePipeline(pipe.id, 'roiH', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
-                ]})
-              ]})
-            );
-          }
-
-          items.push(
-            jsxs('div', {
-              key: 'pipe-' + pipe.id,
-              className: 'rounded-lg p-3 space-y-2',
-              style: { background: clr.bg, border: '1px solid ' + clr.border },
-              children: pipeItems
-            })
-          );
-        })(pipelines[pi], pi);
+          });
+        });
+        items.push(
+          jsxs('div', { key: 'tpl', className: FIELD_CLS, children: [
+            jsx('label', { className: LABEL_CLS, children: 'Working Mode' }),
+            jsx('div', { className: 'grid grid-cols-2 gap-1.5', children: tplCards })
+          ]})
+        );
       }
 
-      // Add pipeline button
+      // Mode-specific fields
+      if (modeArgs.indexOf('categories') >= 0) {
+        items.push(
+          jsxs('div', { key: 'cat', className: FIELD_CLS, children: [
+            jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Categories', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
+            jsx('input', { className: INPUT_CLS, value: config.processingCategories || '', placeholder: 'person, car, dog', onChange: function (e) { update('processingCategories', e.target.value); } })
+          ]})
+        );
+      }
+      if (modeArgs.indexOf('phrase') >= 0) {
+        items.push(
+          jsxs('div', { key: 'phrase', className: FIELD_CLS, children: [
+            jsx('label', { className: LABEL_CLS, children: jsxs('span', { children: ['Search Phrase', jsx('span', { style: { color: '#ef4444', marginLeft: 4 }, children: '*' })] }) }),
+            jsx('input', { className: INPUT_CLS, value: config.processingPhrase || '', placeholder: 'Describe what to find', onChange: function (e) { update('processingPhrase', e.target.value); } })
+          ]})
+        );
+      }
+
+      // Class filter
       items.push(
-        jsx('button', {
-          key: 'add',
-          type: 'button',
-          onClick: addPipeline,
-          className: 'w-full py-2 rounded-md border border-dashed border-border text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors',
-          children: '+ Add AI Pipeline'
-        })
+        jsxs('div', { key: 'cf', className: FIELD_CLS, children: [
+          jsx('label', { className: LABEL_CLS, children: 'Class Filter' }),
+          jsx('input', { className: INPUT_CLS, value: config.processingClassFilter || '', placeholder: 'Empty = all classes', onChange: function (e) { update('processingClassFilter', e.target.value); } })
+        ]})
       );
+
+      // ROI toggle
+      var roiEnabled = config.processingRoiEnabled === true;
+      items.push(
+        jsxs('div', { key: 'roi-div', className: 'flex items-center justify-between pt-2 border-t mt-1', children: [
+          jsx('label', { className: 'text-xs font-medium cursor-pointer', children: 'ROI' }),
+          SwitchControl(roiEnabled, function () { update('processingRoiEnabled', !roiEnabled); })
+        ]})
+      );
+
+      if (roiEnabled) {
+        // ROI action chips
+        var roiAction = config.processingRoiAction || 'count';
+        var actionChips = ROI_ACTIONS.map(function (a) {
+          var selected = roiAction === a.id;
+          return jsx('button', {
+            key: a.id,
+            type: 'button',
+            onClick: function () { update('processingRoiAction', a.id); },
+            className: 'px-2 py-1 rounded-md border text-xs font-medium transition-colors ' +
+              (selected ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-muted-foreground/30'),
+            children: a.label
+          });
+        });
+        items.push(
+          jsxs('div', { key: 'roi-act', className: FIELD_CLS, children: [
+            jsx('label', { className: 'text-xs font-medium', children: 'ROI Action' }),
+            jsx('div', { className: 'flex gap-1.5', children: actionChips })
+          ]})
+        );
+
+        // ROI sliders
+        var roiX = config.processingRoiX != null ? config.processingRoiX : 0.1;
+        var roiY = config.processingRoiY != null ? config.processingRoiY : 0.1;
+        var roiW = config.processingRoiW != null ? config.processingRoiW : 0.8;
+        var roiH = config.processingRoiH != null ? config.processingRoiH : 0.8;
+        items.push(
+          jsxs('div', { key: 'roi-sliders', className: 'grid grid-cols-2 gap-x-3 gap-y-1', children: [
+            jsxs('div', { key: 'x', className: FIELD_CLS, children: [
+              jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'X' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiX.toFixed(2) }) ]}),
+              jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiX, onChange: function (e) { update('processingRoiX', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+            ]}),
+            jsxs('div', { key: 'y', className: FIELD_CLS, children: [
+              jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'Y' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiY.toFixed(2) }) ]}),
+              jsx('input', { type: 'range', min: 0, max: 1, step: 0.01, value: roiY, onChange: function (e) { update('processingRoiY', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+            ]}),
+            jsxs('div', { key: 'w', className: FIELD_CLS, children: [
+              jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'W' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiW.toFixed(2) }) ]}),
+              jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiW, onChange: function (e) { update('processingRoiW', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+            ]}),
+            jsxs('div', { key: 'h', className: FIELD_CLS, children: [
+              jsxs('div', { className: 'flex justify-between', children: [ jsx('span', { className: DESC_CLS, children: 'H' }), jsx('span', { className: DESC_CLS + ' font-mono', children: roiH.toFixed(2) }) ]}),
+              jsx('input', { type: 'range', min: 0.05, max: 1, step: 0.01, value: roiH, onChange: function (e) { update('processingRoiH', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
+            ]})
+          ]})
+        );
+      }
 
       if (extensions.length === 0 && !extLoading) {
         items.push(
