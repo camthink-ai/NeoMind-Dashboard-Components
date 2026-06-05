@@ -251,7 +251,7 @@ var NE101CameraPanel = (function () {
     // Image dimensions for coordinate normalization
     L.push('var W = (imageMeta && imageMeta.width) || 1;');
     L.push('var H = (imageMeta && imageMeta.height) || 1;');
-    L.push('console.log("[ne101-tf] imageMeta:", JSON.stringify(imageMeta), "W:", W, "H:", H);');
+
     L.push('');
 
     // Extension invocation — params use __imageData (injected by platform)
