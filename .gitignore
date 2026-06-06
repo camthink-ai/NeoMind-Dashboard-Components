@@ -1,2 +1,8 @@
 # macOS
 .DS_Store
+
+# Visual companion
+.superpowers/
+
+
+docs/

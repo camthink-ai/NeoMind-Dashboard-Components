@@ -574,7 +574,7 @@ var NE101CameraPanel = (function () {
     // Transform lifecycle — store ID in config, use it.
     // Skip Transform operations while editing (config dialog preview).
     // Only create/update/delete when rendering on the live dashboard.
-    var _isEditing = config.editMode === true;
+    var _isEditing = props.editMode === true;
     var _storedTid = config._transformId || '';
     var _configHash = processingExtId + ':' + processingTemplate + ':' +
       (processingCategories || '') + ':' + (processingPhrase || '') + ':' + (processingClassFilter || '') + ':' +
