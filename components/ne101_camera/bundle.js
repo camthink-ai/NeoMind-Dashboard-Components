@@ -571,7 +571,7 @@ var NE101CameraPanel = (function () {
       imageSrc = rawImageSrc + (rawImageSrc.indexOf('?') >= 0 ? '&' : '?') + '_t=' + (imgTs || 0);
     }
 
-    // Transform lifecycle — simple: store ID in config, use it.
+    // Transform lifecycle — store ID in config, use it.
     var _storedTid = config._transformId || '';
     var _configHash = processingExtId + ':' + processingTemplate + ':' +
       (processingCategories || '') + ':' + (processingPhrase || '') + ':' + (processingClassFilter || '') + ':' +
@@ -582,7 +582,6 @@ var NE101CameraPanel = (function () {
     React.useEffect(function () {
       var neomind = window.neomind;
       var onCfgChange = props.onConfigChange;
-      console.log('[NE101-TF] effect run | _storedTid:', _storedTid, '| hash match:', _storedHash === _configHash, '| enabled:', processingEnabled, '| device:', device ? device.id : null);
 
       // --- Processing OFF: delete Transform ---
       if (!processingEnabled || !processingExtId || !device) {
@@ -634,26 +633,27 @@ var NE101CameraPanel = (function () {
 
       // --- Tier 1: ID + hash match — done ---
       if (_storedTid && _storedHash === _configHash) {
-        console.log('[NE101-TF] Tier 1: exact match, id:', _storedTid);
         transformIdRef.current = _storedTid;
         setExtStatus('active');
         return;
       }
 
-      // --- Tier 2: Have ID, config changed — update ---
-      if (_storedTid) {
-        console.log('[NE101-TF] Tier 2: update, id:', _storedTid);
-        transformIdRef.current = _storedTid;
+      // Check ref — a concurrent effect may have already obtained an ID
+      var refId = transformIdRef.current;
+      var activeId = _storedTid || (refId && refId !== '_creating_' ? refId : '');
+
+      // --- Tier 2: Have ID (config or ref), config changed — update ---
+      if (activeId) {
+        transformIdRef.current = activeId;
         setExtStatus('active');
         if (neomind.updateTransform) {
-          neomind.updateTransform(_storedTid, {
+          neomind.updateTransform(activeId, {
             name: payload.name, description: payload.description,
             scope: payload.scope, js_code: payload.js_code, output_prefix: payload.output_prefix
           }).then(function () {
-            if (!cancelled) persist(_storedTid);
+            if (!cancelled) persist(activeId);
           }).catch(function () {
             if (cancelled) return;
-            // ID invalid — clear, next render will Tier 3
             transformIdRef.current = null;
             if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: '', _transformHash: '' }));
           });
@@ -662,16 +662,23 @@ var NE101CameraPanel = (function () {
       }
 
       // --- Tier 3: No ID — search by name, reuse or create ---
-      console.log('[NE101-TF] Tier 3: no ID, searching by name:', transformName);
+      // Synchronous guard: another effect invocation is already creating
+      if (transformIdRef.current === '_creating_') return;
+      transformIdRef.current = '_creating_';
+
       setExtStatus('checking');
 
       var doCreate = function () {
         if (cancelled) return;
-        console.log('[NE101-TF] doCreate: calling createTransform');
+        // Re-check: another concurrent doCreate may have run while we were in listTransforms
+        if (transformIdRef.current && transformIdRef.current !== '_creating_') return;
         neomind.createTransform(payload).then(function (r) {
-          console.log('[NE101-TF] createTransform result:', r, 'cancelled:', cancelled);
+          if (r && r.id) transformIdRef.current = r.id;
           if (!cancelled && r && r.id) { persist(r.id); setExtStatus('active'); }
-        }).catch(function () { if (!cancelled) setExtStatus('error'); });
+        }).catch(function () {
+          if (transformIdRef.current === '_creating_') transformIdRef.current = null;
+          if (!cancelled) setExtStatus('error');
+        });
       };
 
       var afterExtCheck = function () {
@@ -680,13 +687,11 @@ var NE101CameraPanel = (function () {
           neomind.listTransforms({ name: transformName }).then(function (list) {
             if (cancelled) return;
             var arr = Array.isArray(list) ? list : [];
-            console.log('[NE101-TF] listTransforms found:', arr.length, 'items');
             var found = null;
             for (var fi = 0; fi < arr.length; fi++) {
               if (arr[fi].scope === device.id) { found = arr[fi]; break; }
             }
             if (found) {
-              // Reuse — update + persist ID
               transformIdRef.current = found.id;
               setExtStatus('active');
               if (neomind.updateTransform) {
@@ -712,16 +717,16 @@ var NE101CameraPanel = (function () {
           for (var ei = 0; ei < extList.length; ei++) {
             if (extList[ei].id === processingExtId) { matched = extList[ei]; break; }
           }
-          if (!matched) { setExtStatus('not_installed'); return; }
+          if (!matched) { if (transformIdRef.current === '_creating_') transformIdRef.current = null; setExtStatus('not_installed'); return; }
           var st = (matched.state || '').toLowerCase();
-          if (st.indexOf('stopped') >= 0 || st.indexOf('failed') >= 0 || st.indexOf('error') >= 0) { setExtStatus('offline'); return; }
+          if (st.indexOf('stopped') >= 0 || st.indexOf('failed') >= 0 || st.indexOf('error') >= 0) { if (transformIdRef.current === '_creating_') transformIdRef.current = null; setExtStatus('offline'); return; }
           afterExtCheck();
-        }).catch(function () { if (!cancelled) setExtStatus('error'); });
+        }).catch(function () { if (transformIdRef.current === '_creating_') transformIdRef.current = null; if (!cancelled) setExtStatus('error'); });
       } else {
         afterExtCheck();
       }
 
-      return function () { console.log('[NE101-TF] cleanup (cancelled)'); cancelled = true; };
+      return function () { cancelled = true; };
     }, [device ? device.id : null, processingEnabled, _configHash, _storedTid, _storedHash]);
 
     if (!device) return jsx(NoDevice, {});
