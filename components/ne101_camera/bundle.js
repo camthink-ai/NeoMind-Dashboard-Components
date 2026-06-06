@@ -582,6 +582,7 @@ var NE101CameraPanel = (function () {
     React.useEffect(function () {
       var neomind = window.neomind;
       var onCfgChange = props.onConfigChange;
+      console.log('[NE101-TF] effect run | _storedTid:', _storedTid, '| hash match:', _storedHash === _configHash, '| enabled:', processingEnabled, '| device:', device ? device.id : null);
 
       // --- Processing OFF: delete Transform ---
       if (!processingEnabled || !processingExtId || !device) {
@@ -633,6 +634,7 @@ var NE101CameraPanel = (function () {
 
       // --- Tier 1: ID + hash match — done ---
       if (_storedTid && _storedHash === _configHash) {
+        console.log('[NE101-TF] Tier 1: exact match, id:', _storedTid);
         transformIdRef.current = _storedTid;
         setExtStatus('active');
         return;
@@ -640,6 +642,7 @@ var NE101CameraPanel = (function () {
 
       // --- Tier 2: Have ID, config changed — update ---
       if (_storedTid) {
+        console.log('[NE101-TF] Tier 2: update, id:', _storedTid);
         transformIdRef.current = _storedTid;
         setExtStatus('active');
         if (neomind.updateTransform) {
@@ -659,11 +662,14 @@ var NE101CameraPanel = (function () {
       }
 
       // --- Tier 3: No ID — search by name, reuse or create ---
+      console.log('[NE101-TF] Tier 3: no ID, searching by name:', transformName);
       setExtStatus('checking');
 
       var doCreate = function () {
         if (cancelled) return;
+        console.log('[NE101-TF] doCreate: calling createTransform');
         neomind.createTransform(payload).then(function (r) {
+          console.log('[NE101-TF] createTransform result:', r, 'cancelled:', cancelled);
           if (!cancelled && r && r.id) { persist(r.id); setExtStatus('active'); }
         }).catch(function () { if (!cancelled) setExtStatus('error'); });
       };
@@ -674,6 +680,7 @@ var NE101CameraPanel = (function () {
           neomind.listTransforms({ name: transformName }).then(function (list) {
             if (cancelled) return;
             var arr = Array.isArray(list) ? list : [];
+            console.log('[NE101-TF] listTransforms found:', arr.length, 'items');
             var found = null;
             for (var fi = 0; fi < arr.length; fi++) {
               if (arr[fi].scope === device.id) { found = arr[fi]; break; }
@@ -714,7 +721,7 @@ var NE101CameraPanel = (function () {
         afterExtCheck();
       }
 
-      return function () { cancelled = true; };
+      return function () { console.log('[NE101-TF] cleanup (cancelled)'); cancelled = true; };
     }, [device ? device.id : null, processingEnabled, _configHash, _storedTid, _storedHash]);
 
     if (!device) return jsx(NoDevice, {});
