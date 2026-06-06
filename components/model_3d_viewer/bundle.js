@@ -27,7 +27,7 @@ var Model3DViewer = (function () {
   };
 
   // --- Three.js dynamic loader (IIFE/UMD from jsDelivr, NOT ESM) ---
-  var THREE_VERSION = '0.169.0';
+  var THREE_VERSION = '0.147.0';
   var THREE_CDN = 'https://cdn.jsdelivr.net/npm/three@' + THREE_VERSION;
 
   var loadScript = function (url) {
@@ -512,7 +512,6 @@ var Model3DViewer = (function () {
   function Model3DViewer(props) {
     var config = props.config || {};
     var modelUrl = config.modelUrl || '';
-
     var containerRef = React.useRef(null);
     var sceneHandleRef = React.useRef(null);
     var modelRef = React.useRef(null);
