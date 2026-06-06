@@ -655,11 +655,27 @@ var NE101CameraPanel = (function () {
         if (transformIdRef.current === '_creating_') transformIdRef.current = null;
       };
 
-      // --- Tier 1: ID + hash match — done ---
+      // --- Tier 1: ID + hash match — verify Transform still exists ---
       if (_storedTid && _storedHash === _configHash) {
-        console.log('[NE101-TF] Tier 1: hash match, id:', _storedTid);
+        console.log('[NE101-TF] Tier 1: hash match, verifying id:', _storedTid);
         transformIdRef.current = _storedTid;
         setExtStatus('active');
+        // Verify the Transform still exists on the backend (may have been deleted externally)
+        if (neomind.listTransforms) {
+          neomind.listTransforms({ id: _storedTid }).then(function (list) {
+            if (cancelled) return;
+            var arr = Array.isArray(list) ? list : [];
+            var found = false;
+            for (var vi = 0; vi < arr.length; vi++) {
+              if (arr[vi].id === _storedTid) { found = true; break; }
+            }
+            if (!found) {
+              console.log('[NE101-TF] Tier 1: Transform no longer exists, clearing stale ID');
+              transformIdRef.current = null;
+              if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: '', _transformHash: '' }));
+            }
+          }).catch(function () {});
+        }
         return;
       }
 
