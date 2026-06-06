@@ -355,6 +355,106 @@ var Model3DViewer = (function () {
     });
   };
 
+  // --- PinConfigPopover Component ---
+  var PinConfigPopover = function (props) {
+    var pin = props.pin;
+    var onSave = props.onSave;
+    var onCancel = props.onCancel;
+    var popoverRef = props.popoverRef;
+
+    var labelState = React.useState(pin.label || '');
+    var label = labelState[0];
+    var setLabel = labelState[1];
+
+    var deviceIdState = React.useState(
+      (pin.type === 'metric' && pin.metricRef) ? (pin.metricRef.deviceId || '') :
+      (pin.type === 'device' && pin.deviceRef) ? (pin.deviceRef.deviceId || '') :
+      (pin.type === 'command' && pin.commandRef) ? (pin.commandRef.deviceId || '') : ''
+    );
+    var deviceId = deviceIdState[0];
+    var setDeviceId = deviceIdState[1];
+
+    var metricKeyState = React.useState(
+      (pin.type === 'metric' && pin.metricRef) ? (pin.metricRef.metricKey || '') : ''
+    );
+    var metricKey = metricKeyState[0];
+    var setMetricKey = metricKeyState[1];
+
+    var textState = React.useState(pin.annotationText || '');
+    var text = textState[0];
+    var setText = textState[1];
+
+    var cmdKeyState = React.useState(
+      (pin.type === 'command' && pin.commandRef) ? (pin.commandRef.commandKey || '') : ''
+    );
+    var cmdKey = cmdKeyState[0];
+    var setCmdKey = cmdKeyState[1];
+
+    var handleSave = function () {
+      var updated = Object.assign({}, pin, { label: label });
+      if (pin.type === 'metric') {
+        updated.metricRef = { deviceType: '', metricKey: metricKey, deviceId: deviceId };
+      } else if (pin.type === 'device') {
+        updated.deviceRef = { deviceType: '', deviceId: deviceId };
+      } else if (pin.type === 'annotation') {
+        updated.annotationText = text;
+      } else if (pin.type === 'command') {
+        updated.commandRef = { deviceType: '', commandKey: cmdKey, deviceId: deviceId };
+      }
+      onSave(updated);
+    };
+
+    var fields = null;
+    if (pin.type === 'metric') {
+      fields = jsxs('div', { className: 'space-y-2', children: [
+        jsx('input', { className: 'w-full h-8 px-2 rounded-md border border-input bg-background text-sm', placeholder: 'Device ID', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } }),
+        jsx('input', { className: 'w-full h-8 px-2 rounded-md border border-input bg-background text-sm', placeholder: 'Metric key (e.g. values.temperature)', value: metricKey, onChange: function (e) { setMetricKey(e.target.value); } })
+      ]});
+    } else if (pin.type === 'device') {
+      fields = jsx('input', { className: 'w-full h-8 px-2 rounded-md border border-input bg-background text-sm', placeholder: 'Device ID', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } });
+    } else if (pin.type === 'annotation') {
+      fields = jsx('textarea', { className: 'w-full h-16 px-2 py-1 rounded-md border border-input bg-background text-sm resize-none', placeholder: 'Annotation text...', value: text, onChange: function (e) { setText(e.target.value); } });
+    } else if (pin.type === 'command') {
+      fields = jsxs('div', { className: 'space-y-2', children: [
+        jsx('input', { className: 'w-full h-8 px-2 rounded-md border border-input bg-background text-sm', placeholder: 'Device ID', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } }),
+        jsx('input', { className: 'w-full h-8 px-2 rounded-md border border-input bg-background text-sm', placeholder: 'Command key', value: cmdKey, onChange: function (e) { setCmdKey(e.target.value); } })
+      ]});
+    }
+
+    return jsx('div', {
+      ref: function (el) { if (popoverRef) popoverRef.current[pin.id + '_config'] = el; },
+      className: 'absolute pointer-events-auto',
+      style: { zIndex: 30, display: 'none' },
+      children: jsxs('div', {
+        className: 'bg-card border border-glass-border rounded-xl shadow-xl p-3 space-y-2',
+        style: { minWidth: '220px' },
+        children: [
+          jsx('p', { className: 'text-xs font-medium text-foreground', children: 'Configure ' + pin.type + ' pin' }),
+          jsx('input', {
+            className: 'w-full h-8 px-2 rounded-md border border-input bg-background text-sm',
+            placeholder: 'Label',
+            value: label,
+            onChange: function (e) { setLabel(e.target.value); }
+          }),
+          fields,
+          jsxs('div', { className: 'flex gap-2 justify-end pt-1', children: [
+            jsx('button', {
+              className: 'px-3 py-1 text-xs text-muted-foreground hover:bg-muted rounded-md',
+              onClick: onCancel,
+              children: 'Cancel'
+            }),
+            jsx('button', {
+              className: 'px-3 py-1 text-xs text-primary-foreground rounded-md',
+              style: { backgroundColor: 'var(--color-accent-purple)' },
+              onClick: handleSave,
+              children: 'Save'
+            })
+          ]})
+        ]
+      })
+    });
+  };
+
   // --- Root Component (full Three.js lifecycle) ---
   function Model3DViewer(props) {
     var config = props.config || {};
@@ -390,6 +490,10 @@ var Model3DViewer = (function () {
     var selectedPinId = selectedPinState[0];
     var setSelectedPinId = selectedPinState[1];
 
+    var configPinState = React.useState(null);
+    var configuringPinId = configPinState[0];
+    var setConfiguringPinId = configPinState[1];
+
     var pinValuesState = React.useState({});
     var pinValues = pinValuesState[0];
     var setPinValues = pinValuesState[1];
@@ -399,10 +503,12 @@ var Model3DViewer = (function () {
     var pinMeshesRef = React.useRef({});
     var pinsRef = React.useRef(pins);
     var selectedPinIdRef = React.useRef(selectedPinId);
+    var configuringPinIdRef = React.useRef(configuringPinId);
 
     // Refs synchronization
     React.useEffect(function () { pinsRef.current = pins; }, [pins]);
     React.useEffect(function () { selectedPinIdRef.current = selectedPinId; }, [selectedPinId]);
+    React.useEffect(function () { configuringPinIdRef.current = configuringPinId; }, [configuringPinId]);
 
     // Handlers
     var toggleEdit = function () {
@@ -430,6 +536,30 @@ var Model3DViewer = (function () {
       );
       sceneHandle.controls.target.copy(center);
       sceneHandle.controls.update();
+    };
+
+    var handlePinConfigSave = function (updatedPin) {
+      setPins(function (prev) {
+        return prev.map(function (p) { return p.id === updatedPin.id ? updatedPin : p; });
+      });
+      setConfiguringPinId(null);
+    };
+
+    var handlePinConfigCancel = function () {
+      setPins(function (prev) {
+        var toRemove = prev.find(function (p) { return p.id === configuringPinId; });
+        if (toRemove) {
+          var mesh = pinMeshesRef.current[toRemove.id];
+          if (mesh && sceneHandleRef.current) {
+            sceneHandleRef.current.scene.remove(mesh);
+            mesh.geometry.dispose();
+            mesh.material.dispose();
+          }
+          delete pinMeshesRef.current[toRemove.id];
+        }
+        return prev.filter(function (p) { return p.id !== configuringPinId; });
+      });
+      setConfiguringPinId(null);
     };
 
     // Refs for edit mode and active pin type (used in click handler)
@@ -475,6 +605,7 @@ var Model3DViewer = (function () {
           label: type.charAt(0).toUpperCase() + type.slice(1)
         };
         setPins(function (prev) { return prev.concat([newPin]); });
+        setConfiguringPinId(id);
       };
 
       sceneHandle.renderer.domElement.addEventListener('click', handleClick);
@@ -554,6 +685,16 @@ var Model3DViewer = (function () {
             } else {
               var detailEl = popupRefs.current[pin.id + '_detail'];
               if (detailEl) detailEl.style.display = 'none';
+            }
+
+            // Update config popover position
+            if (pin.id === configuringPinIdRef.current) {
+              var configEl = popupRefs.current[pin.id + '_config'];
+              if (configEl) {
+                configEl.style.left = (screen.x + 20) + 'px';
+                configEl.style.top = (screen.y - 20) + 'px';
+                configEl.style.display = screen.behind ? 'none' : '';
+              }
             }
           }
 
@@ -664,6 +805,15 @@ var Model3DViewer = (function () {
                   onAction: function () {},
                   onClose: function () { setSelectedPinId(null); },
                   detailRef: popupRefs
+                })]
+              : []
+          ).concat(
+            configuringPinId && pins.find(function (p) { return p.id === configuringPinId; })
+              ? [jsx(PinConfigPopover, {
+                  pin: pins.find(function (p) { return p.id === configuringPinId; }),
+                  onSave: handlePinConfigSave,
+                  onCancel: handlePinConfigCancel,
+                  popoverRef: popupRefs
                 })]
               : []
           )
