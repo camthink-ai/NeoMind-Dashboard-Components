@@ -752,35 +752,20 @@ var NE101CameraPanel = (function () {
       var tsMatch = !vSourceTs || !imgTsVal || String(vSourceTs) === String(imgTsVal);
       if (Array.isArray(vDet) && vDet.length > 0 && tsMatch) {
         detections = vDet;
+        lastDetsRef.current = vDet;
+        lastDetsTsRef.current = imgTsVal;
       } else if (Array.isArray(vDet) && vDet.length > 0) {
-        // Detections exist but from a different image — will cache in effect
+        // Detections exist but from a different image — cache but don't display
+        lastDetsRef.current = vDet;
+        lastDetsTsRef.current = vSourceTs;
       } else if (lastDetsRef.current.length > 0 && lastDetsTsRef.current != null &&
                  String(lastDetsTsRef.current) === String(imgTsVal)) {
         // No detections in store — use cache only if it matches current image
         detections = lastDetsRef.current;
       }
+    } else {
+      lastDetsRef.current = [];
     }
-
-    // Sync detection cache in effect (no side effects during render)
-    React.useEffect(function () {
-      if (!processingEnabled || !processingExtId) {
-        lastDetsRef.current = [];
-        lastDetsTsRef.current = null;
-        return;
-      }
-      var pfx = 'virtual.' + processingExtId.replace(/-/g, '_') + '.';
-      var vDet = getFirst(vals, [pfx + 'detections', 'values.' + pfx + 'detections']);
-      var vSourceTs = getFirst(vals, [pfx + 'source_ts', 'values.' + pfx + 'source_ts']);
-      var imgTsVal = imgTs;
-      var tsMatch = !vSourceTs || !imgTsVal || String(vSourceTs) === String(imgTsVal);
-      if (Array.isArray(vDet) && vDet.length > 0 && tsMatch) {
-        lastDetsRef.current = vDet;
-        lastDetsTsRef.current = imgTsVal;
-      } else if (Array.isArray(vDet) && vDet.length > 0) {
-        lastDetsRef.current = vDet;
-        lastDetsTsRef.current = vSourceTs;
-      }
-    }, [processingEnabled, processingExtId, vals, imgTs]);
 
     // Object-cover transform: map normalized image coords (0-1) to container coords (0-1)
     // object-cover scales image to cover container, cropping excess.
