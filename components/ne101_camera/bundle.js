@@ -638,20 +638,16 @@ var NE101CameraPanel = (function () {
         return;
       }
 
-      // Check ref — a concurrent effect may have already obtained an ID
-      var refId = transformIdRef.current;
-      var activeId = _storedTid || (refId && refId !== '_creating_' ? refId : '');
-
-      // --- Tier 2: Have ID (config or ref), config changed — update ---
-      if (activeId) {
-        transformIdRef.current = activeId;
+      // --- Tier 2: Have ID, config changed — update ---
+      if (_storedTid) {
+        transformIdRef.current = _storedTid;
         setExtStatus('active');
         if (neomind.updateTransform) {
-          neomind.updateTransform(activeId, {
+          neomind.updateTransform(_storedTid, {
             name: payload.name, description: payload.description,
             scope: payload.scope, js_code: payload.js_code, output_prefix: payload.output_prefix
           }).then(function () {
-            if (!cancelled) persist(activeId);
+            if (!cancelled) persist(_storedTid);
           }).catch(function () {
             if (cancelled) return;
             transformIdRef.current = null;
@@ -661,24 +657,27 @@ var NE101CameraPanel = (function () {
         return;
       }
 
-      // --- Tier 3: No ID — search by name, reuse or create ---
-      // Synchronous guard: another effect invocation is already creating
-      if (transformIdRef.current === '_creating_') return;
-      transformIdRef.current = '_creating_';
-
+      // --- Tier 3: No ID — search by name first, create if not found ---
+      // After create, clean up any duplicates caused by concurrent effects.
       setExtStatus('checking');
+
+      var dedup = function (keepId) {
+        // Delete any other transforms with the same name (concurrent create duplicates)
+        if (!neomind.listTransforms || !neomind.deleteTransform) return;
+        neomind.listTransforms({ name: transformName }).then(function (list) {
+          var arr = Array.isArray(list) ? list : [];
+          for (var i = 0; i < arr.length; i++) {
+            if (arr[i].id !== keepId) neomind.deleteTransform(arr[i].id).catch(function () {});
+          }
+        });
+      };
 
       var doCreate = function () {
         if (cancelled) return;
-        // Re-check: another concurrent doCreate may have run while we were in listTransforms
-        if (transformIdRef.current && transformIdRef.current !== '_creating_') return;
         neomind.createTransform(payload).then(function (r) {
-          if (r && r.id) transformIdRef.current = r.id;
           if (!cancelled && r && r.id) { persist(r.id); setExtStatus('active'); }
-        }).catch(function () {
-          if (transformIdRef.current === '_creating_') transformIdRef.current = null;
-          if (!cancelled) setExtStatus('error');
-        });
+          if (r && r.id) dedup(r.id);
+        }).catch(function () { if (!cancelled) setExtStatus('error'); });
       };
 
       var afterExtCheck = function () {
@@ -692,6 +691,7 @@ var NE101CameraPanel = (function () {
               if (arr[fi].scope === device.id) { found = arr[fi]; break; }
             }
             if (found) {
+              // Reuse existing
               transformIdRef.current = found.id;
               setExtStatus('active');
               if (neomind.updateTransform) {
@@ -717,11 +717,11 @@ var NE101CameraPanel = (function () {
           for (var ei = 0; ei < extList.length; ei++) {
             if (extList[ei].id === processingExtId) { matched = extList[ei]; break; }
           }
-          if (!matched) { if (transformIdRef.current === '_creating_') transformIdRef.current = null; setExtStatus('not_installed'); return; }
+          if (!matched) { setExtStatus('not_installed'); return; }
           var st = (matched.state || '').toLowerCase();
-          if (st.indexOf('stopped') >= 0 || st.indexOf('failed') >= 0 || st.indexOf('error') >= 0) { if (transformIdRef.current === '_creating_') transformIdRef.current = null; setExtStatus('offline'); return; }
+          if (st.indexOf('stopped') >= 0 || st.indexOf('failed') >= 0 || st.indexOf('error') >= 0) { setExtStatus('offline'); return; }
           afterExtCheck();
-        }).catch(function () { if (transformIdRef.current === '_creating_') transformIdRef.current = null; if (!cancelled) setExtStatus('error'); });
+        }).catch(function () { if (!cancelled) setExtStatus('error'); });
       } else {
         afterExtCheck();
       }
