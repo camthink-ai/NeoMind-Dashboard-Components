@@ -500,6 +500,24 @@ var NE101CameraPanel = (function () {
     var wsValues = device ? (device.currentValues || {}) : {};
     var wsTs = getFirst(wsValues, ['ts', 'values.ts', 'timestamp', 'values.timestamp']);
 
+    // Initial fetch on mount: get image + virtual metrics before any WS event arrives.
+    // This ensures the component shows data immediately when navigating back to the dashboard.
+    var initialFetchRef = React.useRef(false);
+    React.useEffect(function () {
+      if (!device || initialFetchRef.current) return;
+      var neomind = window.neomind;
+      if (!neomind || typeof neomind.fetchDeviceValues !== 'function') return;
+      initialFetchRef.current = true;
+      neomind.fetchDeviceValues(device.id).then(function (v) {
+        if (!v) return;
+        setImageData(v);
+        var virt = v.virtual;
+        if (virt && typeof virt === 'object') {
+          setVirtualData(v);
+        }
+      }).catch(function () {});
+    }, [device ? device.id : null]);
+
     React.useEffect(function () {
       if (!device || wsTs == null) return;
       // Only fetch when ts actually changed (new telemetry from WS)
