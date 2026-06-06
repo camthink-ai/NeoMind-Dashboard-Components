@@ -455,6 +455,42 @@ var Model3DViewer = (function () {
     });
   };
 
+  // --- NeoMind API helpers ---
+  var fetchPinData = function (pin) {
+    var neomind = window.neomind;
+    if (!neomind) return Promise.resolve(null);
+
+    var deviceId = null;
+    if (pin.type === 'metric' && pin.metricRef) {
+      deviceId = pin.metricRef.deviceId;
+    } else if (pin.type === 'device' && pin.deviceRef) {
+      deviceId = pin.deviceRef.deviceId;
+    }
+
+    if (!deviceId) return Promise.resolve(null);
+
+    return neomind.fetchDeviceValues(deviceId).then(function (v) {
+      if (!v) return null;
+      if (pin.type === 'metric' && pin.metricRef) {
+        return v[pin.metricRef.metricKey];
+      }
+      return v;
+    }).catch(function () { return null; });
+  };
+
+  var executeCommand = function (pin) {
+    var neomind = window.neomind;
+    if (!neomind || pin.type !== 'command' || !pin.commandRef) return;
+
+    if (pin.commandRef.extensionId) {
+      neomind.callExtension(
+        pin.commandRef.extensionId,
+        pin.commandRef.commandKey,
+        pin.commandRef.params || {}
+      );
+    }
+  };
+
   // --- Root Component (full Three.js lifecycle) ---
   function Model3DViewer(props) {
     var config = props.config || {};
@@ -509,6 +545,32 @@ var Model3DViewer = (function () {
     React.useEffect(function () { pinsRef.current = pins; }, [pins]);
     React.useEffect(function () { selectedPinIdRef.current = selectedPinId; }, [selectedPinId]);
     React.useEffect(function () { configuringPinIdRef.current = configuringPinId; }, [configuringPinId]);
+
+    // Periodic data refresh for metric and device pins
+    React.useEffect(function () {
+      var dataPins = pins.filter(function (p) {
+        return p.type === 'metric' || p.type === 'device';
+      });
+      if (dataPins.length === 0) return;
+
+      var interval = setInterval(function () {
+        var promises = dataPins.map(function (pin) {
+          return fetchPinData(pin).then(function (val) {
+            return { id: pin.id, value: val };
+          }).catch(function () {
+            return { id: pin.id, value: null };
+          });
+        });
+
+        Promise.all(promises).then(function (results) {
+          var updated = {};
+          results.forEach(function (r) { updated[r.id] = r.value; });
+          setPinValues(function (prev) { return Object.assign({}, prev, updated); });
+        });
+      }, 5000);
+
+      return function () { clearInterval(interval); };
+    }, [pins]);
 
     // Handlers
     var toggleEdit = function () {
@@ -802,7 +864,7 @@ var Model3DViewer = (function () {
               ? [jsx(DetailCard, {
                   pin: pins.find(function (p) { return p.id === selectedPinId; }),
                   value: pinValues[selectedPinId],
-                  onAction: function () {},
+                  onAction: executeCommand,
                   onClose: function () { setSelectedPinId(null); },
                   detailRef: popupRefs
                 })]
