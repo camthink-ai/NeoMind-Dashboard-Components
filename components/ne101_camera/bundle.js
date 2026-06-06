@@ -583,14 +583,24 @@ var NE101CameraPanel = (function () {
       JSON.stringify(processingRois);
     var _storedHash = config._transformHash || '';
     React.useEffect(function () {
+      console.log('[NE101-TF] useEffect fired', {
+        editMode: props.editMode,
+        processingEnabled: processingEnabled,
+        processingExtId: processingExtId,
+        hasDevice: !!device,
+        storedTid: _storedTid,
+        storedHash: _storedHash,
+        configHash: _configHash
+      });
       // Don't manage Transforms while in config dialog preview
-      if (_isEditing) return;
+      if (_isEditing) { console.log('[NE101-TF] skipped: editMode'); return; }
 
       var neomind = window.neomind;
       var onCfgChange = props.onConfigChange;
 
       // --- Processing OFF: delete Transform ---
       if (!processingEnabled || !processingExtId || !device) {
+        console.log('[NE101-TF] processing off', { processingEnabled: processingEnabled, processingExtId: processingExtId, hasDevice: !!device });
         if (_storedTid && neomind && neomind.deleteTransform) {
           neomind.deleteTransform(_storedTid).catch(function () {});
         }
