@@ -194,6 +194,104 @@ var Model3DViewer = (function () {
     };
   };
 
+  // --- PinPopup Component ---
+  var PinPopup = function (props) {
+    var pin = props.pin;
+    var onClick = props.onClick;
+    var popupRef = props.popupRef;
+    var pc = PinColors[pin.type] || PinColors.metric;
+
+    return jsx('div', {
+      ref: function (el) { if (popupRef) popupRef.current[pin.id] = el; },
+      className: 'absolute pointer-events-auto cursor-pointer',
+      style: { transform: 'translate(-50%, -130%)', zIndex: 10, display: 'none' },
+      onClick: function (e) { e.stopPropagation(); onClick(pin.id); },
+      children: jsxs('div', {
+        className: 'flex items-center gap-1.5 px-2 py-1 rounded-md bg-card border border-glass-border shadow-lg',
+        children: [
+          jsx('div', {
+            className: 'w-2 h-2 rounded-full flex-shrink-0',
+            style: { backgroundColor: 'var(--color-' + (pin.type === 'annotation' ? 'warning' : pin.type === 'command' ? 'accent-purple' : pin.type) + ')' }
+          }),
+          jsx('span', { className: 'text-xs text-foreground whitespace-nowrap', children: pin.label || pin.type })
+        ]
+      })
+    });
+  };
+
+  // --- DetailCard Component ---
+  var DetailCard = function (props) {
+    var pin = props.pin;
+    var value = props.value;
+    var onAction = props.onAction;
+    var onClose = props.onClose;
+    var detailRef = props.detailRef;
+    var pc = PinColors[pin.type] || PinColors.metric;
+
+    var colorKey = pin.type === 'annotation' ? 'warning' : pin.type === 'command' ? 'accent-purple' : pin.type;
+
+    var content = null;
+    if (pin.type === 'metric') {
+      content = jsxs('div', { children: [
+        jsx('span', { className: 'text-4xl font-extralight text-foreground leading-none', children: value != null ? String(value) : '--' }),
+        jsx('span', { className: 'text-base text-muted-foreground font-light ml-1', children: pin.label })
+      ]});
+    } else if (pin.type === 'device') {
+      var online = value && value.status === 'online';
+      content = jsxs('div', { className: 'flex items-center gap-2.5', children: [
+        jsx('div', {
+          className: 'w-2 h-2 rounded-full',
+          style: { backgroundColor: online ? 'var(--color-success)' : 'var(--color-muted-foreground)' }
+        }),
+        jsx('span', { className: 'text-lg text-muted-foreground font-light', children: online ? 'Online' : 'Offline' })
+      ]});
+    } else if (pin.type === 'annotation') {
+      content = jsx('div', {
+        className: 'text-sm text-muted-foreground font-light leading-relaxed',
+        children: pin.annotationText || 'No annotation'
+      });
+    } else if (pin.type === 'command') {
+      content = jsx('div', { children:
+        jsx('button', {
+          className: 'w-9 h-9 rounded-full flex items-center justify-center',
+          style: { backgroundColor: 'oklch(0.7 0.15 310 / 12%)', border: '1px solid oklch(0.7 0.15 310 / 25%)' },
+          onClick: function (e) { e.stopPropagation(); onAction && onAction(pin); },
+          dangerouslySetInnerHTML: { __html: Icons.play }
+        })
+      });
+    }
+
+    return jsx('div', {
+      ref: function (el) { if (detailRef) detailRef.current[pin.id + '_detail'] = el; },
+      className: 'absolute pointer-events-auto',
+      style: { zIndex: 20, display: 'none' },
+      children: jsxs('div', {
+        className: 'rounded-2xl border border-glass-border shadow-xl overflow-hidden relative',
+        style: {
+          aspectRatio: '4/3', backgroundColor: 'var(--color-card)',
+          padding: '20px 24px', display: 'flex', flexDirection: 'column',
+          justifyContent: 'space-between', minWidth: '200px'
+        },
+        children: [
+          jsx('div', {
+            style: { position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, var(--color-' + colorKey + '), transparent)' }
+          }),
+          jsxs('div', { className: 'flex justify-between items-start', style: { position: 'relative', zIndex: 1 }, children: [
+            jsx('span', { className: 'text-xs text-muted-foreground tracking-wide', children: pin.label }),
+            jsx('div', { className: pc.tw, style: { width: 14, height: 14, opacity: 0.5 }, dangerouslySetInnerHTML: { __html: Icons[pin.type] } })
+          ]}),
+          jsx('div', { style: { position: 'relative', zIndex: 1 }, children: content }),
+          jsx('button', {
+            className: 'absolute top-2 right-2 w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-foreground rounded',
+            style: { zIndex: 2 },
+            onClick: function (e) { e.stopPropagation(); onClose(); },
+            dangerouslySetInnerHTML: { __html: Icons.close }
+          })
+        ]
+      })
+    });
+  };
+
   // --- Root Component (full Three.js lifecycle) ---
   function Model3DViewer(props) {
     var config = props.config || {};
@@ -228,6 +326,10 @@ var Model3DViewer = (function () {
     var selectedPinState = React.useState(null);
     var selectedPinId = selectedPinState[0];
     var setSelectedPinId = selectedPinState[1];
+
+    var pinValuesState = React.useState({});
+    var pinValues = pinValuesState[0];
+    var setPinValues = pinValuesState[1];
 
     // Refs for per-frame updates (mirrors of state, used in rAF loop)
     var popupRefs = React.useRef({});
@@ -350,6 +452,18 @@ var Model3DViewer = (function () {
               popupEl.style.top = screen.y + 'px';
               popupEl.style.display = screen.behind ? 'none' : '';
             }
+            // Update detail card position
+            if (pin.id === selectedPinIdRef.current) {
+              var detailEl = popupRefs.current[pin.id + '_detail'];
+              if (detailEl) {
+                detailEl.style.left = (screen.x + 20) + 'px';
+                detailEl.style.top = (screen.y - 40) + 'px';
+                detailEl.style.display = screen.behind ? 'none' : '';
+              }
+            } else {
+              var detailEl = popupRefs.current[pin.id + '_detail'];
+              if (detailEl) detailEl.style.display = 'none';
+            }
           }
 
           sceneHandleRef.current.frameId = requestAnimationFrame(animate);
@@ -424,6 +538,27 @@ var Model3DViewer = (function () {
               children: 'Retry'
             })
           ]})
+        }),
+        jsx('div', {
+          className: 'absolute inset-0 pointer-events-none overflow-hidden',
+          children: pins.map(function (pin) {
+            return jsx(PinPopup, {
+              key: pin.id,
+              pin: pin,
+              onClick: setSelectedPinId,
+              popupRef: popupRefs
+            });
+          }).concat(
+            selectedPinId && pins.find(function (p) { return p.id === selectedPinId; })
+              ? [jsx(DetailCard, {
+                  pin: pins.find(function (p) { return p.id === selectedPinId; }),
+                  value: pinValues[selectedPinId],
+                  onAction: function () {},
+                  onClose: function () { setSelectedPinId(null); },
+                  detailRef: popupRefs
+                })]
+              : []
+          )
         })
       ]
     });
