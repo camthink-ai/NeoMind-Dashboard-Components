@@ -582,6 +582,9 @@ var NE101CameraPanel = (function () {
     var _storedHash = config._transformHash || '';
     var configRef = React.useRef(config);
     configRef.current = config;
+    // Mutex: prevents concurrent StrictMode effects from both creating Transforms
+    var creatingRef = React.useRef(false);
+
     React.useEffect(function () {
       var neomind = window.neomind;
       var onCfgChange = props.onConfigChange;
@@ -635,6 +638,7 @@ var NE101CameraPanel = (function () {
       // Helper: persist ID + hash to config
       var persist = function (id) {
         transformIdRef.current = id;
+        creatingRef.current = false;
         if (onCfgChange) onCfgChange(Object.assign({}, configRef.current, { _transformId: id, _transformHash: _configHash }));
       };
 
@@ -665,7 +669,6 @@ var NE101CameraPanel = (function () {
             transformIdRef.current = null;
             if (onCfgChange) onCfgChange(Object.assign({}, configRef.current, { _transformId: '', _transformHash: '' }));
             neomind.createTransform(payload).then(function (r) {
-              // Always set ref so concurrent effect can find it
               if (r && r.id) transformIdRef.current = r.id;
               if (!cancelled && r && r.id) persist(r.id);
             }).catch(function () {});
@@ -675,17 +678,22 @@ var NE101CameraPanel = (function () {
       }
 
       // --- Tier 3: No ID — check extension, then create ---
+      // StrictMode guard: if another effect invocation is already creating, skip
+      if (creatingRef.current) return;
+      creatingRef.current = true;
+
       setExtStatus('checking');
       if (!neomind.listExtensions) {
         neomind.createTransform(payload).then(function (r) {
           if (r && r.id) transformIdRef.current = r.id;
           if (!cancelled && r && r.id) { persist(r.id); setExtStatus('active'); }
-        }).catch(function () { if (!cancelled) setExtStatus('error'); });
+        }).catch(function () { if (!cancelled) { creatingRef.current = false; setExtStatus('error'); } });
         return;
       }
       neomind.listExtensions().then(function (exts) {
         // StrictMode: first effect's create may have set ref by now — upgrade to update
         if (transformIdRef.current) {
+          creatingRef.current = false;
           var existingId = transformIdRef.current;
           if (neomind.updateTransform) {
             neomind.updateTransform(existingId, {
@@ -697,21 +705,21 @@ var NE101CameraPanel = (function () {
           }
           return;
         }
-        if (cancelled) return;
+        if (cancelled) { creatingRef.current = false; return; }
         var extList = Array.isArray(exts) ? exts : [];
         var matched = null;
         for (var ei = 0; ei < extList.length; ei++) {
           if (extList[ei].id === processingExtId) { matched = extList[ei]; break; }
         }
-        if (!matched) { setExtStatus('not_installed'); return; }
+        if (!matched) { creatingRef.current = false; setExtStatus('not_installed'); return; }
         var st = (matched.state || '').toLowerCase();
-        if (st.indexOf('stopped') >= 0 || st.indexOf('failed') >= 0 || st.indexOf('error') >= 0) { setExtStatus('offline'); return; }
+        if (st.indexOf('stopped') >= 0 || st.indexOf('failed') >= 0 || st.indexOf('error') >= 0) { creatingRef.current = false; setExtStatus('offline'); return; }
         setExtStatus('active');
         neomind.createTransform(payload).then(function (r) {
           if (r && r.id) transformIdRef.current = r.id;
           if (!cancelled && r && r.id) persist(r.id);
-        }).catch(function () {});
-      }).catch(function () { if (!cancelled) setExtStatus('error'); });
+        }).catch(function () { creatingRef.current = false; });
+      }).catch(function () { if (!cancelled) { creatingRef.current = false; setExtStatus('error'); } });
 
       return function () { cancelled = true; };
     }, [device ? device.id : null, processingEnabled, _configHash, _storedTid, _storedHash]);
