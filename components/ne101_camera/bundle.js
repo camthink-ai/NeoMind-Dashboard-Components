@@ -777,23 +777,12 @@ var NE101CameraPanel = (function () {
     if (processingEnabled && processingExtId) {
       var pfx = 'virtual.' + processingExtId.replace(/-/g, '_') + '.';
       var vDet = getFirst(vals, [pfx + 'detections', 'values.' + pfx + 'detections']);
+      // Backend may store detections as a JSON string — parse it
+      if (typeof vDet === 'string') { try { vDet = JSON.parse(vDet); } catch(e) { vDet = null; } }
       var vSourceTs = getFirst(vals, [pfx + 'source_ts', 'values.' + pfx + 'source_ts']);
       // Match: detections' source_ts must align with the current image timestamp
       var imgTsVal = imgTs;
       var tsMatch = !vSourceTs || !imgTsVal || String(vSourceTs) === String(imgTsVal);
-      if (!window.__ne101_diag) window.__ne101_diag = 0;
-      window.__ne101_diag++;
-      if (window.__ne101_diag <= 5) {
-        var allVirtualKeys = Object.keys(vals).filter(function(k) { return k.indexOf('virtual') >= 0; });
-        console.log('[NE101-OVERLAY] diag#' + window.__ne101_diag, {
-          pfx: pfx, vDet: vDet, vSourceTs: vSourceTs,
-          imgTsVal: imgTsVal, tsMatch: tsMatch,
-          virtualKeys: allVirtualKeys,
-          wsKeys: Object.keys(wsValues).slice(0, 10),
-          hasVirtualData: !!(virtualDataState[0]),
-          imageSrc: !!imageSrc
-        });
-      }
       if (Array.isArray(vDet) && vDet.length > 0 && tsMatch) {
         detections = vDet;
         lastDetsRef.current = vDet;
