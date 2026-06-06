@@ -148,6 +148,52 @@ var Model3DViewer = (function () {
     }
   };
 
+  // --- 3D Pin creation ---
+  var createPin3D = function (position, normal, type) {
+    var THREE = window.THREE;
+    var offset = normal.clone().multiplyScalar(0.01);
+    var pinPos = position.clone().add(offset);
+
+    var geometry = new THREE.SphereGeometry(0.03, 16, 16);
+    var colorHex = PinColors[type] ? PinColors[type].three : PinColors.metric.three;
+    var material = new THREE.MeshBasicMaterial({ color: colorHex });
+    var mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(pinPos);
+    mesh.userData.pinType = type;
+
+    return mesh;
+  };
+
+  // --- Raycasting click handler ---
+  var createClickHandler = function (sceneHandle, model, callback) {
+    var THREE = window.THREE;
+    return function (event) {
+      var rect = sceneHandle.renderer.domElement.getBoundingClientRect();
+      var mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      sceneHandle.raycaster.setFromCamera(mouse, sceneHandle.camera);
+      var intersects = sceneHandle.raycaster.intersectObject(model, true);
+      if (intersects.length > 0) {
+        var hit = intersects[0];
+        var normal = hit.face.normal.clone();
+        normal.transformDirection(hit.object.matrixWorld);
+        callback(hit.point, normal);
+      }
+    };
+  };
+
+  // --- 3D to 2D screen projection ---
+  var projectToScreen = function (position3D, camera, width, height) {
+    var projected = position3D.clone().project(camera);
+    return {
+      x: (projected.x + 1) / 2 * width,
+      y: (-projected.y + 1) / 2 * height,
+      behind: projected.z > 1
+    };
+  };
+
   // --- Root Component (full Three.js lifecycle) ---
   function Model3DViewer(props) {
     var config = props.config || {};
@@ -165,6 +211,74 @@ var Model3DViewer = (function () {
 
     var bgColor = config.backgroundColor || '#111827';
     var autoRotate = config.autoRotate || false;
+
+    // Pin state
+    var pinsState = React.useState(config.pins || []);
+    var pins = pinsState[0];
+    var setPins = pinsState[1];
+
+    var editState = React.useState(false);
+    var editMode = editState[0];
+    var setEditMode = editState[1];
+
+    var pinTypeState = React.useState('metric');
+    var activePinType = pinTypeState[0];
+    var setActivePinType = pinTypeState[1];
+
+    var selectedPinState = React.useState(null);
+    var selectedPinId = selectedPinState[0];
+    var setSelectedPinId = selectedPinState[1];
+
+    // Refs for per-frame updates (mirrors of state, used in rAF loop)
+    var popupRefs = React.useRef({});
+    var pinMeshesRef = React.useRef({});
+    var pinsRef = React.useRef(pins);
+    var selectedPinIdRef = React.useRef(selectedPinId);
+
+    // Refs synchronization
+    React.useEffect(function () { pinsRef.current = pins; }, [pins]);
+    React.useEffect(function () { selectedPinIdRef.current = selectedPinId; }, [selectedPinId]);
+
+    // Refs for edit mode and active pin type (used in click handler)
+    var editModeRef = React.useRef(editMode);
+    React.useEffect(function () { editModeRef.current = editMode; }, [editMode]);
+    var activePinTypeRef = React.useRef(activePinType);
+    React.useEffect(function () { activePinTypeRef.current = activePinType; }, [activePinType]);
+
+    // Click handler for pin placement
+    React.useEffect(function () {
+      if (!sceneHandleRef.current || !modelRef.current) return;
+
+      var handleCanvasClick = function (event) {
+        if (!editModeRef.current) return;
+        var clickFn = createClickHandler(sceneHandleRef.current, modelRef.current, function (point, normal) {
+          var id = 'pin_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+          var type = activePinTypeRef.current || 'metric';
+          var pin3d = createPin3D(point, normal, type);
+          sceneHandleRef.current.scene.add(pin3d);
+          pinMeshesRef.current[id] = pin3d;
+
+          var newPin = {
+            id: id,
+            position: { x: point.x, y: point.y, z: point.z },
+            normal: { x: normal.x, y: normal.y, z: normal.z },
+            type: type,
+            label: type.charAt(0).toUpperCase() + type.slice(1)
+          };
+          setPins(function (prev) { return prev.concat([newPin]); });
+        });
+        sceneHandleRef.current._clickHandler = clickFn;
+        sceneHandleRef.current.renderer.domElement.addEventListener('click', clickFn);
+      };
+
+      sceneHandleRef.current.renderer.domElement.addEventListener('click', handleCanvasClick);
+
+      return function cleanup() {
+        if (sceneHandleRef.current && sceneHandleRef.current.renderer && sceneHandleRef.current.renderer.domElement) {
+          sceneHandleRef.current.renderer.domElement.removeEventListener('click', handleCanvasClick);
+        }
+      };
+    }, [editMode, activePinType]);
 
     React.useEffect(function () {
       if (!modelUrl) return;
@@ -191,6 +305,17 @@ var Model3DViewer = (function () {
       }).then(function (model) {
         modelRef.current = model;
 
+        // Restore pins from config
+        var existingPins = config.pins || [];
+        var THREE = window.THREE;
+        existingPins.forEach(function (pin) {
+          var pos = new THREE.Vector3(pin.position.x, pin.position.y, pin.position.z);
+          var norm = new THREE.Vector3(pin.normal.x, pin.normal.y, pin.normal.z);
+          var pin3d = createPin3D(pos, norm, pin.type);
+          sceneHandleRef.current.scene.add(pin3d);
+          pinMeshesRef.current[pin.id] = pin3d;
+        });
+
         function animate() {
           if (!sceneHandleRef.current) return;
           sceneHandleRef.current.controls.update();
@@ -198,6 +323,24 @@ var Model3DViewer = (function () {
             sceneHandleRef.current.scene,
             sceneHandleRef.current.camera
           );
+
+          // Per-frame pin DOM position updates
+          var containerW = sceneHandleRef.current.container.offsetWidth;
+          var containerH = sceneHandleRef.current.container.offsetHeight;
+          var currentPins = pinsRef.current;
+          for (var i = 0; i < currentPins.length; i++) {
+            var pin = currentPins[i];
+            var pinMesh = pinMeshesRef.current[pin.id];
+            if (!pinMesh) continue;
+            var screen = projectToScreen(pinMesh.position, sceneHandleRef.current.camera, containerW, containerH);
+            var popupEl = popupRefs.current[pin.id];
+            if (popupEl) {
+              popupEl.style.left = screen.x + 'px';
+              popupEl.style.top = screen.y + 'px';
+              popupEl.style.display = screen.behind ? 'none' : '';
+            }
+          }
+
           sceneHandleRef.current.frameId = requestAnimationFrame(animate);
         }
         animate();
@@ -226,6 +369,10 @@ var Model3DViewer = (function () {
       return function cleanup() {
         if (observer) observer.disconnect();
         if (sceneHandleRef.current) {
+          // Remove click handler
+          if (sceneHandleRef.current._clickHandler && sceneHandleRef.current.renderer && sceneHandleRef.current.renderer.domElement) {
+            sceneHandleRef.current.renderer.domElement.removeEventListener('click', sceneHandleRef.current._clickHandler);
+          }
           disposeScene(sceneHandleRef.current);
           sceneHandleRef.current = null;
         }
