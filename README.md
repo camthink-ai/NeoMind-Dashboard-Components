@@ -438,6 +438,30 @@ The templates define how device data maps to extension inputs and how extension 
 
 The component does **not** interpret these mappings — they are passed through to `createTransform()` for the backend TransformEngine to process.
 
+### Testing
+
+NE101 includes an automated test suite (`test_bundle.js`) that validates core business logic without external dependencies:
+
+```bash
+node components/ne101_camera/test_bundle.js
+```
+
+**Test coverage** (70 tests):
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| `getFirst` | 7 | Nested key access, null/empty skipping |
+| `getExtMode` | 6 | Extension mode lookup, fallback behavior |
+| `pipeRois` | 8 | ROI polygon parsing (new + legacy format) |
+| `generateTransformJsCode` | 16 | Transform code generation, ROI/class filter, safety checks |
+| Transform execution | 11 | Generated code runs correctly, bbox normalization, all 4 response types |
+| `fillTemplate` | 5 | Payload structure validation |
+| Device null guard | 3 | Component doesn't crash when device is unbound |
+| Transform lifecycle | 8 | Tier 1/2/3 update strategy, StrictMode protection |
+| Object-cover math | 6 | Detection box coordinate mapping for object-cover images |
+
+The tests extract pure functions from `bundle.js` via regex and `new Function()`, testing the actual production code rather than copies. Run in CI or before releases to catch regressions.
+
 ## NeoMind Runtime API (`window.neomind`)
 
 Components running inside NeoMind have access to the platform API via `window.neomind`. All methods are async and degrade gracefully when unavailable.
