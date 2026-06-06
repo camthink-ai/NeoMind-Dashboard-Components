@@ -199,7 +199,22 @@ var Model3DViewer = (function () {
     var pin = props.pin;
     var onClick = props.onClick;
     var popupRef = props.popupRef;
+    var isSmall = props.isSmall || false;
     var pc = PinColors[pin.type] || PinColors.metric;
+
+    // When small, show only dot (no label)
+    if (isSmall) {
+      return jsx('div', {
+        ref: function (el) { if (popupRef) popupRef.current[pin.id] = el; },
+        className: 'absolute pointer-events-auto cursor-pointer',
+        style: { transform: 'translate(-50%, -50%)', zIndex: 10, display: 'none' },
+        onClick: function (e) { e.stopPropagation(); onClick(pin.id); },
+        children: jsx('div', {
+          className: 'w-2 h-2 rounded-full flex-shrink-0',
+          style: { backgroundColor: 'var(--color-' + (pin.type === 'annotation' ? 'warning' : pin.type === 'command' ? 'accent-purple' : pin.type) + ')' }
+        })
+      });
+    }
 
     return jsx('div', {
       ref: function (el) { if (popupRef) popupRef.current[pin.id] = el; },
@@ -226,6 +241,7 @@ var Model3DViewer = (function () {
     var activePinType = props.activePinType;
     var onSelectPinType = props.onSelectPinType;
     var onResetCamera = props.onResetCamera;
+    var isSmall = props.isSmall || false;
 
     var pinTypes = ['metric', 'device', 'annotation', 'command'];
     var typeLabels = { metric: 'Metric', device: 'Device', annotation: 'Note', command: 'Cmd' };
@@ -509,6 +525,12 @@ var Model3DViewer = (function () {
     var bgColor = config.backgroundColor || '#111827';
     var autoRotate = config.autoRotate || false;
 
+    // Responsive sizing state
+    var sizeState = React.useState({ w: 0, h: 0 });
+    var containerSize = sizeState[0];
+    var setContainerSize = sizeState[1];
+    var isSmall = containerSize.w > 0 && (containerSize.w < 300 || containerSize.h < 300);
+
     // Pin state
     var pinsState = React.useState(config.pins || []);
     var pins = pinsState[0];
@@ -545,6 +567,81 @@ var Model3DViewer = (function () {
     React.useEffect(function () { pinsRef.current = pins; }, [pins]);
     React.useEffect(function () { selectedPinIdRef.current = selectedPinId; }, [selectedPinId]);
     React.useEffect(function () { configuringPinIdRef.current = configuringPinId; }, [configuringPinId]);
+
+    // Drag-drop file upload
+    React.useEffect(function () {
+      var container = containerRef.current;
+      if (!container) return;
+
+      var handleDragOver = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      };
+
+      var handleDrop = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var files = e.dataTransfer && e.dataTransfer.files;
+        if (!files || files.length === 0) return;
+        var file = files[0];
+        var ext = file.name.toLowerCase();
+        if (ext.endsWith('.glb') || ext.endsWith('.gltf')) {
+          setLoadState('loading');
+          loadThreeJS().then(function () {
+            // Dispose existing scene
+            disposeScene(sceneHandleRef.current);
+            sceneHandleRef.current = null;
+            modelRef.current = null;
+
+            var sceneHandle = createScene(container, config.backgroundColor || '#111827');
+            sceneHandleRef.current = sceneHandle;
+
+            return loadModel(sceneHandle, file);
+          }).then(function (model) {
+            modelRef.current = model;
+            setLoadState('loaded');
+            // Start render loop
+            function animate() {
+              if (!sceneHandleRef.current) return;
+              sceneHandleRef.current.frameId = requestAnimationFrame(animate);
+              sceneHandleRef.current.controls.update();
+              if (config.autoRotate) {
+                sceneHandleRef.current.controls.autoRotate = true;
+              }
+              sceneHandleRef.current.renderer.render(sceneHandleRef.current.scene, sceneHandleRef.current.camera);
+
+              // Per-frame pin DOM position updates
+              var containerW = sceneHandleRef.current.container.offsetWidth;
+              var containerH = sceneHandleRef.current.container.offsetHeight;
+              var currentPins = pinsRef.current;
+              for (var i = 0; i < currentPins.length; i++) {
+                var pin = currentPins[i];
+                var pinMesh = pinMeshesRef.current[pin.id];
+                if (!pinMesh) continue;
+                var screen = projectToScreen(pinMesh.position, sceneHandleRef.current.camera, containerW, containerH);
+                var popupEl = popupRefs.current[pin.id];
+                if (popupEl) {
+                  popupEl.style.left = screen.x + 'px';
+                  popupEl.style.top = screen.y + 'px';
+                  popupEl.style.display = screen.behind ? 'none' : '';
+                }
+              }
+            }
+            animate();
+          }).catch(function (err) {
+            setErrorMsg(err.message || 'Failed to load model');
+            setLoadState('error');
+          });
+        }
+      };
+
+      container.addEventListener('dragover', handleDragOver);
+      container.addEventListener('drop', handleDrop);
+      return function () {
+        container.removeEventListener('dragover', handleDragOver);
+        container.removeEventListener('drop', handleDrop);
+      };
+    }, []);
 
     // Periodic data refresh for metric and device pins
     React.useEffect(function () {
@@ -677,20 +774,51 @@ var Model3DViewer = (function () {
       };
     }, [modelRef.current]);
 
+    // Model URL change handler (replaces old Three.js init)
+    var prevModelUrlRef = React.useRef('');
     React.useEffect(function () {
-      if (!modelUrl) return;
+      var url = config.modelUrl || '';
+      if (url === prevModelUrlRef.current) return;
+      prevModelUrlRef.current = url;
+
+      if (!url) {
+        // Clear scene
+        disposeScene(sceneHandleRef.current);
+        sceneHandleRef.current = null;
+        modelRef.current = null;
+        setLoadState('idle');
+        // Clear pins
+        Object.keys(pinMeshesRef.current).forEach(function (id) {
+          var mesh = pinMeshesRef.current[id];
+          if (mesh) { mesh.geometry.dispose(); mesh.material.dispose(); }
+        });
+        pinMeshesRef.current = {};
+        setPins([]);
+        return;
+      }
+
+      // Model URL changed — clear old pins if any exist
+      if (pins.length > 0) {
+        Object.keys(pinMeshesRef.current).forEach(function (id) {
+          var mesh = pinMeshesRef.current[id];
+          if (mesh && sceneHandleRef.current) { sceneHandleRef.current.scene.remove(mesh); }
+          if (mesh) { mesh.geometry.dispose(); mesh.material.dispose(); }
+        });
+        pinMeshesRef.current = {};
+        setPins([]);
+      }
 
       setLoadState('loading');
       setErrorMsg('');
 
-      var container = containerRef.current;
-      if (!container) return;
-
-      var observer = null;
-      var sceneHandle = null;
-
       loadThreeJS().then(function () {
-        sceneHandle = createScene(container, bgColor);
+        var container = containerRef.current;
+        if (!container) return;
+
+        // Dispose old scene if exists
+        disposeScene(sceneHandleRef.current);
+
+        var sceneHandle = createScene(container, config.backgroundColor || '#111827');
         sceneHandleRef.current = sceneHandle;
 
         if (autoRotate) {
@@ -698,101 +826,95 @@ var Model3DViewer = (function () {
           sceneHandle.controls.autoRotateSpeed = 2.0;
         }
 
-        return loadModel(sceneHandle, modelUrl);
-      }).then(function (model) {
-        modelRef.current = model;
+        return loadModel(sceneHandle, url).then(function (model) {
+          modelRef.current = model;
+          setLoadState('loaded');
 
-        // Restore pins from config
-        var existingPins = config.pins || [];
-        var THREE = window.THREE;
-        existingPins.forEach(function (pin) {
-          var pos = new THREE.Vector3(pin.position.x, pin.position.y, pin.position.z);
-          var norm = new THREE.Vector3(pin.normal.x, pin.normal.y, pin.normal.z);
-          var pin3d = createPin3D(pos, norm, pin.type);
-          sceneHandleRef.current.scene.add(pin3d);
-          pinMeshesRef.current[pin.id] = pin3d;
-        });
+          // Restore pins from config
+          var existingPins = config.pins || [];
+          var THREE = window.THREE;
+          existingPins.forEach(function (pin) {
+            var pos = new THREE.Vector3(pin.position.x, pin.position.y, pin.position.z);
+            var norm = new THREE.Vector3(pin.normal.x, pin.normal.y, pin.normal.z);
+            var pin3d = createPin3D(pos, norm, pin.type);
+            sceneHandleRef.current.scene.add(pin3d);
+            pinMeshesRef.current[pin.id] = pin3d;
+          });
+          setPins(existingPins);
 
-        function animate() {
-          if (!sceneHandleRef.current) return;
-          sceneHandleRef.current.controls.update();
-          sceneHandleRef.current.renderer.render(
-            sceneHandleRef.current.scene,
-            sceneHandleRef.current.camera
-          );
-
-          // Per-frame pin DOM position updates
-          var containerW = sceneHandleRef.current.container.offsetWidth;
-          var containerH = sceneHandleRef.current.container.offsetHeight;
-          var currentPins = pinsRef.current;
-          for (var i = 0; i < currentPins.length; i++) {
-            var pin = currentPins[i];
-            var pinMesh = pinMeshesRef.current[pin.id];
-            if (!pinMesh) continue;
-            var screen = projectToScreen(pinMesh.position, sceneHandleRef.current.camera, containerW, containerH);
-            var popupEl = popupRefs.current[pin.id];
-            if (popupEl) {
-              popupEl.style.left = screen.x + 'px';
-              popupEl.style.top = screen.y + 'px';
-              popupEl.style.display = screen.behind ? 'none' : '';
-            }
-            // Update detail card position
-            if (pin.id === selectedPinIdRef.current) {
-              var detailEl = popupRefs.current[pin.id + '_detail'];
-              if (detailEl) {
-                detailEl.style.left = (screen.x + 20) + 'px';
-                detailEl.style.top = (screen.y - 40) + 'px';
-                detailEl.style.display = screen.behind ? 'none' : '';
+          // Start render loop
+          function animate() {
+            if (!sceneHandleRef.current) return;
+            sceneHandleRef.current.frameId = requestAnimationFrame(animate);
+            sceneHandleRef.current.controls.update();
+            sceneHandleRef.current.renderer.render(sceneHandleRef.current.scene, sceneHandleRef.current.camera);
+            // Pin DOM updates
+            var containerW = sceneHandleRef.current.container.offsetWidth;
+            var containerH = sceneHandleRef.current.container.offsetHeight;
+            var currentPins = pinsRef.current;
+            for (var i = 0; i < currentPins.length; i++) {
+              var pin = currentPins[i];
+              var pinMesh = pinMeshesRef.current[pin.id];
+              if (!pinMesh) continue;
+              var screen = projectToScreen(pinMesh.position, sceneHandleRef.current.camera, containerW, containerH);
+              var popupEl = popupRefs.current[pin.id];
+              if (popupEl) {
+                popupEl.style.left = screen.x + 'px';
+                popupEl.style.top = screen.y + 'px';
+                popupEl.style.display = screen.behind ? 'none' : '';
               }
-            } else {
-              var detailEl = popupRefs.current[pin.id + '_detail'];
-              if (detailEl) detailEl.style.display = 'none';
-            }
-
-            // Update config popover position
-            if (pin.id === configuringPinIdRef.current) {
-              var configEl = popupRefs.current[pin.id + '_config'];
-              if (configEl) {
-                configEl.style.left = (screen.x + 20) + 'px';
-                configEl.style.top = (screen.y - 20) + 'px';
-                configEl.style.display = screen.behind ? 'none' : '';
+              // Update detail card position
+              if (pin.id === selectedPinIdRef.current) {
+                var detailEl = popupRefs.current[pin.id + '_detail'];
+                if (detailEl) {
+                  detailEl.style.left = (screen.x + 20) + 'px';
+                  detailEl.style.top = (screen.y - 40) + 'px';
+                  detailEl.style.display = screen.behind ? 'none' : '';
+                }
+              } else {
+                var detailEl = popupRefs.current[pin.id + '_detail'];
+                if (detailEl) detailEl.style.display = 'none';
+              }
+              // Update config popover position
+              if (pin.id === configuringPinIdRef.current) {
+                var configEl = popupRefs.current[pin.id + '_config'];
+                if (configEl) {
+                  configEl.style.left = (screen.x + 20) + 'px';
+                  configEl.style.top = (screen.y - 20) + 'px';
+                  configEl.style.display = screen.behind ? 'none' : '';
+                }
               }
             }
           }
+          animate();
 
-          sceneHandleRef.current.frameId = requestAnimationFrame(animate);
-        }
-        animate();
+          // ResizeObserver
+          var observer = new ResizeObserver(function (entries) {
+            if (!sceneHandleRef.current) return;
+            var w = entries[0].contentRect.width;
+            var h = entries[0].contentRect.height;
+            sceneHandleRef.current.camera.aspect = w / h;
+            sceneHandleRef.current.camera.updateProjectionMatrix();
+            sceneHandleRef.current.renderer.setSize(w, h);
+            // Update responsive sizing state
+            setContainerSize({ w: w, h: h });
+          });
+          observer.observe(container);
 
-        observer = new ResizeObserver(function () {
-          if (!sceneHandleRef.current) return;
-          var w = container.offsetWidth;
-          var h = container.offsetHeight;
-          sceneHandleRef.current.camera.aspect = w / h;
-          sceneHandleRef.current.camera.updateProjectionMatrix();
-          sceneHandleRef.current.renderer.setSize(w, h);
+          return { observer: observer, model: model };
         });
-        observer.observe(container);
-
-        setLoadState('loaded');
       }).catch(function (err) {
-        console.error('Failed to load 3D model:', err);
         setErrorMsg(err.message || 'Failed to load model');
         setLoadState('error');
-        if (sceneHandleRef.current) {
-          disposeScene(sceneHandleRef.current);
-          sceneHandleRef.current = null;
-        }
       });
 
       return function cleanup() {
-        if (observer) observer.disconnect();
         if (sceneHandleRef.current) {
           disposeScene(sceneHandleRef.current);
           sceneHandleRef.current = null;
         }
       };
-    }, [modelUrl, bgColor, autoRotate]);
+    }, [config.modelUrl, bgColor, autoRotate]);
 
     if (!modelUrl) {
       return jsx('div', {
@@ -815,6 +937,8 @@ var Model3DViewer = (function () {
       ref: containerRef,
       className: 'relative w-full h-full overflow-hidden rounded-xl',
       children: [
+        // Spinner keyframes animation
+        jsx('style', { dangerouslySetInnerHTML: { __html: '@keyframes spin { to { transform: rotate(360deg) } }' } }),
         editMode ? jsx('div', {
           className: 'absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-md text-xs',
           style: {
@@ -830,13 +954,18 @@ var Model3DViewer = (function () {
           onToggleEdit: toggleEdit,
           activePinType: activePinType,
           onSelectPinType: setActivePinType,
-          onResetCamera: resetCamera
+          onResetCamera: resetCamera,
+          isSmall: isSmall
         }),
         loadState === 'loading' && jsx('div', {
-          className: 'absolute inset-0 flex flex-col items-center justify-center bg-card/80 z-10',
-          children: jsxs('div', { className: 'text-center space-y-2', children: [
-            jsx('div', { className: 'w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto' }),
-            jsx('p', { className: 'text-sm text-muted-foreground', children: 'Loading model...' })
+          className: 'absolute inset-0 flex flex-col items-center justify-center rounded-xl',
+          style: { backgroundColor: 'oklch(0.15 0.02 270 / 80%)', zIndex: 50 },
+          children: jsxs('div', { className: 'text-center', children: [
+            jsx('div', {
+              className: 'w-8 h-8 border-2 rounded-full mx-auto',
+              style: { borderTopColor: 'var(--color-info)', borderColor: 'var(--color-muted-foreground)', animation: 'spin 1s linear infinite' }
+            }),
+            jsx('p', { className: 'text-xs text-muted-foreground mt-2', children: 'Loading model...' })
           ]})
         }),
         loadState === 'error' && jsx('div', {
@@ -857,7 +986,8 @@ var Model3DViewer = (function () {
               key: pin.id,
               pin: pin,
               onClick: setSelectedPinId,
-              popupRef: popupRefs
+              popupRef: popupRefs,
+              isSmall: isSmall
             });
           }).concat(
             selectedPinId && pins.find(function (p) { return p.id === selectedPinId; })
