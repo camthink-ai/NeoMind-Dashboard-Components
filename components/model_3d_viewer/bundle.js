@@ -219,6 +219,69 @@ var Model3DViewer = (function () {
     });
   };
 
+  // --- Toolbar Component ---
+  var Toolbar = function (props) {
+    var editMode = props.editMode;
+    var onToggleEdit = props.onToggleEdit;
+    var activePinType = props.activePinType;
+    var onSelectPinType = props.onSelectPinType;
+    var onResetCamera = props.onResetCamera;
+
+    var pinTypes = ['metric', 'device', 'annotation', 'command'];
+    var typeLabels = { metric: 'Metric', device: 'Device', annotation: 'Note', command: 'Cmd' };
+
+    if (!editMode) {
+      return jsxs('div', {
+        className: 'absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 bg-card border border-glass-border rounded-lg px-2.5 py-1.5',
+        style: { zIndex: 40 },
+        children: [
+          jsx('button', {
+            className: 'p-1.5 rounded-md hover:bg-muted text-muted-foreground',
+            onClick: onToggleEdit,
+            title: 'Edit pins',
+            dangerouslySetInnerHTML: { __html: Icons.edit }
+          }),
+          jsx('button', {
+            className: 'p-1.5 rounded-md hover:bg-muted text-muted-foreground',
+            onClick: onResetCamera,
+            title: 'Reset view',
+            dangerouslySetInnerHTML: { __html: Icons.reset }
+          }),
+          jsx('button', {
+            className: 'p-1.5 rounded-md hover:bg-muted text-muted-foreground',
+            title: 'Fullscreen',
+            dangerouslySetInnerHTML: { __html: Icons.fullscreen }
+          })
+        ]
+      });
+    }
+
+    return jsxs('div', {
+      className: 'absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 bg-card border border-accent-purple rounded-lg px-2 py-1.5',
+      style: { zIndex: 40 },
+      children: [
+        pinTypes.map(function (t) {
+          var isActive = activePinType === t;
+          var pc = PinColors[t];
+          return jsx('button', {
+            className: 'flex items-center gap-1 px-2 py-1 rounded-md text-xs ' + (isActive ? pc.tw + ' bg-muted' : 'text-muted-foreground'),
+            onClick: function () { onSelectPinType(t); },
+            children: [
+              jsx('span', { className: 'w-3 h-3 ' + pc.tw, dangerouslySetInnerHTML: { __html: Icons[t] } }),
+              jsx('span', { children: typeLabels[t] })
+            ]
+          }, t);
+        }),
+        jsx('div', { className: 'w-px bg-glass-border mx-1' }),
+        jsx('button', {
+          className: 'px-2 py-1 rounded-md text-xs text-muted-foreground hover:bg-muted',
+          onClick: onToggleEdit,
+          children: 'Done'
+        })
+      ]
+    });
+  };
+
   // --- DetailCard Component ---
   var DetailCard = function (props) {
     var pin = props.pin;
@@ -340,6 +403,34 @@ var Model3DViewer = (function () {
     // Refs synchronization
     React.useEffect(function () { pinsRef.current = pins; }, [pins]);
     React.useEffect(function () { selectedPinIdRef.current = selectedPinId; }, [selectedPinId]);
+
+    // Handlers
+    var toggleEdit = function () {
+      var next = !editMode;
+      setEditMode(next);
+      if (!next && props.onConfigChange) {
+        props.onConfigChange('pins', pins);
+      }
+    };
+
+    var resetCamera = function () {
+      var sceneHandle = sceneHandleRef.current;
+      var model = modelRef.current;
+      if (!sceneHandle || !model) return;
+      var THREE = window.THREE;
+      var box = new THREE.Box3().setFromObject(model);
+      var center = box.getCenter(new THREE.Vector3());
+      var size = box.getSize(new THREE.Vector3());
+      var maxDim = Math.max(size.x, size.y, size.z);
+      var distance = maxDim * 2;
+      sceneHandle.camera.position.set(
+        center.x + distance * 0.7,
+        center.y + distance * 0.5,
+        center.z + distance * 0.7
+      );
+      sceneHandle.controls.target.copy(center);
+      sceneHandle.controls.update();
+    };
 
     // Refs for edit mode and active pin type (used in click handler)
     var editModeRef = React.useRef(editMode);
@@ -521,6 +612,23 @@ var Model3DViewer = (function () {
       ref: containerRef,
       className: 'relative w-full h-full overflow-hidden rounded-xl',
       children: [
+        editMode ? jsx('div', {
+          className: 'absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-md text-xs',
+          style: {
+            zIndex: 40,
+            backgroundColor: 'oklch(0.72 0.19 155 / 12%)',
+            border: '1px solid oklch(0.72 0.19 155 / 40%)',
+            color: 'var(--color-success)'
+          },
+          children: 'Click on the model to place a ' + activePinType + ' pin'
+        }) : null,
+        jsx(Toolbar, {
+          editMode: editMode,
+          onToggleEdit: toggleEdit,
+          activePinType: activePinType,
+          onSelectPinType: setActivePinType,
+          onResetCamera: resetCamera
+        }),
         loadState === 'loading' && jsx('div', {
           className: 'absolute inset-0 flex flex-col items-center justify-center bg-card/80 z-10',
           children: jsxs('div', { className: 'text-center space-y-2', children: [
