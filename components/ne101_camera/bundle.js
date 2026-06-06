@@ -572,6 +572,9 @@ var NE101CameraPanel = (function () {
     }
 
     // Transform lifecycle — store ID in config, use it.
+    // Skip Transform operations while editing (config dialog preview).
+    // Only create/update/delete when rendering on the live dashboard.
+    var _isEditing = config.editMode === true;
     var _storedTid = config._transformId || '';
     var _configHash = processingExtId + ':' + processingTemplate + ':' +
       (processingCategories || '') + ':' + (processingPhrase || '') + ':' + (processingClassFilter || '') + ':' +
@@ -580,6 +583,9 @@ var NE101CameraPanel = (function () {
       JSON.stringify(processingRois);
     var _storedHash = config._transformHash || '';
     React.useEffect(function () {
+      // Don't manage Transforms while in config dialog preview
+      if (_isEditing) return;
+
       var neomind = window.neomind;
       var onCfgChange = props.onConfigChange;
 
