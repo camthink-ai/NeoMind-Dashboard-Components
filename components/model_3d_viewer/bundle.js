@@ -251,23 +251,23 @@ var Model3DViewer = (function () {
 
     if (!editMode) {
       return jsxs('div', {
-        className: 'absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 bg-card border border-glass-border rounded-lg px-2.5 py-1.5',
-        style: { zIndex: 40 },
+        className: 'absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-0.5 rounded-lg px-1 py-0.5',
+        style: { zIndex: 40, backgroundColor: 'oklch(0.15 0.02 270 / 70%)', backdropFilter: 'blur(8px)' },
         children: [
           jsx('button', {
-            className: 'p-1.5 rounded-md hover:bg-muted text-muted-foreground',
+            className: 'w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground',
             onClick: onToggleEdit,
             title: 'Edit pins',
             dangerouslySetInnerHTML: { __html: Icons.edit }
           }),
           jsx('button', {
-            className: 'p-1.5 rounded-md hover:bg-muted text-muted-foreground',
+            className: 'w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground',
             onClick: onResetCamera,
             title: 'Reset view',
             dangerouslySetInnerHTML: { __html: Icons.reset }
           }),
           jsx('button', {
-            className: 'p-1.5 rounded-md hover:bg-muted text-muted-foreground',
+            className: 'w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground',
             title: 'Fullscreen',
             dangerouslySetInnerHTML: { __html: Icons.fullscreen }
           })
@@ -276,24 +276,22 @@ var Model3DViewer = (function () {
     }
 
     return jsxs('div', {
-      className: 'absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 bg-card border border-accent-purple rounded-lg px-2 py-1.5',
-      style: { zIndex: 40 },
+      className: 'absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-0.5 rounded-lg px-1 py-0.5',
+      style: { zIndex: 40, backgroundColor: 'oklch(0.15 0.02 270 / 70%)', backdropFilter: 'blur(8px)', border: '1px solid oklch(0.55 0.2 310 / 30%)' },
       children: [
         pinTypes.map(function (t) {
           var isActive = activePinType === t;
           var pc = PinColors[t];
           return jsx('button', {
-            className: 'flex items-center gap-1 px-2 py-1 rounded-md text-xs ' + (isActive ? pc.tw + ' bg-muted' : 'text-muted-foreground'),
+            className: 'w-7 h-7 flex items-center justify-center rounded ' + (isActive ? 'bg-muted ' + pc.tw : 'text-muted-foreground hover:bg-muted'),
             onClick: function () { onSelectPinType(t); },
-            children: [
-              jsx('span', { className: 'w-3 h-3 ' + pc.tw, dangerouslySetInnerHTML: { __html: Icons[t] } }),
-              jsx('span', { children: typeLabels[t] })
-            ]
+            title: typeLabels[t],
+            dangerouslySetInnerHTML: { __html: '<span style="display:block;width:14px;height:14px" class="' + pc.tw + '">' + Icons[t] + '</span>' }
           }, t);
         }),
-        jsx('div', { className: 'w-px bg-glass-border mx-1' }),
+        jsx('div', { className: 'w-px bg-glass-border mx-0.5', style: { height: '20px', alignSelf: 'center' } }),
         jsx('button', {
-          className: 'px-2 py-1 rounded-md text-xs text-muted-foreground hover:bg-muted',
+          className: 'px-2 h-7 rounded text-xs text-muted-foreground hover:bg-muted',
           onClick: onToggleEdit,
           children: 'Done'
         })
@@ -995,32 +993,33 @@ var Model3DViewer = (function () {
       };
     }, [config.modelUrl, bgColor, autoRotate]);
 
-    if (!modelUrl) {
-      return jsx('div', {
-        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-glass-border rounded-xl select-none',
-        children: jsxs('div', {
-          className: 'text-center space-y-3',
-          children: [
-            jsx('div', {
-              className: 'w-12 h-12 mx-auto rounded-xl bg-muted flex items-center justify-center',
-              style: { color: 'var(--color-muted-foreground)' },
-              dangerouslySetInnerHTML: { __html: Icons.upload }
-            }),
-            jsx('p', { className: 'text-sm text-muted-foreground', children: 'Configure a model URL to get started' })
-          ]
-        })
-      });
-    }
-
     return jsxs('div', {
       ref: containerRef,
       className: 'relative w-full h-full overflow-hidden rounded-xl',
       onPointerMove: handlePointerMove,
       onPointerUp: handlePointerUp,
       children: [
-        // Spinner keyframes animation
         jsx('style', { dangerouslySetInnerHTML: { __html: '@keyframes spin { to { transform: rotate(360deg) } }' } }),
-        editMode ? jsx('div', {
+        // Empty state — no model URL configured
+        !modelUrl && jsx('div', {
+          className: 'absolute inset-0 flex flex-col items-center justify-center',
+          children: jsxs('div', {
+            className: 'text-center space-y-4 px-6',
+            children: [
+              jsx('div', {
+                className: 'w-16 h-16 mx-auto rounded-2xl flex items-center justify-center',
+                style: { backgroundColor: 'oklch(0.55 0.15 250 / 10%)', border: '1px dashed oklch(0.55 0.15 250 / 30%)' },
+                dangerouslySetInnerHTML: { __html: Icons.upload }
+              }),
+              jsxs('div', { children: [
+                jsx('p', { className: 'text-sm font-medium text-foreground', children: 'No 3D Model' }),
+                jsx('p', { className: 'text-xs text-muted-foreground mt-1', children: 'Configure a GLTF/GLB URL or drag & drop a file' })
+              ]})
+            ]
+          })
+        }),
+        // Edit mode indicator
+        editMode && modelUrl ? jsx('div', {
           className: 'absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-md text-xs',
           style: {
             zIndex: 40,
@@ -1030,36 +1029,45 @@ var Model3DViewer = (function () {
           },
           children: 'Click on the model to place a ' + activePinType + ' pin'
         }) : null,
-        jsx(Toolbar, {
+        // Toolbar (compact buttons)
+        modelUrl && loadState === 'loaded' ? jsx(Toolbar, {
           editMode: editMode,
           onToggleEdit: toggleEdit,
           activePinType: activePinType,
           onSelectPinType: setActivePinType,
           onResetCamera: resetCamera,
           isSmall: isSmall
-        }),
+        }) : null,
+        // Loading overlay
         loadState === 'loading' && jsx('div', {
-          className: 'absolute inset-0 flex flex-col items-center justify-center rounded-xl',
+          className: 'absolute inset-0 flex flex-col items-center justify-center',
           style: { backgroundColor: 'oklch(0.15 0.02 270 / 80%)', zIndex: 50 },
           children: jsxs('div', { className: 'text-center', children: [
             jsx('div', {
               className: 'w-8 h-8 border-2 rounded-full mx-auto',
-              style: { borderTopColor: 'var(--color-info)', borderColor: 'var(--color-muted-foreground)', animation: 'spin 1s linear infinite' }
+              style: { borderTopColor: 'var(--color-info)', borderColor: 'oklch(0.4 0.02 270)', animation: 'spin 1s linear infinite' }
             }),
             jsx('p', { className: 'text-xs text-muted-foreground mt-2', children: 'Loading model...' })
           ]})
         }),
+        // Error overlay
         loadState === 'error' && jsx('div', {
-          className: 'absolute inset-0 flex flex-col items-center justify-center bg-card/90 z-10',
-          children: jsxs('div', { className: 'text-center space-y-3', children: [
-            jsx('p', { className: 'text-sm text-destructive', children: errorMsgValue || 'Failed to load model' }),
+          className: 'absolute inset-0 flex flex-col items-center justify-center',
+          style: { backgroundColor: 'oklch(0.15 0.02 270 / 90%)', zIndex: 50 },
+          children: jsxs('div', { className: 'text-center space-y-2', children: [
+            jsx('p', { className: 'text-sm text-error', children: errorMsgValue || 'Failed to load model' }),
             jsx('button', {
-              className: 'px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded-md hover:bg-primary/90',
-              onClick: function () { window.location.reload(); },
+              className: 'px-3 py-1 text-xs rounded-md',
+              style: { backgroundColor: 'var(--color-info)', color: 'var(--color-primary-foreground)' },
+              onClick: function () {
+                setLoadState('idle');
+                prevModelUrlRef.current = '';
+              },
               children: 'Retry'
             })
           ]})
         }),
+        // Pin overlay
         jsx('div', {
           className: 'absolute inset-0 pointer-events-none overflow-hidden',
           children: pins.map(function (pin) {
