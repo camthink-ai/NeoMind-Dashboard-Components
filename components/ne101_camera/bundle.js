@@ -631,6 +631,12 @@ var NE101CameraPanel = (function () {
         if (onCfgChange) onCfgChange(Object.assign({}, config, { _transformId: id, _transformHash: _configHash }));
       };
 
+      // resetGuard: called when this effect gives up (cancelled/error), clears sentinel
+      // so the next render's effect can retry Tier 3.
+      var resetGuard = function () {
+        if (transformIdRef.current === '_creating_') transformIdRef.current = null;
+      };
+
       // --- Tier 1: ID + hash match — done ---
       if (_storedTid && _storedHash === _configHash) {
         transformIdRef.current = _storedTid;
@@ -638,16 +644,19 @@ var NE101CameraPanel = (function () {
         return;
       }
 
-      // --- Tier 2: Have ID, config changed — update ---
-      if (_storedTid) {
-        transformIdRef.current = _storedTid;
+      // --- Tier 2: Have ID (config or ref), update ---
+      // ref may hold a real ID from a cancelled effect that created but didn't persist.
+      var _refId = transformIdRef.current;
+      var activeId = _storedTid || (_refId && _refId !== '_creating_' ? _refId : '');
+      if (activeId) {
+        transformIdRef.current = activeId;
         setExtStatus('active');
         if (neomind.updateTransform) {
-          neomind.updateTransform(_storedTid, {
+          neomind.updateTransform(activeId, {
             name: payload.name, description: payload.description,
             scope: payload.scope, js_code: payload.js_code, output_prefix: payload.output_prefix
           }).then(function () {
-            if (!cancelled) persist(_storedTid);
+            if (!cancelled) persist(activeId);
           }).catch(function () {
             if (cancelled) return;
             transformIdRef.current = null;
@@ -657,20 +666,65 @@ var NE101CameraPanel = (function () {
         return;
       }
 
-      // --- Tier 3: No ID — search by name first, create if not found ---
-      // After create, clean up any duplicates caused by concurrent effects.
+      // --- Tier 3: No ID anywhere ---
+      // Synchronous guard: if another effect already set '_creating_', wait for it.
+      // It will either persist an ID (triggers re-render → Tier 2) or fail (resets guard).
+      if (transformIdRef.current === '_creating_') return;
+      transformIdRef.current = '_creating_';
+
       setExtStatus('checking');
 
-      var dedup = function (keepId) {
-        // Delete any other transforms with the same name (concurrent create duplicates)
-        if (!neomind.listTransforms || !neomind.deleteTransform) return;
-        neomind.listTransforms({ name: transformName }).then(function (list) {
-          var arr = Array.isArray(list) ? list : [];
-          for (var i = 0; i < arr.length; i++) {
-            if (arr[i].id !== keepId) neomind.deleteTransform(arr[i].id).catch(function () {});
-          }
-        });
+      var doCreate = function () {
+        if (cancelled) { resetGuard(); return; }
+        neomind.createTransform(payload).then(function (r) {
+          // Always update ref so Tier 2 can use it on next render
+          if (r && r.id) transformIdRef.current = r.id;
+          if (!cancelled && r && r.id) { persist(r.id); setExtStatus('active'); }
+        }).catch(function () { resetGuard(); if (!cancelled) setExtStatus('error'); });
       };
+
+      var afterExtCheck = function () {
+        if (cancelled) { resetGuard(); return; }
+        if (neomind.listTransforms) {
+          neomind.listTransforms({ name: transformName }).then(function (list) {
+            if (cancelled) { resetGuard(); return; }
+            var arr = Array.isArray(list) ? list : [];
+            var found = null;
+            for (var fi = 0; fi < arr.length; fi++) {
+              if (arr[fi].scope === device.id) { found = arr[fi]; break; }
+            }
+            if (found) {
+              // Reuse existing — adopt its ID
+              transformIdRef.current = found.id;
+              if (!cancelled) { persist(found.id); setExtStatus('active'); }
+            } else {
+              doCreate();
+            }
+          }).catch(function () { if (!cancelled) doCreate(); else resetGuard(); });
+        } else {
+          doCreate();
+        }
+      };
+
+      if (neomind.listExtensions) {
+        neomind.listExtensions().then(function (exts) {
+          if (cancelled) { resetGuard(); return; }
+          var extList = Array.isArray(exts) ? exts : [];
+          var matched = null;
+          for (var ei = 0; ei < extList.length; ei++) {
+            if (extList[ei].id === processingExtId) { matched = extList[ei]; break; }
+          }
+          if (!matched) { resetGuard(); setExtStatus('not_installed'); return; }
+          var st = (matched.state || '').toLowerCase();
+          if (st.indexOf('stopped') >= 0 || st.indexOf('failed') >= 0 || st.indexOf('error') >= 0) { resetGuard(); setExtStatus('offline'); return; }
+          afterExtCheck();
+        }).catch(function () { resetGuard(); if (!cancelled) setExtStatus('error'); });
+      } else {
+        afterExtCheck();
+      }
+
+      return function () { cancelled = true; };
+    }, [device ? device.id : null, processingEnabled, _configHash, _storedTid, _storedHash]);
 
       var doCreate = function () {
         if (cancelled) return;
