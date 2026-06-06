@@ -614,18 +614,19 @@ var NE101CameraPanel = (function () {
       }
 
       // --- No API ---
-      if (!neomind || !neomind.createTransform) { setExtStatus('unavailable'); return; }
+      if (!neomind || !neomind.createTransform) { console.log('[NE101-TF] no neomind API'); setExtStatus('unavailable'); return; }
 
       // --- Build payload ---
       var mode = getExtMode(processingExtId, processingTemplate);
-      if (!mode) { setExtStatus('active'); return; }
+      console.log('[NE101-TF] mode:', mode, 'template:', processingTemplate);
+      if (!mode) { console.log('[NE101-TF] no mode found'); setExtStatus('active'); return; }
       var reqArgs = mode.args || [];
       var missing = false;
       for (var ai = 0; ai < reqArgs.length; ai++) {
         if (reqArgs[ai] === 'categories' && !(processingCategories || '').trim()) { missing = true; break; }
         if (reqArgs[ai] === 'phrase' && !(processingPhrase || '').trim()) { missing = true; break; }
       }
-      if (missing) { setExtStatus('active'); return; }
+      if (missing) { console.log('[NE101-TF] missing required args'); setExtStatus('active'); return; }
 
       var pipe = {
         id: 'main', deviceId: device.id, extId: processingExtId, template: processingTemplate,
@@ -656,6 +657,7 @@ var NE101CameraPanel = (function () {
 
       // --- Tier 1: ID + hash match — done ---
       if (_storedTid && _storedHash === _configHash) {
+        console.log('[NE101-TF] Tier 1: hash match, id:', _storedTid);
         transformIdRef.current = _storedTid;
         setExtStatus('active');
         return;
@@ -666,6 +668,7 @@ var NE101CameraPanel = (function () {
       var _refId = transformIdRef.current;
       var activeId = _storedTid || (_refId && _refId !== '_creating_' ? _refId : '');
       if (activeId) {
+        console.log('[NE101-TF] Tier 2: updating', activeId);
         transformIdRef.current = activeId;
         setExtStatus('active');
         if (neomind.updateTransform) {
@@ -684,6 +687,7 @@ var NE101CameraPanel = (function () {
       }
 
       // --- Tier 3: No ID anywhere ---
+      console.log('[NE101-TF] Tier 3: creating new transform, name:', transformName);
       // Synchronous guard: if another effect already set '_creating_', wait for it.
       // It will either persist an ID (triggers re-render → Tier 2) or fail (resets guard).
       if (transformIdRef.current === '_creating_') return;
@@ -693,7 +697,9 @@ var NE101CameraPanel = (function () {
 
       var doCreate = function () {
         if (cancelled) { resetGuard(); return; }
+        console.log('[NE101-TF] calling createTransform...');
         neomind.createTransform(payload).then(function (r) {
+          console.log('[NE101-TF] createTransform result:', r);
           // Always update ref so Tier 2 can use it on next render
           if (r && r.id) transformIdRef.current = r.id;
           if (!cancelled && r && r.id) { persist(r.id); setExtStatus('active'); }
@@ -731,9 +737,10 @@ var NE101CameraPanel = (function () {
           for (var ei = 0; ei < extList.length; ei++) {
             if (extList[ei].id === processingExtId) { matched = extList[ei]; break; }
           }
-          if (!matched) { resetGuard(); setExtStatus('not_installed'); return; }
+          if (!matched) { resetGuard(); console.log('[NE101-TF] ext not installed'); setExtStatus('not_installed'); return; }
           var st = (matched.state || '').toLowerCase();
-          if (st.indexOf('stopped') >= 0 || st.indexOf('failed') >= 0 || st.indexOf('error') >= 0) { resetGuard(); setExtStatus('offline'); return; }
+          if (st.indexOf('stopped') >= 0 || st.indexOf('failed') >= 0 || st.indexOf('error') >= 0) { resetGuard(); console.log('[NE101-TF] ext offline:', st); setExtStatus('offline'); return; }
+          console.log('[NE101-TF] ext found, checking existing transforms');
           afterExtCheck();
         }).catch(function () { resetGuard(); if (!cancelled) setExtStatus('error'); });
       } else {
