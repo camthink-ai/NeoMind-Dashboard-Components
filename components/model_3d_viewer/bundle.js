@@ -26,10 +26,211 @@ var Model3DViewer = (function () {
     command: { three: 0xc084fc, tw: 'text-accent-purple', twBg: 'bg-accent-purple-light' }
   };
 
-  // --- Root Component (shell — will be expanded in later tasks) ---
+  // --- Three.js dynamic loader (IIFE/UMD from jsDelivr, NOT ESM) ---
+  var THREE_VERSION = '0.169.0';
+  var THREE_CDN = 'https://cdn.jsdelivr.net/npm/three@' + THREE_VERSION;
+
+  var loadScript = function (url) {
+    return new Promise(function (resolve, reject) {
+      var existing = document.querySelector('script[src="' + url + '"]');
+      if (existing) { resolve(); return; }
+      var script = document.createElement('script');
+      script.src = url;
+      script.onload = resolve;
+      script.onerror = function () { reject(new Error('Failed to load: ' + url)); };
+      document.head.appendChild(script);
+    });
+  };
+
+  var loadThreeJS = function () {
+    return loadScript(THREE_CDN + '/build/three.min.js').then(function () {
+      return Promise.all([
+        loadScript(THREE_CDN + '/examples/js/controls/OrbitControls.js'),
+        loadScript(THREE_CDN + '/examples/js/loaders/GLTFLoader.js')
+      ]);
+    });
+  };
+
+  // --- Scene creation ---
+  var createScene = function (container, bgColor) {
+    var THREE = window.THREE;
+
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color(bgColor || '#111827');
+
+    var w = container.offsetWidth;
+    var h = container.offsetHeight;
+    var camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 1000);
+    camera.position.set(3, 2, 3);
+
+    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    container.appendChild(renderer.domElement);
+
+    var controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    var raycaster = new THREE.Raycaster();
+
+    return {
+      scene: scene,
+      camera: camera,
+      renderer: renderer,
+      controls: controls,
+      raycaster: raycaster,
+      container: container
+    };
+  };
+
+  // --- Model loading ---
+  var loadModel = function (sceneHandle, urlOrFile) {
+    var THREE = window.THREE;
+    var loader = new THREE.GLTFLoader();
+
+    var loadPromise;
+    if (typeof urlOrFile === 'string') {
+      loadPromise = new Promise(function (resolve, reject) {
+        loader.load(urlOrFile, resolve, undefined, reject);
+      });
+    } else {
+      loadPromise = new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          loader.parse(e.target.result, '', resolve, reject);
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(urlOrFile);
+      });
+    }
+
+    return loadPromise.then(function (gltf) {
+      var model = gltf.scene;
+      sceneHandle.scene.add(model);
+
+      var box = new THREE.Box3().setFromObject(model);
+      var center = box.getCenter(new THREE.Vector3());
+      var size = box.getSize(new THREE.Vector3());
+      var maxDim = Math.max(size.x, size.y, size.z);
+      var distance = maxDim * 2;
+
+      sceneHandle.camera.position.set(
+        center.x + distance * 0.7,
+        center.y + distance * 0.5,
+        center.z + distance * 0.7
+      );
+      sceneHandle.controls.target.copy(center);
+      sceneHandle.controls.update();
+
+      return model;
+    });
+  };
+
+  // --- Scene cleanup ---
+  var disposeScene = function (sceneHandle) {
+    if (!sceneHandle) return;
+    if (sceneHandle.frameId) cancelAnimationFrame(sceneHandle.frameId);
+    sceneHandle.scene.traverse(function (obj) {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach(function (m) { m.dispose(); });
+        } else {
+          obj.material.dispose();
+        }
+      }
+    });
+    sceneHandle.renderer.dispose();
+    if (sceneHandle.renderer.domElement.parentNode) {
+      sceneHandle.renderer.domElement.parentNode.removeChild(sceneHandle.renderer.domElement);
+    }
+  };
+
+  // --- Root Component (full Three.js lifecycle) ---
   function Model3DViewer(props) {
     var config = props.config || {};
     var modelUrl = config.modelUrl || '';
+
+    var containerRef = React.useRef(null);
+    var sceneHandleRef = React.useRef(null);
+    var modelRef = React.useRef(null);
+
+    var loadState = React.useState('idle');
+    var setLoadState = loadState[1];
+    var errorMsg = React.useState('');
+    var setErrorMsg = errorMsg[1];
+    var errorMsgValue = errorMsg[0];
+
+    var bgColor = config.backgroundColor || '#111827';
+    var autoRotate = config.autoRotate || false;
+
+    React.useEffect(function () {
+      if (!modelUrl) return;
+
+      setLoadState('loading');
+      setErrorMsg('');
+
+      var container = containerRef.current;
+      if (!container) return;
+
+      var observer = null;
+      var sceneHandle = null;
+
+      loadThreeJS().then(function () {
+        sceneHandle = createScene(container, bgColor);
+        sceneHandleRef.current = sceneHandle;
+
+        if (autoRotate) {
+          sceneHandle.controls.autoRotate = true;
+          sceneHandle.controls.autoRotateSpeed = 2.0;
+        }
+
+        return loadModel(sceneHandle, modelUrl);
+      }).then(function (model) {
+        modelRef.current = model;
+
+        function animate() {
+          if (!sceneHandleRef.current) return;
+          sceneHandleRef.current.controls.update();
+          sceneHandleRef.current.renderer.render(
+            sceneHandleRef.current.scene,
+            sceneHandleRef.current.camera
+          );
+          sceneHandleRef.current.frameId = requestAnimationFrame(animate);
+        }
+        animate();
+
+        observer = new ResizeObserver(function () {
+          if (!sceneHandleRef.current) return;
+          var w = container.offsetWidth;
+          var h = container.offsetHeight;
+          sceneHandleRef.current.camera.aspect = w / h;
+          sceneHandleRef.current.camera.updateProjectionMatrix();
+          sceneHandleRef.current.renderer.setSize(w, h);
+        });
+        observer.observe(container);
+
+        setLoadState('loaded');
+      }).catch(function (err) {
+        console.error('Failed to load 3D model:', err);
+        setErrorMsg(err.message || 'Failed to load model');
+        setLoadState('error');
+        if (sceneHandleRef.current) {
+          disposeScene(sceneHandleRef.current);
+          sceneHandleRef.current = null;
+        }
+      });
+
+      return function cleanup() {
+        if (observer) observer.disconnect();
+        if (sceneHandleRef.current) {
+          disposeScene(sceneHandleRef.current);
+          sceneHandleRef.current = null;
+        }
+      };
+    }, [modelUrl, bgColor, autoRotate]);
 
     if (!modelUrl) {
       return jsx('div', {
@@ -48,9 +249,29 @@ var Model3DViewer = (function () {
       });
     }
 
-    return jsx('div', {
-      className: 'flex items-center justify-center h-full w-full bg-card border border-glass-border rounded-xl select-none',
-      children: jsx('p', { className: 'text-sm text-muted-foreground', children: '3D Viewer loading...' })
+    return jsxs('div', {
+      ref: containerRef,
+      className: 'relative w-full h-full overflow-hidden rounded-xl',
+      children: [
+        loadState === 'loading' && jsx('div', {
+          className: 'absolute inset-0 flex flex-col items-center justify-center bg-card/80 z-10',
+          children: jsxs('div', { className: 'text-center space-y-2', children: [
+            jsx('div', { className: 'w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto' }),
+            jsx('p', { className: 'text-sm text-muted-foreground', children: 'Loading model...' })
+          ]})
+        }),
+        loadState === 'error' && jsx('div', {
+          className: 'absolute inset-0 flex flex-col items-center justify-center bg-card/90 z-10',
+          children: jsxs('div', { className: 'text-center space-y-3', children: [
+            jsx('p', { className: 'text-sm text-destructive', children: errorMsgValue || 'Failed to load model' }),
+            jsx('button', {
+              className: 'px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded-md hover:bg-primary/90',
+              onClick: function () { window.location.reload(); },
+              children: 'Retry'
+            })
+          ]})
+        })
+      ]
     });
   }
 
