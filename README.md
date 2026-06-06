@@ -334,6 +334,7 @@ See [STYLE_GUIDE.md](./STYLE_GUIDE.md) for the full visual style guide covering:
 | ID | Category | Description |
 |----|----------|-------------|
 | `clock` | Display | Real-time clock widget with 12h/24h format |
+| `model_3d_viewer` | Visualization | Interactive 3D model viewer with marker pins for metrics, devices, annotations, and commands |
 | `ne101_camera` | Device | CamThink NE101 camera panel with capture display, battery, AI processing pipeline, and device commands |
 
 ---
@@ -519,3 +520,95 @@ if (!neomind) {
 - **Never poll REST APIs** — `device.currentValues` in props is updated in real-time via WebSocket
 - **Clean up transforms** only on component deletion, not on page navigation or unmount
 - **Never block rendering** — use async patterns and show loading/fallback states
+
+## Lessons Learned (NE101 Development)
+
+Building the NE101 camera component uncovered several platform-specific pitfalls. Documenting them here to avoid repeating.
+
+### 1. Transform Lifecycle vs React StrictMode
+
+**Problem**: React StrictMode executes `useEffect` twice (mount → unmount → mount), causing `createTransform` to be called twice and producing duplicate Transforms.
+
+**Dead ends tried**:
+- `creatingRef` mutex → StrictMode's second mount runs after the first cleanup resets the ref, so the mutex is ineffective
+- Atomic sentinel (`_creating_`) → still racy
+- Post-creation dedup → creates first then cleans up, leaving a window with multiple Transforms
+- Server-side `listTransforms` name search → works but has latency
+
+**Final solution** — three-tier strategy:
+1. **Tier 1**: Has `_transformId` + `_transformHash` match → no-op
+2. **Tier 2**: Has `_transformId` but hash changed → `updateTransform`
+3. **Tier 3**: No `_transformId` → `listTransforms` dedup check + `createTransform`
+4. Use `transformIdRef` to track the ID in memory and prevent concurrent creation
+
+See `transformIdRef` and `_configHash` in `bundle.js` for the implementation.
+
+### 2. Config Dialog Preview Triggering Transform Operations
+
+**Problem**: When the user opens the config dialog, NeoMind renders a live component preview. The component's `useEffect` runs in this preview too, causing Transform create/update/delete operations during config editing.
+
+**Wrong approach**: Check `config.editMode` → this value gets persisted to the config, so it also takes effect during live rendering.
+
+**Correct approach**: Check `typeof props.onConfigChange !== 'function'`. The config dialog preview does not pass `onConfigChange`, while live rendering does. This is platform behavior, not a config value, so it never gets persisted.
+
+```javascript
+var _isPreview = typeof props.onConfigChange !== 'function';
+React.useEffect(function () {
+  if (_isPreview) return;  // Skip Transform operations in preview
+  // ... Transform lifecycle
+}, [...]);
+```
+
+### 3. Backend Virtual Metrics Returned as JSON Strings
+
+**Problem**: The backend TransformEngine writes virtual metrics (e.g. `virtual.detections`) as JSON strings (`"[{...}]"`), not JS objects. The frontend's `Array.isArray()` check always returned `false`, so detections never rendered.
+
+**Fix**: Check the type and `JSON.parse` before use:
+
+```javascript
+if (typeof vDet === 'string') { try { vDet = JSON.parse(vDet); } catch(e) { vDet = null; } }
+```
+
+**Lesson**: Backend metric values may not match frontend-expected types, especially for complex structures (arrays, objects). Always do type checks and fallback parsing.
+
+### 4. Canvas Coordinate Mapping with objectFit Contain
+
+**Problem**: The image was displayed with `objectFit: 'contain'` inside the canvas container, but ROI click coordinates were mapped directly via `clientX / rect.width` to 0–1. When the image aspect ratio differs from the container, `contain` adds letterboxing (black bars), causing the click position to not correspond to the actual image content.
+
+**Fix**: Add a `containTransform()` helper to compute the actual rendered area (offset + scale) under contain mode, and use it consistently in both click handling and canvas drawing:
+
+```javascript
+function containTransform(imgW, imgH, cW, cH) {
+  var imgAsp = imgW / imgH, cAsp = cW / cH;
+  var scale, ox, oy;
+  if (imgAsp > cAsp) { scale = cW / imgW; ox = 0; oy = (cH - imgH * scale) / 2; }
+  else { scale = cH / imgH; ox = (cW - imgW * scale) / 2; oy = 0; }
+  return { scale: scale, ox: ox, oy: oy, w: imgW * scale, h: imgH * scale };
+}
+```
+
+**Lesson**: Any canvas overlay + `objectFit` combination requires explicit contain/cover offset calculation. A similar `object-cover` scenario is also covered by tests (`objectCoverTransform`).
+
+### 5. Initial Fetch Required on Mount
+
+**Problem**: Image data relies on real-time WebSocket push, but on first mount the WS connection may not be established yet or no new data has been produced, leaving the image blank.
+
+**Fix**: Call `fetchDeviceValues` proactively in `useEffect` for initial data, then rely on WS push for subsequent updates.
+
+```javascript
+React.useEffect(function () {
+  if (!deviceId) return;
+  // Initial fetch on mount
+  neomind.fetchDeviceValues(deviceId).then(function(v) { ... });
+}, [deviceId]);
+```
+
+### 6. Ref Write Timing vs Early Return
+
+**Problem**: In async functions, ref writes (e.g. `cacheRef.current = data`) were placed after an early return. When the early return triggered, the ref was never updated, causing subsequent renders to use stale data.
+
+**Fix**: Move ref writes before early returns so the ref is always updated regardless of which branch is taken.
+
+---
+
+> These issues were all encountered during real development and debugging. Refer to these patterns when facing similar scenarios.
