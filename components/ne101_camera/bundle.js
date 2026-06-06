@@ -572,9 +572,9 @@ var NE101CameraPanel = (function () {
     }
 
     // Transform lifecycle — store ID in config, use it.
-    // Skip Transform operations while editing (config dialog preview).
+    // Skip Transform operations in config dialog preview (no onConfigChange).
     // Only create/update/delete when rendering on the live dashboard.
-    var _isEditing = props.editMode === true;
+    var _isPreview = typeof props.onConfigChange !== 'function';
     var _storedTid = config._transformId || '';
     var _configHash = processingExtId + ':' + processingTemplate + ':' +
       (processingCategories || '') + ':' + (processingPhrase || '') + ':' + (processingClassFilter || '') + ':' +
@@ -584,6 +584,7 @@ var NE101CameraPanel = (function () {
     var _storedHash = config._transformHash || '';
     React.useEffect(function () {
       console.log('[NE101-TF] useEffect fired', {
+        isPreview: _isPreview,
         editMode: props.editMode,
         processingEnabled: processingEnabled,
         processingExtId: processingExtId,
@@ -593,7 +594,7 @@ var NE101CameraPanel = (function () {
         configHash: _configHash
       });
       // Don't manage Transforms while in config dialog preview
-      if (_isEditing) { console.log('[NE101-TF] skipped: editMode'); return; }
+      if (_isPreview) { console.log('[NE101-TF] skipped: preview mode'); return; }
 
       var neomind = window.neomind;
       var onCfgChange = props.onConfigChange;
