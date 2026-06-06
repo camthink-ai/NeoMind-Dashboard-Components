@@ -1460,6 +1460,17 @@ var NE101CameraPanel = (function () {
     var setCurrentPts = drawState[1];
     var canvasRef = React.useRef(null);
     var imgRef = React.useRef(null);
+    var imgNatState2 = React.useState({ w: 1, h: 1 });
+    var imgNat2 = imgNatState2[0];
+
+    // objectFit contain transform helper
+    function containTransform(imgW, imgH, cW, cH) {
+      var imgAsp = imgW / imgH, cAsp = cW / cH;
+      var scale, ox, oy;
+      if (imgAsp > cAsp) { scale = cW / imgW; ox = 0; oy = (cH - imgH * scale) / 2; }
+      else { scale = cH / imgH; ox = (cW - imgW * scale) / 2; oy = 0; }
+      return { scale: scale, ox: ox, oy: oy, w: imgW * scale, h: imgH * scale };
+    }
 
     // Canvas redraw effect
     React.useEffect(function () {
@@ -1475,14 +1486,15 @@ var NE101CameraPanel = (function () {
       ctx.clearRect(0, 0, rect.width, rect.height);
       var cw = rect.width;
       var ch = rect.height;
+      var ct = containTransform(imgNat2.w, imgNat2.h, cw, ch);
 
       for (var ri = 0; ri < rois.length; ri++) {
         var pts = rois[ri].points || [];
         if (pts.length < 2) continue;
         ctx.beginPath();
-        ctx.moveTo(pts[0].x * cw, pts[0].y * ch);
+        ctx.moveTo(ct.ox + pts[0].x * ct.w, ct.oy + pts[0].y * ct.h);
         for (var pi = 1; pi < pts.length; pi++) {
-          ctx.lineTo(pts[pi].x * cw, pts[pi].y * ch);
+          ctx.lineTo(ct.ox + pts[pi].x * ct.w, ct.oy + pts[pi].y * ct.h);
         }
         ctx.closePath();
         ctx.fillStyle = 'rgba(255, 200, 50, 0.15)';
@@ -1492,13 +1504,13 @@ var NE101CameraPanel = (function () {
         ctx.stroke();
         ctx.fillStyle = 'rgba(255, 200, 50, 0.9)';
         ctx.font = '10px monospace';
-        ctx.fillText(rois[ri].name || 'ROI ' + (ri + 1), pts[0].x * cw + 4, pts[0].y * ch - 4);
+        ctx.fillText(rois[ri].name || 'ROI ' + (ri + 1), ct.ox + pts[0].x * ct.w + 4, ct.oy + pts[0].y * ct.h - 4);
       }
       if (currentPts.length > 0) {
         ctx.beginPath();
-        ctx.moveTo(currentPts[0].x * cw, currentPts[0].y * ch);
+        ctx.moveTo(ct.ox + currentPts[0].x * ct.w, ct.oy + currentPts[0].y * ct.h);
         for (var cpi = 1; cpi < currentPts.length; cpi++) {
-          ctx.lineTo(currentPts[cpi].x * cw, currentPts[cpi].y * ch);
+          ctx.lineTo(ct.ox + currentPts[cpi].x * ct.w, ct.oy + currentPts[cpi].y * ct.h);
         }
         ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)';
         ctx.lineWidth = 1.5;
@@ -1507,18 +1519,17 @@ var NE101CameraPanel = (function () {
         ctx.setLineDash([]);
         for (var dotI = 0; dotI < currentPts.length; dotI++) {
           ctx.beginPath();
-          ctx.arc(currentPts[dotI].x * cw, currentPts[dotI].y * ch, 3, 0, Math.PI * 2);
+          ctx.arc(ct.ox + currentPts[dotI].x * ct.w, ct.oy + currentPts[dotI].y * ct.h, 3, 0, Math.PI * 2);
           ctx.fillStyle = dotI === 0 ? 'rgba(59, 130, 246, 1)' : 'rgba(59, 130, 246, 0.7)';
           ctx.fill();
         }
       }
-    }, [roiEnabled, rois, currentPts]);
+    }, [roiEnabled, rois, currentPts, imgNat2]);
 
     // Fetch preview image from bound device
     var deviceId = config.deviceBinding && config.deviceBinding.deviceId;
     var previewImgState = React.useState('');
     var previewSrc = previewImgState[0];
-    var imgNatState2 = React.useState({ w: 1, h: 1 });
     React.useEffect(function () {
       if (!deviceId) { previewImgState[1](''); return; }
       var neomind = window.neomind;
@@ -1646,7 +1657,6 @@ var NE101CameraPanel = (function () {
         );
 
         // ROI drawing canvas — visual polygon drawing on top of the camera image
-        var imgNat2 = imgNatState2[0];
         var canvasAspect = imgNat2.w > 0 && imgNat2.h > 0 ? (imgNat2.w / imgNat2.h) : (16 / 9);
         // Max height 200px, width auto based on aspect
         var canvasH = 180;
@@ -1655,6 +1665,11 @@ var NE101CameraPanel = (function () {
         var canvasStyle = canvasW > 400
           ? { width: '100%', aspectRatio: String(canvasAspect), maxHeight: '200px', background: '#1a1a2e' }
           : { width: Math.round(canvasW) + 'px', height: canvasH + 'px', background: '#1a1a2e' };
+
+        // ROI list editing state
+        var editingIdxState = React.useState(-1);
+        var editingIdx = editingIdxState[0];
+        var setEditingIdx = editingIdxState[1];
 
         var canvasContainer = jsxs('div', { key: 'roi-canvas-wrap', className: FIELD_CLS, children: [
           jsx('label', { className: 'text-xs font-medium', children:
@@ -1670,7 +1685,7 @@ var NE101CameraPanel = (function () {
                 ? jsx('img', {
                     ref: imgRef,
                     src: previewSrc,
-                    style: { width: '100%', height: '100%', objectFit: 'contain', opacity: 0.5 },
+                    style: { width: '100%', height: '100%', objectFit: 'contain', opacity: 0.7 },
                     crossOrigin: 'anonymous',
                     onLoad: function (e) {
                       var img = e.target;
@@ -1688,10 +1703,14 @@ var NE101CameraPanel = (function () {
                   var canvas = canvasRef.current;
                   if (!canvas) return;
                   var rect = canvas.getBoundingClientRect();
-                  var x = (e.clientX - rect.left) / rect.width;
-                  var y = (e.clientY - rect.top) / rect.height;
-                  x = Math.max(0, Math.min(1, x));
-                  y = Math.max(0, Math.min(1, y));
+                  var ct = containTransform(imgNat2.w, imgNat2.h, rect.width, rect.height);
+                  var px = e.clientX - rect.left;
+                  var py = e.clientY - rect.top;
+                  // Convert canvas pixel → image normalized coords (accounting for contain offset)
+                  var x = (px - ct.ox) / ct.w;
+                  var y = (py - ct.oy) / ct.h;
+                  // Only accept clicks within the actual image area
+                  if (x < 0 || x > 1 || y < 0 || y > 1) return;
 
                   if (currentPts.length >= 3) {
                     var dx = x - currentPts[0].x;
@@ -1709,79 +1728,97 @@ var NE101CameraPanel = (function () {
               })
             ]
           }),
-          // Action buttons row
-          jsxs('div', { className: 'flex gap-1.5 mt-1', children: [
-            currentPts.length >= 3
-              ? jsx('button', {
-                  type: 'button',
-                  onClick: function () {
-                    var defaultName = 'ROI_' + (rois.length + 1);
-                    var newRois = rois.concat([{ name: defaultName, points: currentPts.slice() }]);
-                    update('processingRois', newRois);
-                    setCurrentPts([]);
-                  },
-                  className: 'px-2 py-1 rounded-md border border-primary bg-primary/10 text-primary text-xs font-medium',
-                  children: 'Done'
-                })
-              : null,
-            currentPts.length > 0
-              ? jsx('button', {
+          // Drawing action buttons (only while drawing)
+          currentPts.length > 0
+            ? jsxs('div', { className: 'flex gap-1.5 mt-1', children: [
+                currentPts.length >= 3
+                  ? jsx('button', {
+                      type: 'button',
+                      onClick: function () {
+                        var defaultName = 'ROI_' + (rois.length + 1);
+                        var newRois = rois.concat([{ name: defaultName, points: currentPts.slice() }]);
+                        update('processingRois', newRois);
+                        setCurrentPts([]);
+                      },
+                      className: 'px-2 py-1 rounded-md border border-primary bg-primary/10 text-primary text-xs font-medium',
+                      children: 'Done'
+                    })
+                  : null,
+                jsx('button', {
                   type: 'button',
                   onClick: function () { setCurrentPts([]); },
                   className: 'px-2 py-1 rounded-md border border-border text-muted-foreground text-xs',
                   children: 'Cancel'
                 })
-              : null,
-            jsx('button', {
-              type: 'button',
-              onClick: function () {
-                update('processingRois', []);
-                setCurrentPts([]);
-              },
-              className: 'px-2 py-1 rounded-md border border-border text-muted-foreground text-xs' +
-                (rois.length === 0 ? ' opacity-50 cursor-not-allowed' : ''),
-              children: 'Clear All'
-            })
-          ]}),
-          // ROI regions list
+              ]})
+            : null,
+          // ROI regions list with header
           rois.length > 0
-            ? jsx('div', { className: 'mt-2 space-y-1.5', children:
-                rois.map(function (roi, ri) {
-                  return jsxs('div', {
-                    className: 'flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/40 border border-border',
-                    children: [
-                      jsx('div', {
-                        className: 'w-3 h-3 rounded flex-shrink-0 border',
-                        style: { background: 'rgba(255,200,50,0.35)', borderColor: 'rgba(255,200,50,0.7)' }
-                      }),
-                      jsxs('div', { className: 'flex-1 min-w-0', children: [
-                        jsx('input', {
-                          className: 'h-5 px-1.5 rounded border border-border bg-background text-xs font-medium w-full',
-                          value: roi.name || '',
-                          placeholder: 'Region name',
-                          onChange: function (e) {
-                            var updated = rois.slice();
-                            updated[ri] = Object.assign({}, updated[ri], { name: e.target.value });
+            ? jsxs('div', { className: 'mt-2', children: [
+                // List header: title + count + clear all
+                jsxs('div', { className: 'flex items-center justify-between mb-1.5', children: [
+                  jsxs('div', { className: 'flex items-center gap-1.5', children: [
+                    jsx('span', { className: 'text-xs font-medium text-muted-foreground', children: 'Regions' }),
+                    jsx('span', { className: 'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-muted text-[10px] font-medium text-muted-foreground tabular-nums', children: String(rois.length) })
+                  ]}),
+                  jsx('button', {
+                    type: 'button',
+                    onClick: function () {
+                      update('processingRois', []);
+                      setCurrentPts([]);
+                    },
+                    className: 'text-[10px] text-muted-foreground hover:text-red-500 transition-colors px-1 py-0.5 rounded hover:bg-red-500/10',
+                    children: 'Clear All'
+                  })
+                ]}),
+                // ROI items
+                jsx('div', { className: 'space-y-1', children:
+                  rois.map(function (roi, ri) {
+                    var isEditing = editingIdx === ri;
+                    return jsxs('div', {
+                      className: 'group flex items-center gap-2 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors',
+                      children: [
+                        jsx('div', {
+                          className: 'w-1.5 h-1.5 rounded-full flex-shrink-0',
+                          style: { background: 'rgba(255,200,50,0.9)' }
+                        }),
+                        isEditing
+                          ? jsx('input', {
+                              className: 'flex-1 min-w-0 h-5 px-1 rounded border border-border bg-background text-xs font-medium',
+                              value: roi.name || '',
+                              placeholder: 'Region name',
+                              autoFocus: true,
+                              onBlur: function () { setEditingIdx(-1); },
+                              onKeyDown: function (e) { if (e.key === 'Enter') setEditingIdx(-1); },
+                              onChange: function (e) {
+                                var updated = rois.slice();
+                                updated[ri] = Object.assign({}, updated[ri], { name: e.target.value });
+                                update('processingRois', updated);
+                              }
+                            })
+                          : jsx('span', {
+                              className: 'flex-1 min-w-0 text-xs font-medium truncate cursor-pointer hover:text-primary transition-colors',
+                              onClick: function () { setEditingIdx(ri); },
+                              children: roi.name || 'ROI ' + (ri + 1)
+                            }),
+                        jsx('span', { className: 'text-[10px] text-muted-foreground/60 tabular-nums flex-shrink-0', children: (roi.points || []).length + 'pts' }),
+                        jsx('button', {
+                          type: 'button',
+                          onClick: function () {
+                            var updated = rois.filter(function (_, i) { return i !== ri; });
                             update('processingRois', updated);
-                          }
+                            if (editingIdx === ri) setEditingIdx(-1);
+                          },
+                          className: 'flex-shrink-0 w-4 h-4 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-all',
+                          children: jsx('svg', { width: '10', height: '10', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2.5', strokeLinecap: 'round', strokeLinejoin: 'round', children:
+                            jsx('path', { d: 'M18 6 6 18M6 6l12 12' })
+                          })
                         })
-                      ]}),
-                      jsx('span', { className: 'text-[10px] text-muted-foreground tabular-nums flex-shrink-0', children: (roi.points || []).length + 'pts' }),
-                      jsx('button', {
-                        type: 'button',
-                        onClick: function () {
-                          var updated = rois.filter(function (_, i) { return i !== ri; });
-                          update('processingRois', updated);
-                        },
-                        className: 'flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors',
-                        children: jsx('svg', { width: '12', height: '12', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round', children:
-                          jsx('path', { d: 'M18 6 6 18M6 6l12 12' })
-                        })
-                      })
-                    ]
-                  });
+                      ]
+                    });
+                  })
                 })
-              })
+              ]})
             : null
         ]});
         items.push(canvasContainer);
