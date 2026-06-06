@@ -732,63 +732,6 @@ var NE101CameraPanel = (function () {
       return function () { cancelled = true; };
     }, [device ? device.id : null, processingEnabled, _configHash, _storedTid, _storedHash]);
 
-      var doCreate = function () {
-        if (cancelled) return;
-        neomind.createTransform(payload).then(function (r) {
-          if (!cancelled && r && r.id) { persist(r.id); setExtStatus('active'); }
-          if (r && r.id) dedup(r.id);
-        }).catch(function () { if (!cancelled) setExtStatus('error'); });
-      };
-
-      var afterExtCheck = function () {
-        if (cancelled) return;
-        if (neomind.listTransforms) {
-          neomind.listTransforms({ name: transformName }).then(function (list) {
-            if (cancelled) return;
-            var arr = Array.isArray(list) ? list : [];
-            var found = null;
-            for (var fi = 0; fi < arr.length; fi++) {
-              if (arr[fi].scope === device.id) { found = arr[fi]; break; }
-            }
-            if (found) {
-              // Reuse existing
-              transformIdRef.current = found.id;
-              setExtStatus('active');
-              if (neomind.updateTransform) {
-                neomind.updateTransform(found.id, {
-                  name: payload.name, description: payload.description,
-                  scope: payload.scope, js_code: payload.js_code, output_prefix: payload.output_prefix
-                }).then(function () { if (!cancelled) persist(found.id); }).catch(function () {});
-              }
-            } else {
-              doCreate();
-            }
-          }).catch(function () { if (!cancelled) doCreate(); });
-        } else {
-          doCreate();
-        }
-      };
-
-      if (neomind.listExtensions) {
-        neomind.listExtensions().then(function (exts) {
-          if (cancelled) return;
-          var extList = Array.isArray(exts) ? exts : [];
-          var matched = null;
-          for (var ei = 0; ei < extList.length; ei++) {
-            if (extList[ei].id === processingExtId) { matched = extList[ei]; break; }
-          }
-          if (!matched) { setExtStatus('not_installed'); return; }
-          var st = (matched.state || '').toLowerCase();
-          if (st.indexOf('stopped') >= 0 || st.indexOf('failed') >= 0 || st.indexOf('error') >= 0) { setExtStatus('offline'); return; }
-          afterExtCheck();
-        }).catch(function () { if (!cancelled) setExtStatus('error'); });
-      } else {
-        afterExtCheck();
-      }
-
-      return function () { cancelled = true; };
-    }, [device ? device.id : null, processingEnabled, _configHash, _storedTid, _storedHash]);
-
     if (!device) return jsx(NoDevice, {});
 
     var vals = _vals;
