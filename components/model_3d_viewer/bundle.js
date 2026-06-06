@@ -200,6 +200,7 @@ var Model3DViewer = (function () {
     var onClick = props.onClick;
     var popupRef = props.popupRef;
     var isSmall = props.isSmall || false;
+    var onPointerDown = props.onPointerDown;
     var pc = PinColors[pin.type] || PinColors.metric;
 
     // When small, show only dot (no label)
@@ -209,6 +210,7 @@ var Model3DViewer = (function () {
         className: 'absolute pointer-events-auto cursor-pointer',
         style: { transform: 'translate(-50%, -50%)', zIndex: 10, display: 'none' },
         onClick: function (e) { e.stopPropagation(); onClick(pin.id); },
+        onPointerDown: onPointerDown ? function (e) { onPointerDown(pin.id, e); } : undefined,
         children: jsx('div', {
           className: 'w-2 h-2 rounded-full flex-shrink-0',
           style: { backgroundColor: 'var(--color-' + (pin.type === 'annotation' ? 'warning' : pin.type === 'command' ? 'accent-purple' : pin.type) + ')' }
@@ -221,6 +223,7 @@ var Model3DViewer = (function () {
       className: 'absolute pointer-events-auto cursor-pointer',
       style: { transform: 'translate(-50%, -130%)', zIndex: 10, display: 'none' },
       onClick: function (e) { e.stopPropagation(); onClick(pin.id); },
+      onPointerDown: onPointerDown ? function (e) { onPointerDown(pin.id, e); } : undefined,
       children: jsxs('div', {
         className: 'flex items-center gap-1.5 px-2 py-1 rounded-md bg-card border border-glass-border shadow-lg',
         children: [
@@ -556,6 +559,9 @@ var Model3DViewer = (function () {
     var pinValues = pinValuesState[0];
     var setPinValues = pinValuesState[1];
 
+    // Long-press drag info ref
+    var dragInfoRef = React.useRef({ active: false, pinId: null, timer: null, startX: 0, startY: 0 });
+
     // Refs for per-frame updates (mirrors of state, used in rAF loop)
     var popupRefs = React.useRef({});
     var pinMeshesRef = React.useRef({});
@@ -719,6 +725,79 @@ var Model3DViewer = (function () {
         return prev.filter(function (p) { return p.id !== configuringPinId; });
       });
       setConfiguringPinId(null);
+    };
+
+    // Long-press drag handlers
+    var handlePinPointerDown = function (pinId, event) {
+      event.stopPropagation();
+      event.preventDefault();
+      dragInfoRef.current.startX = event.clientX;
+      dragInfoRef.current.startY = event.clientY;
+      dragInfoRef.current.pinId = pinId;
+      dragInfoRef.current.timer = setTimeout(function () {
+        dragInfoRef.current.active = true;
+        if (sceneHandleRef.current) sceneHandleRef.current.controls.enabled = false;
+      }, 300);
+    };
+
+    var handlePointerMove = function (event) {
+      var di = dragInfoRef.current;
+      if (di.timer && !di.active) {
+        var dx = event.clientX - di.startX;
+        var dy = event.clientY - di.startY;
+        if (Math.sqrt(dx * dx + dy * dy) > 5) {
+          clearTimeout(di.timer);
+          di.timer = null;
+        }
+        return;
+      }
+      if (!di.active) return;
+
+      var THREE = window.THREE;
+      var sceneHandle = sceneHandleRef.current;
+      var model = modelRef.current;
+      if (!sceneHandle || !model) return;
+
+      var rect = sceneHandle.renderer.domElement.getBoundingClientRect();
+      var mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      sceneHandle.raycaster.setFromCamera(mouse, sceneHandle.camera);
+      var intersects = sceneHandle.raycaster.intersectObject(model, true);
+      if (intersects.length > 0) {
+        var hit = intersects[0];
+        var normal = hit.face.normal.clone();
+        normal.transformDirection(hit.object.matrixWorld);
+        var offset = normal.clone().multiplyScalar(0.01);
+        var newPos = hit.point.clone().add(offset);
+
+        var mesh = pinMeshesRef.current[di.pinId];
+        if (mesh) mesh.position.copy(newPos);
+
+        var pinId = di.pinId;
+        setPins(function (prev) {
+          return prev.map(function (p) {
+            if (p.id !== pinId) return p;
+            return Object.assign({}, p, {
+              position: { x: newPos.x, y: newPos.y, z: newPos.z },
+              normal: { x: normal.x, y: normal.y, z: normal.z }
+            });
+          });
+        });
+      }
+    };
+
+    var handlePointerUp = function () {
+      var di = dragInfoRef.current;
+      clearTimeout(di.timer);
+      if (di.active) {
+        if (sceneHandleRef.current) sceneHandleRef.current.controls.enabled = true;
+        if (props.onConfigChange) {
+          props.onConfigChange('pins', pinsRef.current);
+        }
+      }
+      dragInfoRef.current = { active: false, pinId: null, timer: null, startX: 0, startY: 0 };
     };
 
     // Refs for edit mode and active pin type (used in click handler)
@@ -936,6 +1015,8 @@ var Model3DViewer = (function () {
     return jsxs('div', {
       ref: containerRef,
       className: 'relative w-full h-full overflow-hidden rounded-xl',
+      onPointerMove: handlePointerMove,
+      onPointerUp: handlePointerUp,
       children: [
         // Spinner keyframes animation
         jsx('style', { dangerouslySetInnerHTML: { __html: '@keyframes spin { to { transform: rotate(360deg) } }' } }),
@@ -987,7 +1068,8 @@ var Model3DViewer = (function () {
               pin: pin,
               onClick: setSelectedPinId,
               popupRef: popupRefs,
-              isSmall: isSmall
+              isSmall: isSmall,
+              onPointerDown: handlePinPointerDown
             });
           }).concat(
             selectedPinId && pins.find(function (p) { return p.id === selectedPinId; })
@@ -1019,6 +1101,30 @@ var Model3DViewer = (function () {
     var config = props.config || {};
     var onChange = props.onChange;
 
+    var exportPins = function () {
+      var json = JSON.stringify(config.pins || [], null, 2);
+      var blob = new Blob([json], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = '3d-viewer-pins.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    var importPins = function (e) {
+      var file = e.target.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        try {
+          var imported = JSON.parse(ev.target.result);
+          if (Array.isArray(imported)) onChange('pins', imported);
+        } catch (err) { /* ignore */ }
+      };
+      reader.readAsText(file);
+    };
+
     return jsxs('div', { className: 'space-y-3', children: [
       jsxs('div', { children: [
         jsx('label', { className: 'text-sm font-medium', children: 'Model File URL' }),
@@ -1048,6 +1154,20 @@ var Model3DViewer = (function () {
           onChange: function (e) { onChange('autoRotate', e.target.checked); }
         }),
         jsx('label', { className: 'text-sm', children: 'Auto Rotate' })
+      ]}),
+      jsxs('div', { className: 'flex gap-2 pt-2 border-t border-glass-border', children: [
+        jsx('button', {
+          className: 'flex-1 h-8 text-xs border border-input rounded-md text-muted-foreground hover:bg-muted',
+          onClick: exportPins,
+          children: 'Export Pins'
+        }),
+        jsxs('label', {
+          className: 'flex-1 h-8 text-xs border border-input rounded-md text-muted-foreground hover:bg-muted flex items-center justify-center cursor-pointer',
+          children: [
+            'Import Pins',
+            jsx('input', { type: 'file', accept: '.json', className: 'hidden', onChange: importPins })
+          ]
+        })
       ]})
     ]});
   }
