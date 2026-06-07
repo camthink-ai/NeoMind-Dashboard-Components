@@ -36,10 +36,14 @@ var NeoMind_DataList = (function () {
       // value is a plain object with no arrays — wrap it as single-item array
       return [result.value];
     }
-    // { series: [...] } — timeseries data
+    // { series: [...] } — timeseries data: may contain objects or primitives
     if (result.series != null && Array.isArray(result.series)) {
-      return result.series.map(function (item) {
-        return { timestamp: item.timestamp, value: item.value };
+      return result.series.map(function (item, idx) {
+        if (item != null && typeof item === 'object') {
+          return { timestamp: item.timestamp, value: item.value };
+        }
+        // Primitive values (number, string) — wrap with index
+        return { index: idx, value: item };
       });
     }
     // Deep search: find first array in any top-level field
@@ -187,6 +191,7 @@ var NeoMind_DataList = (function () {
     var containerRef = React.useRef(null);
     var tagColorMaps = React.useRef({});
     var fetchDataRef = React.useRef(fetchData);
+    var mountedRef = React.useRef(false);
     fetchDataRef.current = fetchData;
 
     function doFetch() {
@@ -197,10 +202,8 @@ var NeoMind_DataList = (function () {
       fn()
         .then(function (result) {
           // fetchData returns null when no data source configured
-          console.log('[DataList] fetchData result:', JSON.stringify(result, null, 2));
           if (result == null) { setData(null); setLoading(false); return; }
           var arr = extractArray(result, config.data_path || '');
-          console.log('[DataList] extractArray result:', arr ? ('array[' + arr.length + ']') : 'null');
           if (arr === null) { setData(null); setError('format'); }
           else {
             setData(arr);
@@ -217,7 +220,12 @@ var NeoMind_DataList = (function () {
         .finally(function () { setLoading(false); });
     }
 
-    React.useEffect(function () { doFetch(); }, [dataSource, config.data_path]);
+    React.useEffect(function () {
+      // Only fetch once on mount; skip if already fetched
+      if (mountedRef.current) return;
+      mountedRef.current = true;
+      doFetch();
+    }, []);
 
     function handleScroll(e) {
       var el = e.target;
@@ -445,14 +453,17 @@ var NeoMind_DataList = (function () {
       var statusVal = statusCol ? item[statusCol.key] : null;
       var isOnline = statusVal === true || statusVal === 'true' || statusVal === 'online' || statusVal === 1;
       var dotColor = isOnline ? 'var(--text-success)' : statusVal != null ? 'var(--text-muted-foreground)' : null;
+      var topChildren = [
+        jsx('span', { key: 'name', style: { color: 'var(--text-foreground)', fontWeight: 500, fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: name })
+      ];
+      if (dotColor) {
+        topChildren.push(jsx('span', { key: 'dot', style: { width: '5px', height: '5px', borderRadius: '50%', background: dotColor, flexShrink: 0 } }));
+      }
       var contentChildren = [
         jsxs('div', {
           key: 'top',
           style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' },
-          children: [
-            jsx('span', { style: { color: 'var(--text-foreground)', fontWeight: 500, fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: name }),
-            dotColor ? jsx('span', { key: 'dot', style: { width: '5px', height: '5px', borderRadius: '50%', background: dotColor, flexShrink: 0 } }) : null
-          ]
+          children: topChildren
         }),
         jsx('div', { key: 'sub', style: { color: 'var(--text-muted-foreground)', fontSize: '9px', marginTop: '1px' }, children: subtitle })
       ];
