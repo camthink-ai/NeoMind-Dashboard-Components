@@ -23,6 +23,8 @@ var NeoMind_DataList = (function () {
       if (Array.isArray(resolved)) return resolved;
       return null;
     }
+    // Result itself is an array
+    if (Array.isArray(result)) return result;
     if (result.value != null && Array.isArray(result.value)) return result.value;
     if (result.value != null && typeof result.value === 'object' && !Array.isArray(result.value)) {
       var keys = Object.keys(result.value);
@@ -34,6 +36,11 @@ var NeoMind_DataList = (function () {
       return result.series.map(function (item) {
         return { timestamp: item.timestamp, value: item.value };
       });
+    }
+    // Deep search: find first array in any top-level field
+    var topKeys = Object.keys(result);
+    for (var k = 0; k < topKeys.length; k++) {
+      if (Array.isArray(result[topKeys[k]]) && result[topKeys[k]].length > 0) return result[topKeys[k]];
     }
     return null;
   }
