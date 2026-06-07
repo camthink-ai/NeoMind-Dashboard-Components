@@ -21,37 +21,54 @@ var NeoMind_DataList = (function () {
     if (dataPath) {
       var resolved = resolveByPath(result, dataPath);
       if (Array.isArray(resolved)) return resolved;
+      if (resolved != null && typeof resolved === 'object') return [resolved];
       return null;
     }
     // Result itself is an array
     if (Array.isArray(result)) return result;
-    // { value: [...] }
+
+    // { value: [...] } — array of objects/rows
     if (result.value != null && Array.isArray(result.value)) return result.value;
-    // { value: { ... } } — find first array field inside value object
+
+    // { value: { key1: [...], key2: ..., ... } } — find first array inside value
     if (result.value != null && typeof result.value === 'object' && !Array.isArray(result.value)) {
       var keys = Object.keys(result.value);
       for (var i = 0; i < keys.length; i++) {
         if (Array.isArray(result.value[keys[i]])) return result.value[keys[i]];
       }
-      // value is a plain object with no arrays — wrap it as single-item array
+      // value is a plain object — wrap as single row
       return [result.value];
     }
-    // { series: [...] } — timeseries data: may contain objects or primitives
+
+    // { series: [...] } — timeseries data
     if (result.series != null && Array.isArray(result.series)) {
+      // Empty series — no data
+      if (result.series.length === 0) return [];
+      // Series items are objects with timestamp/value
+      if (result.series[0] != null && typeof result.series[0] === 'object') {
+        return result.series.map(function (item, idx) {
+          return typeof item === 'object' && item !== null
+            ? { timestamp: item.timestamp, value: item.value }
+            : { index: idx, value: item };
+        });
+      }
+      // Series items are primitives (numbers/strings) — wrap each as a row
       return result.series.map(function (item, idx) {
-        if (item != null && typeof item === 'object') {
-          return { timestamp: item.timestamp, value: item.value };
-        }
-        // Primitive values (number, string) — wrap with index
-        return { index: idx, value: item };
+        return { index: idx + 1, value: item };
       });
     }
+
+    // { value: <primitive> } — single scalar value, wrap as one row
+    if (result.value != null && typeof result.value !== 'object') {
+      return [{ value: result.value }];
+    }
+
     // Deep search: find first array in any top-level field
     var topKeys = Object.keys(result);
     for (var k = 0; k < topKeys.length; k++) {
       if (Array.isArray(result[topKeys[k]]) && result[topKeys[k]].length > 0) return result[topKeys[k]];
     }
-    // Final fallback: if result is a plain object with non-null values, wrap as single-item
+    // Fallback: wrap result as single row
     if (typeof result === 'object' && topKeys.length > 0) {
       return [result];
     }
@@ -191,24 +208,32 @@ var NeoMind_DataList = (function () {
     var containerRef = React.useRef(null);
     var tagColorMaps = React.useRef({});
     var fetchDataRef = React.useRef(fetchData);
+    var configRef = React.useRef(config);
     var mountedRef = React.useRef(false);
+    var fetchIdRef = React.useRef(0);
     fetchDataRef.current = fetchData;
+    configRef.current = config;
 
     function doFetch() {
       var fn = fetchDataRef.current;
+      var cfg = configRef.current;
+      var thisFetchId = ++fetchIdRef.current;
       if (!fn) { setLoading(false); return; }
       setLoading(true);
       setError(null);
       fn()
         .then(function (result) {
+          // Ignore stale responses from earlier fetches
+          if (thisFetchId !== fetchIdRef.current) return;
           // fetchData returns null when no data source configured
           if (result == null) { setData(null); setLoading(false); return; }
-          var arr = extractArray(result, config.data_path || '');
+          var arr = extractArray(result, cfg.data_path || '');
           if (arr === null) { setData(null); setError('format'); }
+          else if (arr.length === 0) { setData([]); }
           else {
             setData(arr);
             var inferred = inferColumns(arr);
-            setColumns(mergeColumns(inferred, config.columns));
+            setColumns(mergeColumns(inferred, cfg.columns));
             var maps = {};
             for (var i = 0; i < inferred.length; i++) {
               if (inferred[i].type === 'tag') maps[inferred[i].key] = getTagColorMap(arr, inferred[i]);
@@ -216,8 +241,8 @@ var NeoMind_DataList = (function () {
             tagColorMaps.current = maps;
           }
         })
-        .catch(function (e) { console.error('[DataList] fetchData error:', e); setError('fetch'); })
-        .finally(function () { setLoading(false); });
+        .catch(function (e) { if (thisFetchId === fetchIdRef.current) setError('fetch'); })
+        .finally(function () { if (thisFetchId === fetchIdRef.current) setLoading(false); });
     }
 
     React.useEffect(function () {
