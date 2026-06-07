@@ -74,12 +74,12 @@ var Model3DViewer = (function () {
     controls.dampingFactor = 0.05;
 
     // Lighting
-    var ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    var ambient = new THREE.AmbientLight(0xffffff, 1.0);
     scene.add(ambient);
-    var dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    var dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
     dirLight.position.set(5, 10, 7);
     scene.add(dirLight);
-    var fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    var fillLight = new THREE.DirectionalLight(0xffffff, 0.6);
     fillLight.position.set(-3, 2, -5);
     scene.add(fillLight);
 
