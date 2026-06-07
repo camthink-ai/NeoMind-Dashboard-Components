@@ -1000,7 +1000,24 @@ var Model3DViewer = (function () {
           sceneHandleRef.current = null;
         }
       };
-    }, [config.modelUrl, bgColor, autoRotate]);
+    }, [config.modelUrl]);
+
+    // React to background color changes without reloading model
+    React.useEffect(function () {
+      var handle = sceneHandleRef.current;
+      if (!handle) return;
+      var THREE = window.THREE;
+      var color = config.backgroundColor || '#111827';
+      handle.scene.background = new THREE.Color(color);
+    }, [bgColor]);
+
+    // React to autoRotate changes without reloading model
+    React.useEffect(function () {
+      var handle = sceneHandleRef.current;
+      if (!handle) return;
+      handle.controls.autoRotate = autoRotate;
+      handle.controls.autoRotateSpeed = 2.0;
+    }, [autoRotate]);
 
     return jsxs('div', {
       ref: containerRef,
