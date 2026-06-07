@@ -206,44 +206,42 @@ var Model3DViewer = (function () {
     };
   };
 
-  // --- PinPopup Component ---
+  // color helper for pin types
+  var pinColorVar = function (type) {
+    return type === 'annotation' ? 'var(--color-warning)' : type === 'command' ? 'var(--color-accent-purple)' : 'var(--color-' + type + ')';
+  };
+
+  // --- PinPopup Component (compact dot + tiny label) ---
   var PinPopup = function (props) {
     var pin = props.pin;
     var onClick = props.onClick;
     var popupRef = props.popupRef;
     var isSmall = props.isSmall || false;
     var onPointerDown = props.onPointerDown;
-    var pc = PinColors[pin.type] || PinColors.metric;
 
-    // When small, show only dot (no label)
+    var dotStyle = { width: 8, height: 8, borderRadius: '50%', backgroundColor: pinColorVar(pin.type) };
+    var wrapStyle = { position: 'absolute', pointerEvents: 'auto', cursor: 'pointer', transform: 'translate(-50%, -50%)', zIndex: 10, display: 'none' };
+
     if (isSmall) {
       return jsx('div', {
         ref: function (el) { if (popupRef) popupRef.current[pin.id] = el; },
-        className: 'absolute pointer-events-auto cursor-pointer',
-        style: { transform: 'translate(-50%, -50%)', zIndex: 10, display: 'none' },
+        style: wrapStyle,
         onClick: function (e) { e.stopPropagation(); onClick(pin.id); },
         onPointerDown: onPointerDown ? function (e) { onPointerDown(pin.id, e); } : undefined,
-        children: jsx('div', {
-          className: 'w-2 h-2 rounded-full flex-shrink-0',
-          style: { backgroundColor: 'var(--color-' + (pin.type === 'annotation' ? 'warning' : pin.type === 'command' ? 'accent-purple' : pin.type) + ')' }
-        })
+        children: jsx('div', { style: dotStyle })
       });
     }
 
     return jsx('div', {
       ref: function (el) { if (popupRef) popupRef.current[pin.id] = el; },
-      className: 'absolute pointer-events-auto cursor-pointer',
-      style: { transform: 'translate(-50%, -130%)', zIndex: 10, display: 'none' },
+      style: Object.assign({}, wrapStyle, { transform: 'translate(-50%, -140%)' }),
       onClick: function (e) { e.stopPropagation(); onClick(pin.id); },
       onPointerDown: onPointerDown ? function (e) { onPointerDown(pin.id, e); } : undefined,
       children: jsxs('div', {
-        className: 'flex items-center gap-1.5 px-2 py-1 rounded-md bg-card border border-glass-border shadow-lg',
+        style: { display: 'flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 6, backgroundColor: 'oklch(0.18 0.02 270 / 90%)', backdropFilter: 'blur(6px)', border: '1px solid oklch(0.4 0.02 270 / 30%)', whiteSpace: 'nowrap' },
         children: [
-          jsx('div', {
-            className: 'w-2 h-2 rounded-full flex-shrink-0',
-            style: { backgroundColor: 'var(--color-' + (pin.type === 'annotation' ? 'warning' : pin.type === 'command' ? 'accent-purple' : pin.type) + ')' }
-          }),
-          jsx('span', { className: 'text-xs text-foreground whitespace-nowrap', children: pin.label || pin.type })
+          jsx('div', { style: dotStyle }),
+          jsx('span', { style: { fontSize: 11, color: 'oklch(0.85 0.02 270)' }, children: pin.label || pin.type })
         ]
       })
     });
@@ -322,42 +320,38 @@ var Model3DViewer = (function () {
     });
   };
 
-  // --- DetailCard Component ---
+  // --- DetailCard Component (compact 4:3 card) ---
   var DetailCard = function (props) {
     var pin = props.pin;
     var value = props.value;
     var onAction = props.onAction;
     var onClose = props.onClose;
     var detailRef = props.detailRef;
-    var pc = PinColors[pin.type] || PinColors.metric;
-
     var colorKey = pin.type === 'annotation' ? 'warning' : pin.type === 'command' ? 'accent-purple' : pin.type;
+
+    var cardInner = { backgroundColor: 'oklch(0.18 0.02 270 / 92%)', backdropFilter: 'blur(8px)', borderRadius: 10, border: '1px solid oklch(0.4 0.02 270 / 30%)', overflow: 'hidden', position: 'relative', width: 160, aspectRatio: '4/3', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '10px 12px' };
 
     var content = null;
     if (pin.type === 'metric') {
       content = jsxs('div', { children: [
-        jsx('span', { className: 'text-4xl font-extralight text-foreground leading-none', children: value != null ? String(value) : '--' }),
-        jsx('span', { className: 'text-base text-muted-foreground font-light ml-1', children: pin.label })
+        jsx('span', { style: { fontSize: 28, fontWeight: 200, color: 'oklch(0.95 0.02 270)', lineHeight: 1 }, children: value != null ? String(value) : '--' }),
+        jsx('span', { style: { fontSize: 11, color: 'oklch(0.6 0.02 270)', marginLeft: 4 }, children: pin.label })
       ]});
     } else if (pin.type === 'device') {
       var online = value && value.status === 'online';
-      content = jsxs('div', { className: 'flex items-center gap-2.5', children: [
-        jsx('div', {
-          className: 'w-2 h-2 rounded-full',
-          style: { backgroundColor: online ? 'var(--color-success)' : 'var(--color-muted-foreground)' }
-        }),
-        jsx('span', { className: 'text-lg text-muted-foreground font-light', children: online ? 'Online' : 'Offline' })
+      content = jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 6 }, children: [
+        jsx('div', { style: { width: 6, height: 6, borderRadius: '50%', backgroundColor: online ? 'var(--color-success)' : 'oklch(0.5 0.02 270)' } }),
+        jsx('span', { style: { fontSize: 13, color: 'oklch(0.7 0.02 270)' }, children: online ? 'Online' : 'Offline' })
       ]});
     } else if (pin.type === 'annotation') {
       content = jsx('div', {
-        className: 'text-sm text-muted-foreground font-light leading-relaxed',
+        style: { fontSize: 12, color: 'oklch(0.7 0.02 270)', lineHeight: 1.5 },
         children: pin.annotationText || 'No annotation'
       });
     } else if (pin.type === 'command') {
       content = jsx('div', { children:
         jsx('button', {
-          className: 'w-9 h-9 rounded-full flex items-center justify-center',
-          style: { backgroundColor: 'oklch(0.7 0.15 310 / 12%)', border: '1px solid oklch(0.7 0.15 310 / 25%)' },
+          style: { width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid oklch(0.7 0.15 310 / 25%)', backgroundColor: 'oklch(0.7 0.15 310 / 12%)', cursor: 'pointer', color: 'oklch(0.75 0.12 310)' },
           onClick: function (e) { e.stopPropagation(); onAction && onAction(pin); },
           dangerouslySetInnerHTML: { __html: Icons.play }
         })
@@ -366,27 +360,18 @@ var Model3DViewer = (function () {
 
     return jsx('div', {
       ref: function (el) { if (detailRef) detailRef.current[pin.id + '_detail'] = el; },
-      className: 'absolute pointer-events-auto',
-      style: { zIndex: 20, display: 'none' },
+      style: { position: 'absolute', pointerEvents: 'auto', zIndex: 20, display: 'none' },
       children: jsxs('div', {
-        className: 'rounded-2xl border border-glass-border shadow-xl overflow-hidden relative',
-        style: {
-          aspectRatio: '4/3', backgroundColor: 'var(--color-card)',
-          padding: '20px 24px', display: 'flex', flexDirection: 'column',
-          justifyContent: 'space-between', minWidth: '200px'
-        },
+        style: cardInner,
         children: [
-          jsx('div', {
-            style: { position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, var(--color-' + colorKey + '), transparent)' }
-          }),
-          jsxs('div', { className: 'flex justify-between items-start', style: { position: 'relative', zIndex: 1 }, children: [
-            jsx('span', { className: 'text-xs text-muted-foreground tracking-wide', children: pin.label }),
-            jsx('div', { className: pc.tw, style: { width: 14, height: 14, opacity: 0.5 }, dangerouslySetInnerHTML: { __html: Icons[pin.type] } })
+          jsx('div', { style: { position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, var(--color-' + colorKey + '), transparent)' } }),
+          jsxs('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }, children: [
+            jsx('span', { style: { fontSize: 10, color: 'oklch(0.55 0.02 270)', letterSpacing: '0.05em' }, children: pin.label }),
+            jsx('div', { style: { width: 12, height: 12, opacity: 0.5, color: pinColorVar(pin.type) }, dangerouslySetInnerHTML: { __html: Icons[pin.type] } })
           ]}),
           jsx('div', { style: { position: 'relative', zIndex: 1 }, children: content }),
           jsx('button', {
-            className: 'absolute top-2 right-2 w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-foreground rounded',
-            style: { zIndex: 2 },
+            style: { position: 'absolute', top: 4, right: 4, width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'oklch(0.5 0.02 270)', cursor: 'pointer', border: 'none', background: 'none', borderRadius: 4, zIndex: 2 },
             onClick: function (e) { e.stopPropagation(); onClose(); },
             dangerouslySetInnerHTML: { __html: Icons.close }
           })
@@ -395,7 +380,9 @@ var Model3DViewer = (function () {
     });
   };
 
-  // --- PinConfigPopover Component ---
+  // --- PinConfigPopover Component (compact inline-style form) ---
+  var inputStyle = { width: '100%', height: 26, padding: '0 6px', borderRadius: 4, border: '1px solid oklch(0.35 0.02 270)', backgroundColor: 'oklch(0.12 0.02 270)', color: 'oklch(0.85 0.02 270)', fontSize: 11, outline: 'none', boxSizing: 'border-box' };
+
   var PinConfigPopover = function (props) {
     var pin = props.pin;
     var onSave = props.onSave;
@@ -446,46 +433,38 @@ var Model3DViewer = (function () {
 
     var fields = null;
     if (pin.type === 'metric') {
-      fields = jsxs('div', { className: 'space-y-2', children: [
-        jsx('input', { className: 'w-full h-8 px-2 rounded-md border border-input bg-background text-sm', placeholder: 'Device ID', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } }),
-        jsx('input', { className: 'w-full h-8 px-2 rounded-md border border-input bg-background text-sm', placeholder: 'Metric key (e.g. values.temperature)', value: metricKey, onChange: function (e) { setMetricKey(e.target.value); } })
+      fields = jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 }, children: [
+        jsx('input', { style: inputStyle, placeholder: 'Device ID', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } }),
+        jsx('input', { style: inputStyle, placeholder: 'Metric key', value: metricKey, onChange: function (e) { setMetricKey(e.target.value); } })
       ]});
     } else if (pin.type === 'device') {
-      fields = jsx('input', { className: 'w-full h-8 px-2 rounded-md border border-input bg-background text-sm', placeholder: 'Device ID', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } });
+      fields = jsx('input', { style: inputStyle, placeholder: 'Device ID', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } });
     } else if (pin.type === 'annotation') {
-      fields = jsx('textarea', { className: 'w-full h-16 px-2 py-1 rounded-md border border-input bg-background text-sm resize-none', placeholder: 'Annotation text...', value: text, onChange: function (e) { setText(e.target.value); } });
+      fields = jsx('textarea', { style: Object.assign({}, inputStyle, { height: 40, padding: '4px 6px', resize: 'none' }), placeholder: 'Annotation text...', value: text, onChange: function (e) { setText(e.target.value); } });
     } else if (pin.type === 'command') {
-      fields = jsxs('div', { className: 'space-y-2', children: [
-        jsx('input', { className: 'w-full h-8 px-2 rounded-md border border-input bg-background text-sm', placeholder: 'Device ID', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } }),
-        jsx('input', { className: 'w-full h-8 px-2 rounded-md border border-input bg-background text-sm', placeholder: 'Command key', value: cmdKey, onChange: function (e) { setCmdKey(e.target.value); } })
+      fields = jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 }, children: [
+        jsx('input', { style: inputStyle, placeholder: 'Device ID', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } }),
+        jsx('input', { style: inputStyle, placeholder: 'Command key', value: cmdKey, onChange: function (e) { setCmdKey(e.target.value); } })
       ]});
     }
 
     return jsx('div', {
       ref: function (el) { if (popoverRef) popoverRef.current[pin.id + '_config'] = el; },
-      className: 'absolute pointer-events-auto',
-      style: { zIndex: 30, display: 'none' },
+      style: { position: 'absolute', pointerEvents: 'auto', zIndex: 30, display: 'none' },
       children: jsxs('div', {
-        className: 'bg-card border border-glass-border rounded-xl shadow-xl p-3 space-y-2',
-        style: { minWidth: '220px' },
+        style: { backgroundColor: 'oklch(0.18 0.02 270 / 95%)', backdropFilter: 'blur(8px)', border: '1px solid oklch(0.4 0.02 270 / 30%)', borderRadius: 8, padding: 8, display: 'flex', flexDirection: 'column', gap: 4, width: 180 },
         children: [
-          jsx('p', { className: 'text-xs font-medium text-foreground', children: 'Configure ' + pin.type + ' pin' }),
-          jsx('input', {
-            className: 'w-full h-8 px-2 rounded-md border border-input bg-background text-sm',
-            placeholder: 'Label',
-            value: label,
-            onChange: function (e) { setLabel(e.target.value); }
-          }),
+          jsx('span', { style: { fontSize: 10, fontWeight: 600, color: 'oklch(0.7 0.02 270)', textTransform: 'capitalize' }, children: pin.type + ' pin' }),
+          jsx('input', { style: inputStyle, placeholder: 'Label', value: label, onChange: function (e) { setLabel(e.target.value); } }),
           fields,
-          jsxs('div', { className: 'flex gap-2 justify-end pt-1', children: [
+          jsxs('div', { style: { display: 'flex', gap: 4, justifyContent: 'flex-end', marginTop: 2 }, children: [
             jsx('button', {
-              className: 'px-3 py-1 text-xs text-muted-foreground hover:bg-muted rounded-md',
+              style: { padding: '2px 8px', fontSize: 10, borderRadius: 4, border: 'none', cursor: 'pointer', color: 'oklch(0.6 0.02 270)', background: 'oklch(0.25 0.02 270)' },
               onClick: onCancel,
               children: 'Cancel'
             }),
             jsx('button', {
-              className: 'px-3 py-1 text-xs text-primary-foreground rounded-md',
-              style: { backgroundColor: 'var(--color-accent-purple)' },
+              style: { padding: '2px 8px', fontSize: 10, borderRadius: 4, border: 'none', cursor: 'pointer', color: 'oklch(0.95 0.08 310)', backgroundColor: 'var(--color-accent-purple)' },
               onClick: handleSave,
               children: 'Save'
             })
@@ -957,30 +936,34 @@ var Model3DViewer = (function () {
               var pinMesh = pinMeshesRef.current[pin.id];
               if (!pinMesh) continue;
               var screen = projectToScreen(pinMesh.position, sceneHandleRef.current.camera, containerW, containerH);
+              // Clamp to container bounds
+              var sx = Math.max(8, Math.min(screen.x, containerW - 8));
+              var sy = Math.max(8, Math.min(screen.y, containerH - 8));
               var popupEl = popupRefs.current[pin.id];
               if (popupEl) {
-                popupEl.style.left = screen.x + 'px';
-                popupEl.style.top = screen.y + 'px';
+                popupEl.style.left = sx + 'px';
+                popupEl.style.top = sy + 'px';
                 popupEl.style.display = screen.behind ? 'none' : '';
               }
-              // Update detail card position
-              if (pin.id === selectedPinIdRef.current) {
-                var detailEl = popupRefs.current[pin.id + '_detail'];
-                if (detailEl) {
-                  detailEl.style.left = (screen.x + 20) + 'px';
-                  detailEl.style.top = (screen.y - 40) + 'px';
-                  detailEl.style.display = screen.behind ? 'none' : '';
-                }
-              } else {
-                var detailEl = popupRefs.current[pin.id + '_detail'];
-                if (detailEl) detailEl.style.display = 'none';
+              // Detail card — positioned right of pin, clamped
+              var detailEl = popupRefs.current[pin.id + '_detail'];
+              if (pin.id === selectedPinIdRef.current && detailEl) {
+                var dx = Math.min(sx + 12, containerW - 170);
+                var dy = Math.max(4, sy - 60);
+                detailEl.style.left = dx + 'px';
+                detailEl.style.top = dy + 'px';
+                detailEl.style.display = screen.behind ? 'none' : '';
+              } else if (detailEl) {
+                detailEl.style.display = 'none';
               }
-              // Update config popover position
+              // Config popover — positioned right of pin, clamped
               if (pin.id === configuringPinIdRef.current) {
                 var configEl = popupRefs.current[pin.id + '_config'];
                 if (configEl) {
-                  configEl.style.left = (screen.x + 20) + 'px';
-                  configEl.style.top = (screen.y - 20) + 'px';
+                  var cx = Math.min(sx + 12, containerW - 190);
+                  var cy = Math.max(4, sy - 30);
+                  configEl.style.left = cx + 'px';
+                  configEl.style.top = cy + 'px';
                   configEl.style.display = screen.behind ? 'none' : '';
                 }
               }
