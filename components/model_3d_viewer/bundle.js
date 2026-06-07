@@ -529,6 +529,7 @@ var Model3DViewer = (function () {
     var modelRef = React.useRef(null);
 
     var loadState = React.useState('idle');
+    var loadStateValue = loadState[0];
     var setLoadState = loadState[1];
     var errorMsg = React.useState('');
     var setErrorMsg = errorMsg[1];
@@ -1058,7 +1059,7 @@ var Model3DViewer = (function () {
           children: 'Click on the model to place a ' + activePinType + ' pin'
         }) : null,
         // Toolbar (compact buttons)
-        modelUrl && loadState === 'loaded' ? jsx(Toolbar, {
+        modelUrl && loadStateValue === 'loaded' ? jsx(Toolbar, {
           editMode: editMode,
           onToggleEdit: toggleEdit,
           activePinType: activePinType,
@@ -1067,7 +1068,7 @@ var Model3DViewer = (function () {
           isSmall: isSmall
         }) : null,
         // Loading overlay
-        loadState === 'loading' && jsx('div', {
+        loadStateValue === 'loading' && jsx('div', {
           className: 'absolute inset-0 flex flex-col items-center justify-center',
           style: { backgroundColor: 'oklch(0.15 0.02 270 / 80%)', zIndex: 50 },
           children: jsxs('div', { className: 'text-center', children: [
@@ -1079,7 +1080,7 @@ var Model3DViewer = (function () {
           ]})
         }),
         // Error overlay
-        loadState === 'error' && jsx('div', {
+        loadStateValue === 'error' && jsx('div', {
           className: 'absolute inset-0 flex flex-col items-center justify-center',
           style: { backgroundColor: 'oklch(0.15 0.02 270 / 90%)', zIndex: 50 },
           children: jsxs('div', { className: 'text-center space-y-2', children: [
