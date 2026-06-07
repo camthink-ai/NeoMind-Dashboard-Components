@@ -1069,14 +1069,12 @@ var Model3DViewer = (function () {
         }) : null,
         // Loading overlay
         loadStateValue === 'loading' && jsx('div', {
-          className: 'absolute inset-0 flex flex-col items-center justify-center',
-          style: { backgroundColor: 'oklch(0.15 0.02 270 / 80%)', zIndex: 50 },
-          children: jsxs('div', { className: 'text-center', children: [
+          style: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: 'oklch(0.15 0.02 270 / 80%)', zIndex: 50 },
+          children: jsxs('div', { style: { textAlign: 'center' }, children: [
             jsx('div', {
-              className: 'w-10 h-10 border-[3px] rounded-full mx-auto',
-              style: { borderTopColor: 'var(--color-info)', borderRightColor: 'var(--color-info)', borderColor: 'oklch(0.3 0.02 270)', animation: 'spin 0.8s linear infinite' }
+              style: { width: 40, height: 40, borderWidth: 3, borderStyle: 'solid', borderRadius: '50%', borderTopColor: 'var(--color-info)', borderRightColor: 'var(--color-info)', borderColor: 'oklch(0.3 0.02 270)', animation: 'spin 0.8s linear infinite', margin: '0 auto' }
             }),
-            jsx('p', { className: 'text-sm mt-3', style: { color: 'oklch(0.7 0.02 270)' }, children: 'Loading 3D Model...' })
+            jsx('p', { style: { marginTop: 12, fontSize: 14, color: 'oklch(0.7 0.02 270)' }, children: 'Loading 3D Model...' })
           ]})
         }),
         // Error overlay
