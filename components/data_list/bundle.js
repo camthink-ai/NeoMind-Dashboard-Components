@@ -25,14 +25,19 @@ var NeoMind_DataList = (function () {
     }
     // Result itself is an array
     if (Array.isArray(result)) return result;
+    // { value: [...] }
     if (result.value != null && Array.isArray(result.value)) return result.value;
+    // { value: { ... } } — find first array field inside value object
     if (result.value != null && typeof result.value === 'object' && !Array.isArray(result.value)) {
       var keys = Object.keys(result.value);
       for (var i = 0; i < keys.length; i++) {
         if (Array.isArray(result.value[keys[i]])) return result.value[keys[i]];
       }
+      // value is a plain object with no arrays — wrap it as single-item array
+      return [result.value];
     }
-    if (Array.isArray(result.series)) {
+    // { series: [...] } — timeseries data
+    if (result.series != null && Array.isArray(result.series)) {
       return result.series.map(function (item) {
         return { timestamp: item.timestamp, value: item.value };
       });
@@ -41,6 +46,10 @@ var NeoMind_DataList = (function () {
     var topKeys = Object.keys(result);
     for (var k = 0; k < topKeys.length; k++) {
       if (Array.isArray(result[topKeys[k]]) && result[topKeys[k]].length > 0) return result[topKeys[k]];
+    }
+    // Final fallback: if result is a plain object with non-null values, wrap as single-item
+    if (typeof result === 'object' && topKeys.length > 0) {
+      return [result];
     }
     return null;
   }
@@ -158,6 +167,7 @@ var NeoMind_DataList = (function () {
   function DataList(props) {
     var config = props.config || {};
     var fetchData = props.fetchData;
+    var dataSource = props.dataSource;
 
     var dataState = React.useState(null);
     var data = dataState[0], setData = dataState[1];
@@ -176,14 +186,21 @@ var NeoMind_DataList = (function () {
 
     var containerRef = React.useRef(null);
     var tagColorMaps = React.useRef({});
+    var fetchDataRef = React.useRef(fetchData);
+    fetchDataRef.current = fetchData;
 
     function doFetch() {
-      if (!fetchData) { setLoading(false); return; }
+      var fn = fetchDataRef.current;
+      if (!fn) { setLoading(false); return; }
       setLoading(true);
       setError(null);
-      fetchData()
+      fn()
         .then(function (result) {
+          // fetchData returns null when no data source configured
+          console.log('[DataList] fetchData result:', JSON.stringify(result, null, 2));
+          if (result == null) { setData(null); setLoading(false); return; }
           var arr = extractArray(result, config.data_path || '');
+          console.log('[DataList] extractArray result:', arr ? ('array[' + arr.length + ']') : 'null');
           if (arr === null) { setData(null); setError('format'); }
           else {
             setData(arr);
@@ -196,11 +213,11 @@ var NeoMind_DataList = (function () {
             tagColorMaps.current = maps;
           }
         })
-        .catch(function () { setError('fetch'); })
+        .catch(function (e) { console.error('[DataList] fetchData error:', e); setError('fetch'); })
         .finally(function () { setLoading(false); });
     }
 
-    React.useEffect(function () { doFetch(); }, [fetchData, config.data_path]);
+    React.useEffect(function () { doFetch(); }, [dataSource, config.data_path]);
 
     function handleScroll(e) {
       var el = e.target;
