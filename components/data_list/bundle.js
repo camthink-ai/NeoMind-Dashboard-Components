@@ -273,13 +273,201 @@ var NeoMind_DataList = (function () {
 
     var rows = data.slice(0, displayCount);
 
-    // ── RENDER (placeholder — Task 3 replaces this) ──
-    return jsx('div', {
+    // Column header
+    function renderHeader() {
+      if (mode === 'stacked') return null;
+      return jsx('div', {
+        key: 'header',
+        className: 'flex-shrink-0',
+        style: { display: 'flex', gap: '12px', padding: compact ? '6px 12px' : '8px 14px', borderBottom: '1px solid var(--border-glass-border, var(--border))' },
+        children: displayCols.map(function (col) {
+          return jsx('span', {
+            key: col.key,
+            style: {
+              flex: col.flex, fontSize: '10px', color: 'var(--text-muted-foreground)',
+              textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 500,
+              textAlign: col.type === 'number' || col.type === 'time' ? 'right' : 'left'
+            },
+            children: col.label
+          });
+        })
+      });
+    }
+
+    function renderCell(item, col, rowIdx) {
+      var val = item[col.key];
+      if (val == null) return '';
+
+      if (col.type === 'number') {
+        var colorVar = 'var(--text-foreground)';
+        if (typeof val === 'number' && val >= 0 && val <= 100) {
+          if (val < 20) colorVar = 'var(--text-error)';
+          else if (val < 40) colorVar = 'var(--text-warning)';
+        }
+        var barWidth = (typeof val === 'number' && val >= 0 && val <= 100) ? val : -1;
+        var numChildren = [];
+        if (barWidth >= 0) {
+          numChildren.push(jsx('span', {
+            key: 'bar',
+            style: { width: '32px', height: '4px', borderRadius: '2px', background: 'var(--bg-muted-30, var(--bg-muted))', overflow: 'hidden', display: 'inline-block' },
+            children: jsx('span', { style: { display: 'block', height: '100%', width: barWidth + '%', background: colorVar, borderRadius: '2px' } })
+          }));
+        }
+        numChildren.push(jsx('span', { key: 'val', style: { color: colorVar }, children: val }));
+        return jsxs('span', {
+          style: { display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', width: '100%', fontVariantNumeric: 'tabular-nums' },
+          children: numChildren
+        });
+      }
+
+      if (col.type === 'time') {
+        return jsx('span', { children: formatRelativeTime(val) });
+      }
+
+      if (col.type === 'status') {
+        var isTrue = val === true || val === 'true' || val === 'online' || val === 'on' || val === 1;
+        var dotColor = isTrue ? 'var(--text-success)' : 'var(--text-muted-foreground)';
+        var glow = isTrue ? '0 0 6px oklch(0.72 0.19 155)' : 'none';
+        return jsxs('span', {
+          style: { display: 'inline-flex', alignItems: 'center', gap: '4px' },
+          children: [
+            jsx('span', { key: 'dot', style: { width: '6px', height: '6px', borderRadius: '50%', background: dotColor, boxShadow: glow } }),
+            jsx('span', { key: 'lbl', style: { fontSize: '11px', color: dotColor }, children: String(val) })
+          ]
+        });
+      }
+
+      if (col.type === 'tag') {
+        var colorMap = tagColorMaps.current[col.key] || {};
+        var accent = colorMap[val] || ACCENT_COLORS[0];
+        return jsx('span', {
+          className: accent.bg + ' ' + accent.text,
+          style: { fontSize: '10px', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 },
+          children: String(val)
+        });
+      }
+
+      // text — first text column (flex:2) gets gradient icon
+      if (col.flex === 2) {
+        var iconAccent = ACCENT_COLORS[rowIdx % ACCENT_COLORS.length];
+        return jsxs('span', {
+          style: { display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' },
+          children: [
+            jsx('span', {
+              key: 'icon',
+              style: {
+                width: compact ? '24px' : '28px', height: compact ? '24px' : '28px',
+                borderRadius: '6px', background: iconAccent.grad,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+              },
+              children: jsx('span', { style: { color: 'var(--text-primary-foreground)', fontSize: compact ? '11px' : '13px' }, children: '\u25CF' })
+            }),
+            jsx('span', {
+              key: 'txt',
+              style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500, color: 'var(--text-foreground)' },
+              children: String(val)
+            })
+          ]
+        });
+      }
+
+      return jsx('span', { children: String(val) });
+    }
+
+    function renderRow(item, idx) {
+      var bgColor = idx % 2 === 1 ? 'var(--bg-muted-30, var(--bg-muted))' : 'transparent';
+      var padV = compact ? '8px' : '10px';
+      var padH = compact ? '12px' : '14px';
+      return jsx('div', {
+        key: item.id || idx,
+        className: 'data-list-row',
+        style: {
+          display: 'flex', gap: '12px', alignItems: 'center',
+          padding: padV + ' ' + padH,
+          borderTop: idx > 0 ? '1px solid var(--border-glass-border, var(--border))' : 'none',
+          background: bgColor, transition: 'background 0.15s'
+        },
+        children: displayCols.map(function (col) {
+          return jsx('span', {
+            key: col.key,
+            style: { flex: col.flex, textAlign: col.type === 'number' || col.type === 'time' ? 'right' : 'left', fontSize: '12px', color: 'var(--text-muted-foreground)' },
+            children: renderCell(item, col, idx)
+          });
+        })
+      });
+    }
+
+    function renderStackedRow(item, idx) {
+      var bgColor = idx % 2 === 1 ? 'var(--bg-muted-30, var(--bg-muted))' : 'transparent';
+      var firstCol = visibleCols[0] || displayCols[0];
+      var name = firstCol ? String(item[firstCol.key] || '') : '';
+      var iconAccent = ACCENT_COLORS[idx % ACCENT_COLORS.length];
+      var parts = [];
+      for (var i = 1; i < visibleCols.length && i < 3; i++) {
+        var c = visibleCols[i];
+        var v = item[c.key];
+        if (v != null) { parts.push(c.type === 'time' ? formatRelativeTime(v) : String(v)); }
+      }
+      var subtitle = parts.join(' \u00B7 ');
+      var statusCol = null;
+      for (var j = 0; j < visibleCols.length; j++) {
+        if (visibleCols[j].type === 'status') { statusCol = visibleCols[j]; break; }
+      }
+      var statusVal = statusCol ? item[statusCol.key] : null;
+      var isOnline = statusVal === true || statusVal === 'true' || statusVal === 'online' || statusVal === 1;
+      var dotColor = isOnline ? 'var(--text-success)' : statusVal != null ? 'var(--text-muted-foreground)' : null;
+      var contentChildren = [
+        jsxs('div', {
+          key: 'top',
+          style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' },
+          children: [
+            jsx('span', { style: { color: 'var(--text-foreground)', fontWeight: 500, fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: name }),
+            dotColor ? jsx('span', { key: 'dot', style: { width: '5px', height: '5px', borderRadius: '50%', background: dotColor, flexShrink: 0 } }) : null
+          ]
+        }),
+        jsx('div', { key: 'sub', style: { color: 'var(--text-muted-foreground)', fontSize: '9px', marginTop: '1px' }, children: subtitle })
+      ];
+      return jsxs('div', {
+        key: item.id || idx,
+        style: {
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '7px 10px',
+          borderTop: idx > 0 ? '1px solid var(--border-glass-border, var(--border))' : 'none',
+          background: bgColor
+        },
+        children: [
+          jsx('span', {
+            key: 'icon',
+            style: { width: '22px', height: '22px', borderRadius: '5px', background: iconAccent.grad, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+            children: jsx('span', { style: { color: 'var(--text-primary-foreground)', fontSize: '10px' }, children: '\u25CF' })
+          }),
+          jsxs('span', { key: 'content', style: { flex: 1, minWidth: 0 }, children: contentChildren })
+        ]
+      });
+    }
+
+    var rowRenderer = mode === 'stacked' ? renderStackedRow : renderRow;
+
+    var bodyChildren = rows.map(function (item, idx) { return rowRenderer(item, idx); });
+    if (displayCount < data.length) {
+      bodyChildren.push(jsxs('div', {
+        key: 'loader',
+        style: { display: 'flex', justifyContent: 'center', padding: '8px', gap: '4px' },
+        children: [
+          jsx('div', { key: 'd1', style: { width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-muted-foreground)', opacity: 0.3, animation: 'data-list-pulse 1s infinite' } }),
+          jsx('div', { key: 'd2', style: { width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-muted-foreground)', opacity: 0.3, animation: 'data-list-pulse 1s infinite 0.2s' } }),
+          jsx('div', { key: 'd3', style: { width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-muted-foreground)', opacity: 0.3, animation: 'data-list-pulse 1s infinite 0.4s' } })
+        ]
+      }));
+    }
+
+    return jsxs('div', {
       ref: containerRef,
       className: 'flex flex-col h-full w-full bg-card border border-glass-border rounded-lg overflow-hidden',
-      children: jsxs('div', { className: 'flex-1 overflow-y-auto p-3', children: [
-        jsx('div', { className: 'text-sm text-muted-foreground', children: 'Data loaded: ' + rows.length + ' rows, ' + displayCols.length + ' columns (' + mode + ')' })
-      ]})
+      children: [
+        renderHeader(),
+        jsx('div', { key: 'body', className: 'flex-1 overflow-y-auto', onScroll: handleScroll, children: bodyChildren })
+      ]
     });
   }
 
