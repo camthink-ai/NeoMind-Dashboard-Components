@@ -261,26 +261,33 @@ var Model3DViewer = (function () {
     var pinTypes = ['metric', 'device', 'annotation', 'command'];
     var typeLabels = { metric: 'Metric', device: 'Device', annotation: 'Note', command: 'Cmd' };
 
+    var btnBase = { width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: 'none', cursor: 'pointer', color: 'oklch(0.65 0.02 270)', background: 'transparent' };
+
     if (!editMode) {
       return jsxs('div', {
-        className: 'absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-0.5 rounded-lg px-1 py-0.5',
-        style: { zIndex: 40, backgroundColor: 'oklch(0.15 0.02 270 / 70%)', backdropFilter: 'blur(8px)' },
+        style: { position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 2, borderRadius: 8, padding: '2px 4px', zIndex: 40, backgroundColor: 'oklch(0.15 0.02 270 / 70%)', backdropFilter: 'blur(8px)' },
         children: [
           jsx('button', {
-            className: 'w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground',
+            style: Object.assign({}, btnBase),
             onClick: onToggleEdit,
             title: 'Edit pins',
+            onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
+            onMouseLeave: function (e) { e.currentTarget.style.background = 'transparent'; },
             dangerouslySetInnerHTML: { __html: Icons.edit }
           }),
           jsx('button', {
-            className: 'w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground',
+            style: Object.assign({}, btnBase),
             onClick: onResetCamera,
             title: 'Reset view',
+            onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
+            onMouseLeave: function (e) { e.currentTarget.style.background = 'transparent'; },
             dangerouslySetInnerHTML: { __html: Icons.reset }
           }),
           jsx('button', {
-            className: 'w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground',
+            style: Object.assign({}, btnBase),
             title: 'Fullscreen',
+            onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
+            onMouseLeave: function (e) { e.currentTarget.style.background = 'transparent'; },
             dangerouslySetInnerHTML: { __html: Icons.fullscreen }
           })
         ]
@@ -288,23 +295,27 @@ var Model3DViewer = (function () {
     }
 
     return jsxs('div', {
-      className: 'absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-0.5 rounded-lg px-1 py-0.5',
-      style: { zIndex: 40, backgroundColor: 'oklch(0.15 0.02 270 / 70%)', backdropFilter: 'blur(8px)', border: '1px solid oklch(0.55 0.2 310 / 30%)' },
+      style: { position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 2, borderRadius: 8, padding: '2px 4px', zIndex: 40, backgroundColor: 'oklch(0.15 0.02 270 / 70%)', backdropFilter: 'blur(8px)', border: '1px solid oklch(0.55 0.2 310 / 30%)' },
       children: [
         pinTypes.map(function (t) {
           var isActive = activePinType === t;
           var pc = PinColors[t];
+          var activeBg = isActive ? 'oklch(0.3 0.02 270)' : 'transparent';
           return jsx('button', {
-            className: 'w-7 h-7 flex items-center justify-center rounded ' + (isActive ? 'bg-muted ' + pc.tw : 'text-muted-foreground hover:bg-muted'),
+            style: Object.assign({}, btnBase, isActive ? { background: activeBg } : {}),
             onClick: function () { onSelectPinType(t); },
             title: typeLabels[t],
-            dangerouslySetInnerHTML: { __html: '<span style="display:block;width:14px;height:14px" class="' + pc.tw + '">' + Icons[t] + '</span>' }
+            onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
+            onMouseLeave: function (e) { e.currentTarget.style.background = activeBg; },
+            dangerouslySetInnerHTML: { __html: '<span style="display:block;width:14px;height:14px;color:' + (isActive ? 'oklch(0.85 0.08 ' + (t === 'metric' ? 200 : t === 'device' ? 155 : t === 'annotation' ? 85 : 310) + ')' : 'oklch(0.65 0.02 270)') + '">' + Icons[t] + '</span>' }
           }, t);
         }),
-        jsx('div', { className: 'w-px bg-glass-border mx-0.5', style: { height: '20px', alignSelf: 'center' } }),
+        jsx('div', { style: { width: 1, height: 20, alignSelf: 'center', margin: '0 2px', backgroundColor: 'oklch(0.4 0.02 270)' } }),
         jsx('button', {
-          className: 'px-2 h-7 rounded text-xs text-muted-foreground hover:bg-muted',
+          style: Object.assign({}, btnBase, { width: 'auto', padding: '0 8px', fontSize: 12 }),
           onClick: onToggleEdit,
+          onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
+          onMouseLeave: function (e) { e.currentTarget.style.background = 'transparent'; },
           children: 'Done'
         })
       ]
