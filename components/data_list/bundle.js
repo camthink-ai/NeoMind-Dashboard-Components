@@ -382,7 +382,7 @@ var NeoMind_DataList = (function () {
         }));
       }
       if (kvPairs.length > 0) {
-        cardChildren.push(jsx('div', { key: 'kv', style: { flex: 1, overflow: 'auto' }, children: kvChildren }));
+        cardChildren.push(jsx('div', { key: 'kv', style: { flex: 1, overflow: 'auto', width: '100%', maxWidth: '280px' }, children: kvChildren }));
       }
       if (cardChildren.length === 0) {
         // Only had null values, show the raw data
@@ -390,7 +390,7 @@ var NeoMind_DataList = (function () {
       }
       return jsxs('div', {
         ref: containerRef,
-        className: 'flex flex-col h-full w-full bg-card border border-glass-border rounded-lg overflow-hidden',
+        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-glass-border rounded-lg overflow-hidden',
         style: { padding: '14px' },
         children: cardChildren
       });
@@ -411,7 +411,7 @@ var NeoMind_DataList = (function () {
             style: {
               flex: col.flex, fontSize: '10px', color: 'var(--text-muted-foreground)',
               textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 500,
-              textAlign: col.type === 'number' || col.type === 'time' ? 'right' : 'left'
+              textAlign: 'center'
             },
             children: col.label
           });
@@ -440,7 +440,7 @@ var NeoMind_DataList = (function () {
         }
         numChildren.push(jsx('span', { key: 'val', style: { color: colorVar }, children: val }));
         return jsxs('span', {
-          style: { display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', width: '100%', fontVariantNumeric: 'tabular-nums' },
+          style: { display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'center', width: '100%', fontVariantNumeric: 'tabular-nums' },
           children: numChildren
         });
       }
@@ -515,7 +515,7 @@ var NeoMind_DataList = (function () {
         children: displayCols.map(function (col) {
           return jsx('span', {
             key: col.key,
-            style: { flex: col.flex, textAlign: col.type === 'number' || col.type === 'time' ? 'right' : 'left', fontSize: '12px', color: 'var(--text-muted-foreground)' },
+            style: { flex: col.flex, textAlign: 'center', fontSize: '12px', color: 'var(--text-muted-foreground)' },
             children: renderCell(item, col, idx)
           });
         })
