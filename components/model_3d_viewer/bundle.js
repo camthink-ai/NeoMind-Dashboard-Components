@@ -73,6 +73,16 @@ var Model3DViewer = (function () {
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
 
+    // Lighting
+    var ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambient);
+    var dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(5, 10, 7);
+    scene.add(dirLight);
+    var fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    fillLight.position.set(-3, 2, -5);
+    scene.add(fillLight);
+
     var raycaster = new THREE.Raycaster();
 
     return {
@@ -1043,10 +1053,10 @@ var Model3DViewer = (function () {
           style: { backgroundColor: 'oklch(0.15 0.02 270 / 80%)', zIndex: 50 },
           children: jsxs('div', { className: 'text-center', children: [
             jsx('div', {
-              className: 'w-8 h-8 border-2 rounded-full mx-auto',
-              style: { borderTopColor: 'var(--color-info)', borderColor: 'oklch(0.4 0.02 270)', animation: 'spin 1s linear infinite' }
+              className: 'w-10 h-10 border-[3px] rounded-full mx-auto',
+              style: { borderTopColor: 'var(--color-info)', borderRightColor: 'var(--color-info)', borderColor: 'oklch(0.3 0.02 270)', animation: 'spin 0.8s linear infinite' }
             }),
-            jsx('p', { className: 'text-xs text-muted-foreground mt-2', children: 'Loading model...' })
+            jsx('p', { className: 'text-sm mt-3', style: { color: 'oklch(0.7 0.02 270)' }, children: 'Loading 3D Model...' })
           ]})
         }),
         // Error overlay
