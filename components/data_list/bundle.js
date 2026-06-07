@@ -471,9 +471,82 @@ var NeoMind_DataList = (function () {
     });
   }
 
-  // ── ConfigPanel (placeholder — Task 4) ──
+  // ── ConfigPanel (Task 4) ──
   function ConfigPanel(props) {
-    return jsx('div', { className: 'text-xs text-muted-foreground p-3', children: 'ConfigPanel placeholder' });
+    var config = props.config || {};
+    var onConfigChange = props.onConfigChange || function () {};
+    var columns = config.columns || [];
+
+    var heightState = React.useState(config.row_height || 'default');
+    var rowHeight = heightState[0], setRowHeight = heightState[1];
+
+    function updateConfig(newConfig) {
+      onConfigChange(Object.assign({}, config, newConfig));
+    }
+
+    function toggleColumnVisibility(idx) {
+      var cols = columns.slice();
+      cols[idx] = Object.assign({}, cols[idx], { visible: !cols[idx].visible });
+      updateConfig({ columns: cols });
+    }
+
+    function updateColumnLabel(idx, newLabel) {
+      var cols = columns.slice();
+      cols[idx] = Object.assign({}, cols[idx], { label: newLabel });
+      updateConfig({ columns: cols });
+    }
+
+    var children = [
+      jsxs('div', { key: 'height', className: 'flex flex-col gap-1', children: [
+        jsx('span', { className: 'text-xs font-semibold text-muted-foreground uppercase tracking-wide', children: 'Row Height' }),
+        jsxs('div', { className: 'flex gap-2', children: [
+          jsx('button', {
+            className: 'px-3 py-1 rounded text-xs font-medium transition-colors ' + (rowHeight === 'default' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted-30'),
+            onClick: function () { setRowHeight('default'); updateConfig({ row_height: 'default' }); },
+            children: 'Default'
+          }),
+          jsx('button', {
+            className: 'px-3 py-1 rounded text-xs font-medium transition-colors ' + (rowHeight === 'compact' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted-30'),
+            onClick: function () { setRowHeight('compact'); updateConfig({ row_height: 'compact' }); },
+            children: 'Compact'
+          })
+        ]})
+      ]})
+    ];
+
+    if (columns.length > 0) {
+      var colItems = columns.map(function (col, idx) {
+        return jsxs('div', {
+          key: col.key,
+          className: 'flex items-center gap-2 py-1',
+          children: [
+            jsx('input', {
+              key: 'cb',
+              type: 'checkbox',
+              checked: col.visible !== false,
+              onChange: function () { toggleColumnVisibility(idx); },
+              className: 'accent-foreground'
+            }),
+            jsx('input', {
+              key: 'lbl',
+              type: 'text',
+              value: col.label || '',
+              onChange: function (e) { updateColumnLabel(idx, e.target.value); },
+              className: 'text-xs bg-transparent border-b border-glass-border text-foreground px-1 py-0.5 focus:outline-none focus:border-foreground',
+              style: { flex: 1 }
+            })
+          ]
+        });
+      });
+      children.push(jsxs('div', { key: 'cols', className: 'flex flex-col gap-1', children: [
+        jsx('span', { className: 'text-xs font-semibold text-muted-foreground uppercase tracking-wide', children: 'Columns' }),
+        colItems
+      ]}));
+    } else {
+      children.push(jsx('div', { key: 'no-cols', className: 'text-xs text-muted-foreground', children: 'Columns will appear after data is loaded' }));
+    }
+
+    return jsxs('div', { className: 'flex flex-col gap-3 p-3', children: children });
   }
 
   // ── Inject styles ──
