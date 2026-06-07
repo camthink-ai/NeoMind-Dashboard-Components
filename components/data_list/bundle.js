@@ -16,63 +16,83 @@ var NeoMind_DataList = (function () {
     return cur;
   }
 
-  function extractArray(result, dataPath) {
-    if (!result) return null;
+  /**
+   * Adapt fetchData result to displayable array.
+   * Returns { items: [...], isEmpty: bool, label: string }
+   */
+  function adaptData(result, dataPath) {
+    // null/undefined → no data source or empty
+    if (result == null) return { items: null, isEmpty: true, label: 'no_source' };
+
+    // data_path override
     if (dataPath) {
       var resolved = resolveByPath(result, dataPath);
-      if (Array.isArray(resolved)) return resolved;
-      if (resolved != null && typeof resolved === 'object') return [resolved];
-      return null;
+      if (Array.isArray(resolved)) return { items: resolved, isEmpty: resolved.length === 0, label: 'path' };
+      if (resolved != null && typeof resolved === 'object') return { items: [resolved], isEmpty: false, label: 'path_obj' };
+      return { items: null, isEmpty: true, label: 'path_empty' };
     }
-    // Result itself is an array
-    if (Array.isArray(result)) return result;
 
-    // { value: [...] } — array of objects/rows
-    if (result.value != null && Array.isArray(result.value)) return result.value;
+    // Direct array
+    if (Array.isArray(result)) return { items: result, isEmpty: result.length === 0, label: 'array' };
 
-    // { value: { key1: [...], key2: ..., ... } } — find first array inside value
+    // ── { value: ... } branches ──
+
+    // { value: [...] } — array of items
+    if (result.value != null && Array.isArray(result.value)) {
+      return { items: result.value, isEmpty: result.value.length === 0, label: 'value_array' };
+    }
+
+    // { value: { ... } } — plain object, search for arrays inside
     if (result.value != null && typeof result.value === 'object' && !Array.isArray(result.value)) {
-      var keys = Object.keys(result.value);
-      for (var i = 0; i < keys.length; i++) {
-        if (Array.isArray(result.value[keys[i]])) return result.value[keys[i]];
+      var vKeys = Object.keys(result.value);
+      for (var vi = 0; vi < vKeys.length; vi++) {
+        if (Array.isArray(result.value[vKeys[vi]])) {
+          return { items: result.value[vKeys[vi]], isEmpty: result.value[vKeys[vi]].length === 0, label: 'value_nested_array' };
+        }
       }
-      // value is a plain object — wrap as single row
-      return [result.value];
+      // Plain object with properties → show as key-value card
+      return { items: [result.value], isEmpty: false, label: 'value_object' };
     }
 
-    // { series: [...] } — timeseries data
+    // { value: <primitive> } — scalar value (number, string, boolean)
+    if (result.value != null && typeof result.value !== 'object') {
+      return { items: [{ value: result.value }], isEmpty: false, label: 'value_scalar' };
+    }
+
+    // ── { series: [...] } branches ──
+
     if (result.series != null && Array.isArray(result.series)) {
-      // Empty series — no data
-      if (result.series.length === 0) return [];
-      // Series items are objects with timestamp/value
+      if (result.series.length === 0) return { items: [], isEmpty: true, label: 'series_empty' };
+      // Objects with timestamp/value
       if (result.series[0] != null && typeof result.series[0] === 'object') {
-        return result.series.map(function (item, idx) {
-          return typeof item === 'object' && item !== null
-            ? { timestamp: item.timestamp, value: item.value }
-            : { index: idx, value: item };
+        var items = result.series.map(function (item, idx) {
+          return { index: idx + 1, timestamp: item.timestamp, value: item.value };
         });
+        return { items: items, isEmpty: false, label: 'series_objects' };
       }
-      // Series items are primitives (numbers/strings) — wrap each as a row
-      return result.series.map(function (item, idx) {
+      // Primitive values (numbers/strings)
+      var primItems = result.series.map(function (item, idx) {
         return { index: idx + 1, value: item };
       });
+      return { items: primItems, isEmpty: false, label: 'series_primitives' };
     }
 
-    // { value: <primitive> } — single scalar value, wrap as one row
-    if (result.value != null && typeof result.value !== 'object') {
-      return [{ value: result.value }];
-    }
+    // ── Fallback: search all top-level fields for arrays ──
 
-    // Deep search: find first array in any top-level field
     var topKeys = Object.keys(result);
     for (var k = 0; k < topKeys.length; k++) {
-      if (Array.isArray(result[topKeys[k]]) && result[topKeys[k]].length > 0) return result[topKeys[k]];
+      if (Array.isArray(result[topKeys[k]]) && result[topKeys[k]].length > 0) {
+        return { items: result[topKeys[k]], isEmpty: false, label: 'top_array' };
+      }
     }
-    // Fallback: wrap result as single row
-    if (typeof result === 'object' && topKeys.length > 0) {
-      return [result];
+
+    // Last resort: wrap result itself as a row
+    if (topKeys.length > 0) {
+      return { items: [result], isEmpty: false, label: 'wrap' };
     }
-    return null;
+
+    // Truly empty object
+    return { items: null, isEmpty: true, label: 'empty' };
   }
 
   function keyToLabel(key) {
@@ -109,7 +129,6 @@ var NeoMind_DataList = (function () {
 
   function inferColumns(data) {
     if (!data || data.length === 0) return [];
-    // Find first non-null item to get keys (skip null entries)
     var first = null;
     for (var f = 0; f < data.length; f++) {
       if (data[f] != null && typeof data[f] === 'object') { first = data[f]; break; }
@@ -183,6 +202,18 @@ var NeoMind_DataList = (function () {
     return new Date(ts).toLocaleDateString();
   }
 
+  // ── Get label from dataSource ──
+
+  function getDataSourceLabel(ds) {
+    if (!ds) return '';
+    if (ds.field) return keyToLabel(ds.field);
+    if (ds.infoProperty) return keyToLabel(ds.infoProperty);
+    if (ds.systemMetric) return keyToLabel(ds.systemMetric);
+    if (ds.extensionMetric) return ds.extensionMetric;
+    if (ds.type) return keyToLabel(ds.type);
+    return '';
+  }
+
   // ── Main Component ──
 
   function DataList(props) {
@@ -195,6 +226,9 @@ var NeoMind_DataList = (function () {
 
     var loadingState = React.useState(true);
     var loading = loadingState[0], setLoading = loadingState[1];
+
+    var emptyLabelState = React.useState('');
+    var emptyLabel = emptyLabelState[0], setEmptyLabel = emptyLabelState[1];
 
     var errorState = React.useState(null);
     var error = errorState[0], setError = errorState[1];
@@ -209,10 +243,12 @@ var NeoMind_DataList = (function () {
     var tagColorMaps = React.useRef({});
     var fetchDataRef = React.useRef(fetchData);
     var configRef = React.useRef(config);
-    var mountedRef = React.useRef(false);
     var fetchIdRef = React.useRef(0);
     fetchDataRef.current = fetchData;
     configRef.current = config;
+
+    var dsKey = dataSource ? JSON.stringify(dataSource) : '';
+    var lastDsKeyRef = React.useRef(dsKey);
 
     function doFetch() {
       var fn = fetchDataRef.current;
@@ -225,35 +261,36 @@ var NeoMind_DataList = (function () {
         .then(function (result) {
           if (thisFetchId !== fetchIdRef.current) return;
           console.log('[DataList] fetchData →', JSON.stringify(result));
-          if (result == null) { setData(null); setLoading(false); return; }
-          var arr = extractArray(result, cfg.data_path || '');
-          console.log('[DataList] extractArray →', arr ? ('[' + arr.length + ']') : 'null', arr && arr[0] ? JSON.stringify(arr[0]) : '');
-          if (arr === null) { setData(null); setError('format'); }
-          else if (arr.length === 0) { setData([]); }
-          else {
-            setData(arr);
-            var inferred = inferColumns(arr);
+          var adapted = adaptData(result, cfg.data_path || '');
+          console.log('[DataList] adaptData →', adapted.label, adapted.items ? ('items[' + adapted.items.length + ']') : 'null');
+          if (adapted.items === null) {
+            setData(null);
+            setEmptyLabel(adapted.label === 'no_source' ? 'no_source' : 'incompatible');
+          } else if (adapted.isEmpty) {
+            setData([]);
+            setEmptyLabel(adapted.label);
+          } else {
+            setData(adapted.items);
+            setEmptyLabel('');
+            var inferred = inferColumns(adapted.items);
             setColumns(mergeColumns(inferred, cfg.columns));
             var maps = {};
             for (var i = 0; i < inferred.length; i++) {
-              if (inferred[i].type === 'tag') maps[inferred[i].key] = getTagColorMap(arr, inferred[i]);
+              if (inferred[i].type === 'tag') maps[inferred[i].key] = getTagColorMap(adapted.items, inferred[i]);
             }
             tagColorMaps.current = maps;
           }
         })
-        .catch(function (e) { if (thisFetchId === fetchIdRef.current) setError('fetch'); })
+        .catch(function (e) {
+          if (thisFetchId === fetchIdRef.current) setError('fetch');
+          console.error('[DataList] fetchData error:', e);
+        })
         .finally(function () { if (thisFetchId === fetchIdRef.current) setLoading(false); });
     }
 
-    // Track dataSource identity to re-fetch when user changes the binding
-    var dsKey = dataSource ? JSON.stringify(dataSource) : '';
-    var lastDsKeyRef = React.useRef(dsKey);
-
     React.useEffect(function () {
-      // Re-fetch when dataSource changes, or on first mount
-      if (dsKey === lastDsKeyRef.current && mountedRef.current) return;
+      if (dsKey === lastDsKeyRef.current && lastDsKeyRef.current !== '') return;
       lastDsKeyRef.current = dsKey;
-      mountedRef.current = true;
       doFetch();
     }, [dsKey]);
 
@@ -289,7 +326,9 @@ var NeoMind_DataList = (function () {
       displayCols = visibleCols.slice(0, keepCount);
     }
 
-    // ── States (all attach containerRef) ──
+    var metricLabel = getDataSourceLabel(dataSource);
+
+    // ── Render states ──
 
     if (loading) {
       return jsx('div', {
@@ -306,16 +345,8 @@ var NeoMind_DataList = (function () {
     if (!fetchData) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-glass-border rounded-lg text-muted-foreground',
-        children: jsx('span', { className: 'text-sm', children: 'No data source configured' })
-      });
-    }
-
-    if (error === 'format') {
-      return jsx('div', {
-        ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-glass-border rounded-lg text-muted-foreground',
-        children: jsx('span', { className: 'text-sm', children: 'Data format incompatible' })
+        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-glass-border rounded-lg text-muted-foreground gap-1',
+        children: jsxs('span', { className: 'text-xs', children: ['No data source configured'] })
       });
     }
 
@@ -330,63 +361,66 @@ var NeoMind_DataList = (function () {
       });
     }
 
+    // No data / empty states — show metric name if available
     if (!data || data.length === 0) {
-      return jsx('div', {
+      var emptyMsg = 'No data';
+      if (emptyLabel === 'no_source') emptyMsg = 'No data source configured';
+      else if (emptyLabel === 'series_empty') emptyMsg = 'Waiting for data';
+      else if (emptyLabel === 'incompatible') emptyMsg = 'Data format incompatible';
+      var emptyChildren = [jsx('span', { key: 'msg', className: 'text-sm', children: emptyMsg })];
+      if (metricLabel) {
+        emptyChildren.push(jsx('span', { key: 'metric', className: 'text-xs opacity-60', children: metricLabel }));
+      }
+      return jsxs('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-glass-border rounded-lg text-muted-foreground',
-        children: jsx('span', { className: 'text-sm', children: 'No data' })
+        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-glass-border rounded-lg text-muted-foreground gap-1',
+        children: emptyChildren
       });
     }
 
     // ── Single item: card layout ──
     if (data.length === 1 && typeof data[0] === 'object' && data[0] !== null) {
       var singleItem = data[0];
-      var singleKeys = Object.keys(singleItem);
+      var singleKeys = Object.keys(singleItem).filter(function (k) { return singleItem[k] != null; });
       var singleAccent = ACCENT_COLORS[0];
-      // Find the "name" or first text field for the title
       var titleKey = null;
       for (var ti = 0; ti < singleKeys.length; ti++) {
         var tv = singleItem[singleKeys[ti]];
         if (typeof tv === 'string' && tv.length > 0) { titleKey = singleKeys[ti]; break; }
       }
-      var titleValue = titleKey ? String(singleItem[titleKey]) : '';
-      var kvPairs = singleKeys.filter(function (k) { return k !== titleKey && singleItem[k] != null; });
+      var titleValue = titleKey ? String(singleItem[titleKey]) : (metricLabel || '');
+      var kvPairs = singleKeys.filter(function (k) { return k !== titleKey; });
       var kvChildren = [];
       for (var ki = 0; ki < kvPairs.length; ki++) {
         var kk = kvPairs[ki];
         var kv = singleItem[kk];
         var kvFormatted = kv;
         if (typeof kv === 'number' && kv > 1e12) kvFormatted = formatRelativeTime(kv);
+        else if (typeof kv === 'boolean') kvFormatted = kv ? 'Yes' : 'No';
         kvChildren.push(jsxs('div', {
           key: kk,
-          style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderTop: ki > 0 ? '1px solid var(--border-glass-border, var(--border))' : 'none' },
+          style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: ki > 0 ? '1px solid var(--border-glass-border, var(--border))' : 'none' },
           children: [
-            jsx('span', { key: 'k', style: { fontSize: '11px', color: 'var(--text-muted-foreground)', flexShrink: 0 }, children: keyToLabel(kk) }),
-            jsx('span', { key: 'v', style: { fontSize: '12px', color: 'var(--text-foreground)', fontWeight: 500, textAlign: 'right', marginLeft: '12px' }, children: String(kvFormatted) })
+            jsx('span', { key: 'k', style: { fontSize: '11px', color: 'var(--text-muted-foreground)' }, children: keyToLabel(kk) }),
+            jsx('span', { key: 'v', style: { fontSize: '13px', color: 'var(--text-foreground)', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }, children: String(kvFormatted) })
           ]
         }));
       }
       var cardChildren = [];
-      if (titleValue) {
-        cardChildren.push(jsxs('div', {
-          key: 'title',
-          style: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' },
-          children: [
-            jsx('span', {
-              key: 'icon',
-              style: { width: '32px', height: '32px', borderRadius: '8px', background: singleAccent.grad, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-              children: jsx('span', { style: { color: 'var(--text-primary-foreground)', fontSize: '14px' }, children: '\u25CF' })
-            }),
-            jsx('span', { key: 'txt', style: { fontSize: '14px', fontWeight: 600, color: 'var(--text-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: titleValue })
-          ]
-        }));
-      }
+      cardChildren.push(jsxs('div', {
+        key: 'title',
+        style: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: kvPairs.length > 0 ? '10px' : '0' },
+        children: [
+          jsx('span', {
+            key: 'icon',
+            style: { width: '32px', height: '32px', borderRadius: '8px', background: singleAccent.grad, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+            children: jsx('span', { style: { color: 'var(--text-primary-foreground)', fontSize: '14px', fontWeight: 700 }, children: titleValue ? titleValue.charAt(0).toUpperCase() : '?' })
+          }),
+          jsx('span', { key: 'txt', style: { fontSize: '14px', fontWeight: 600, color: 'var(--text-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: titleValue })
+        ]
+      }));
       if (kvPairs.length > 0) {
-        cardChildren.push(jsx('div', { key: 'kv', style: { flex: 1, overflow: 'auto', width: '100%', maxWidth: '280px' }, children: kvChildren }));
-      }
-      if (cardChildren.length === 0) {
-        // Only had null values, show the raw data
-        cardChildren.push(jsx('div', { key: 'raw', style: { fontSize: '12px', color: 'var(--text-muted-foreground)', padding: '8px 0' }, children: JSON.stringify(singleItem) }));
+        cardChildren.push(jsx('div', { key: 'kv', style: { width: '100%', maxWidth: '260px' }, children: kvChildren }));
       }
       return jsxs('div', {
         ref: containerRef,
@@ -398,7 +432,7 @@ var NeoMind_DataList = (function () {
 
     var rows = data.slice(0, displayCount);
 
-    // Column header
+    // ── Table header ──
     function renderHeader() {
       if (mode === 'stacked') return null;
       return jsx('div', {
@@ -599,7 +633,7 @@ var NeoMind_DataList = (function () {
     });
   }
 
-  // ── ConfigPanel (Task 4) ──
+  // ── ConfigPanel ──
   function ConfigPanel(props) {
     var config = props.config || {};
     var onConfigChange = props.onConfigChange || function () {};
