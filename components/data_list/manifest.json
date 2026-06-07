@@ -1,0 +1,54 @@
+{
+  "id": "data_list",
+  "name": { "en": "Data List", "zh": "数据列表" },
+  "description": {
+    "en": "A configurable data list with auto-inferred columns and responsive layout",
+    "zh": "可配置的数据列表，自动推断列，响应式布局"
+  },
+  "icon": "List",
+  "category": "display",
+  "version": "1.0.0",
+  "author": "NeoMind Team",
+  "size_constraints": { "min_w": 2, "min_h": 2, "default_w": 4, "default_h": 3, "max_w": 12, "max_h": 8 },
+  "has_data_source": true,
+  "max_data_sources": 1,
+  "has_display_config": true,
+  "has_actions": false,
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "row_height": {
+        "type": "string",
+        "enum": ["compact", "default"],
+        "default": "default",
+        "title": "Row Height"
+      },
+      "data_path": {
+        "type": "string",
+        "default": "",
+        "title": "Data Path"
+      },
+      "columns": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "key": { "type": "string" },
+            "label": { "type": "string" },
+            "visible": { "type": "boolean", "default": true },
+            "order": { "type": "number" }
+          }
+        },
+        "default": [],
+        "title": "Columns"
+      }
+    }
+  },
+  "default_config": {
+    "row_height": "default",
+    "data_path": "",
+    "columns": []
+  },
+  "global_name": "NeoMind_DataList",
+  "export_name": "DataList"
+}
