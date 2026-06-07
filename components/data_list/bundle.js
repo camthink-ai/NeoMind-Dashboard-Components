@@ -223,11 +223,11 @@ var NeoMind_DataList = (function () {
       setError(null);
       fn()
         .then(function (result) {
-          // Ignore stale responses from earlier fetches
           if (thisFetchId !== fetchIdRef.current) return;
-          // fetchData returns null when no data source configured
+          console.log('[DataList] fetchData →', JSON.stringify(result));
           if (result == null) { setData(null); setLoading(false); return; }
           var arr = extractArray(result, cfg.data_path || '');
+          console.log('[DataList] extractArray →', arr ? ('[' + arr.length + ']') : 'null', arr && arr[0] ? JSON.stringify(arr[0]) : '');
           if (arr === null) { setData(null); setError('format'); }
           else if (arr.length === 0) { setData([]); }
           else {
@@ -245,12 +245,17 @@ var NeoMind_DataList = (function () {
         .finally(function () { if (thisFetchId === fetchIdRef.current) setLoading(false); });
     }
 
+    // Track dataSource identity to re-fetch when user changes the binding
+    var dsKey = dataSource ? JSON.stringify(dataSource) : '';
+    var lastDsKeyRef = React.useRef(dsKey);
+
     React.useEffect(function () {
-      // Only fetch once on mount; skip if already fetched
-      if (mountedRef.current) return;
+      // Re-fetch when dataSource changes, or on first mount
+      if (dsKey === lastDsKeyRef.current && mountedRef.current) return;
+      lastDsKeyRef.current = dsKey;
       mountedRef.current = true;
       doFetch();
-    }, []);
+    }, [dsKey]);
 
     function handleScroll(e) {
       var el = e.target;
@@ -330,6 +335,64 @@ var NeoMind_DataList = (function () {
         ref: containerRef,
         className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-glass-border rounded-lg text-muted-foreground',
         children: jsx('span', { className: 'text-sm', children: 'No data' })
+      });
+    }
+
+    // ── Single item: card layout ──
+    if (data.length === 1 && typeof data[0] === 'object' && data[0] !== null) {
+      var singleItem = data[0];
+      var singleKeys = Object.keys(singleItem);
+      var singleAccent = ACCENT_COLORS[0];
+      // Find the "name" or first text field for the title
+      var titleKey = null;
+      for (var ti = 0; ti < singleKeys.length; ti++) {
+        var tv = singleItem[singleKeys[ti]];
+        if (typeof tv === 'string' && tv.length > 0) { titleKey = singleKeys[ti]; break; }
+      }
+      var titleValue = titleKey ? String(singleItem[titleKey]) : '';
+      var kvPairs = singleKeys.filter(function (k) { return k !== titleKey && singleItem[k] != null; });
+      var kvChildren = [];
+      for (var ki = 0; ki < kvPairs.length; ki++) {
+        var kk = kvPairs[ki];
+        var kv = singleItem[kk];
+        var kvFormatted = kv;
+        if (typeof kv === 'number' && kv > 1e12) kvFormatted = formatRelativeTime(kv);
+        kvChildren.push(jsxs('div', {
+          key: kk,
+          style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderTop: ki > 0 ? '1px solid var(--border-glass-border, var(--border))' : 'none' },
+          children: [
+            jsx('span', { key: 'k', style: { fontSize: '11px', color: 'var(--text-muted-foreground)', flexShrink: 0 }, children: keyToLabel(kk) }),
+            jsx('span', { key: 'v', style: { fontSize: '12px', color: 'var(--text-foreground)', fontWeight: 500, textAlign: 'right', marginLeft: '12px' }, children: String(kvFormatted) })
+          ]
+        }));
+      }
+      var cardChildren = [];
+      if (titleValue) {
+        cardChildren.push(jsxs('div', {
+          key: 'title',
+          style: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' },
+          children: [
+            jsx('span', {
+              key: 'icon',
+              style: { width: '32px', height: '32px', borderRadius: '8px', background: singleAccent.grad, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+              children: jsx('span', { style: { color: 'var(--text-primary-foreground)', fontSize: '14px' }, children: '\u25CF' })
+            }),
+            jsx('span', { key: 'txt', style: { fontSize: '14px', fontWeight: 600, color: 'var(--text-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: titleValue })
+          ]
+        }));
+      }
+      if (kvPairs.length > 0) {
+        cardChildren.push(jsx('div', { key: 'kv', style: { flex: 1, overflow: 'auto' }, children: kvChildren }));
+      }
+      if (cardChildren.length === 0) {
+        // Only had null values, show the raw data
+        cardChildren.push(jsx('div', { key: 'raw', style: { fontSize: '12px', color: 'var(--text-muted-foreground)', padding: '8px 0' }, children: JSON.stringify(singleItem) }));
+      }
+      return jsxs('div', {
+        ref: containerRef,
+        className: 'flex flex-col h-full w-full bg-card border border-glass-border rounded-lg overflow-hidden',
+        style: { padding: '14px' },
+        children: cardChildren
       });
     }
 
