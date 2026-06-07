@@ -214,6 +214,12 @@ var NeoMind_DataList = (function () {
     return '';
   }
 
+  // ── Stable key from dataSource identifying fields only ──
+  function getStableDsKey(ds) {
+    if (!ds) return '';
+    return [ds.source || '', ds.mode || ds.type || '', ds.id || ds.sourceId || '', ds.field || ''].join('|');
+  }
+
   // ── Main Component ──
 
   function DataList(props) {
@@ -247,8 +253,9 @@ var NeoMind_DataList = (function () {
     fetchDataRef.current = fetchData;
     configRef.current = config;
 
-    var dsKey = dataSource ? JSON.stringify(dataSource) : '';
-    var lastDsKeyRef = React.useRef(dsKey);
+    // Only use stable identifying fields — NOT currentValue, params, etc.
+    var dsKey = getStableDsKey(dataSource);
+    var lastDsKeyRef = React.useRef(null);
 
     function doFetch() {
       var fn = fetchDataRef.current;
@@ -260,15 +267,26 @@ var NeoMind_DataList = (function () {
       fn()
         .then(function (result) {
           if (thisFetchId !== fetchIdRef.current) return;
-          console.log('[DataList] fetchData →', JSON.stringify(result));
           var adapted = adaptData(result, cfg.data_path || '');
-          console.log('[DataList] adaptData →', adapted.label, adapted.items ? ('items[' + adapted.items.length + ']') : 'null');
+          console.log('[DataList]', dsKey, '→', adapted.label, adapted.items ? adapted.items.length : 'null');
           if (adapted.items === null) {
             setData(null);
             setEmptyLabel(adapted.label === 'no_source' ? 'no_source' : 'incompatible');
           } else if (adapted.isEmpty) {
-            setData([]);
-            setEmptyLabel(adapted.label);
+            // If timeseries is empty but dataSource has a currentValue, show that
+            var cv = dataSource && dataSource.currentValue != null ? dataSource.currentValue : null;
+            if (cv != null) {
+              var cvItems = (typeof cv === 'object' && cv !== null && !Array.isArray(cv))
+                ? [cv]
+                : [{ value: cv }];
+              setData(cvItems);
+              setEmptyLabel('');
+              var cvInferred = inferColumns(cvItems);
+              setColumns(mergeColumns(cvInferred, cfg.columns));
+            } else {
+              setData([]);
+              setEmptyLabel(adapted.label);
+            }
           } else {
             setData(adapted.items);
             setEmptyLabel('');
@@ -289,7 +307,8 @@ var NeoMind_DataList = (function () {
     }
 
     React.useEffect(function () {
-      if (dsKey === lastDsKeyRef.current && lastDsKeyRef.current !== '') return;
+      // Skip if same stable key (prevents re-fetch on every render)
+      if (dsKey === lastDsKeyRef.current) return;
       lastDsKeyRef.current = dsKey;
       doFetch();
     }, [dsKey]);
