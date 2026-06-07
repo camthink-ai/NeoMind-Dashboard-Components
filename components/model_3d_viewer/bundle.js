@@ -259,11 +259,12 @@ var Model3DViewer = (function () {
     var pinTypes = ['metric', 'device', 'annotation', 'command'];
     var typeLabels = { metric: 'Metric', device: 'Device', annotation: 'Note', command: 'Cmd' };
 
-    var btnBase = { width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: 'none', cursor: 'pointer', color: 'oklch(0.65 0.02 270)', background: 'transparent' };
+    var btnBase = { width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: 'none', cursor: 'pointer', color: 'oklch(0.6 0.02 270)', background: 'transparent' };
+    var iconWrap = function (svg) { return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">' + svg.replace(/<svg[^>]*>/, '').replace(/<\/svg>/, '') + '</svg>'; };
 
     if (!editMode) {
       return jsxs('div', {
-        style: { position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 2, borderRadius: 8, padding: '2px 4px', zIndex: 40, backgroundColor: 'oklch(0.15 0.02 270 / 70%)', backdropFilter: 'blur(8px)' },
+        style: { position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 1, borderRadius: 6, padding: '2px 3px', zIndex: 40, backgroundColor: 'oklch(0.15 0.02 270 / 60%)', backdropFilter: 'blur(6px)' },
         children: [
           jsx('button', {
             style: Object.assign({}, btnBase),
@@ -271,7 +272,7 @@ var Model3DViewer = (function () {
             title: 'Edit pins',
             onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
             onMouseLeave: function (e) { e.currentTarget.style.background = 'transparent'; },
-            dangerouslySetInnerHTML: { __html: Icons.edit }
+            dangerouslySetInnerHTML: { __html: iconWrap(Icons.edit) }
           }),
           jsx('button', {
             style: Object.assign({}, btnBase),
@@ -279,38 +280,38 @@ var Model3DViewer = (function () {
             title: 'Reset view',
             onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
             onMouseLeave: function (e) { e.currentTarget.style.background = 'transparent'; },
-            dangerouslySetInnerHTML: { __html: Icons.reset }
+            dangerouslySetInnerHTML: { __html: iconWrap(Icons.reset) }
           }),
           jsx('button', {
             style: Object.assign({}, btnBase),
             title: 'Fullscreen',
             onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
             onMouseLeave: function (e) { e.currentTarget.style.background = 'transparent'; },
-            dangerouslySetInnerHTML: { __html: Icons.fullscreen }
+            dangerouslySetInnerHTML: { __html: iconWrap(Icons.fullscreen) }
           })
         ]
       });
     }
 
     return jsxs('div', {
-      style: { position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 2, borderRadius: 8, padding: '2px 4px', zIndex: 40, backgroundColor: 'oklch(0.15 0.02 270 / 70%)', backdropFilter: 'blur(8px)', border: '1px solid oklch(0.55 0.2 310 / 30%)' },
+      style: { position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 1, borderRadius: 6, padding: '2px 3px', zIndex: 40, backgroundColor: 'oklch(0.15 0.02 270 / 60%)', backdropFilter: 'blur(6px)', border: '1px solid oklch(0.55 0.2 310 / 30%)' },
       children: [
         pinTypes.map(function (t) {
           var isActive = activePinType === t;
-          var pc = PinColors[t];
           var activeBg = isActive ? 'oklch(0.3 0.02 270)' : 'transparent';
+          var hue = t === 'metric' ? 200 : t === 'device' ? 155 : t === 'annotation' ? 85 : 310;
           return jsx('button', {
-            style: Object.assign({}, btnBase, isActive ? { background: activeBg } : {}),
+            style: Object.assign({}, btnBase, isActive ? { background: activeBg, color: 'oklch(0.85 0.08 ' + hue + ')' } : {}),
             onClick: function () { onSelectPinType(t); },
             title: typeLabels[t],
             onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
             onMouseLeave: function (e) { e.currentTarget.style.background = activeBg; },
-            dangerouslySetInnerHTML: { __html: '<span style="display:block;width:14px;height:14px;color:' + (isActive ? 'oklch(0.85 0.08 ' + (t === 'metric' ? 200 : t === 'device' ? 155 : t === 'annotation' ? 85 : 310) + ')' : 'oklch(0.65 0.02 270)') + '">' + Icons[t] + '</span>' }
+            dangerouslySetInnerHTML: { __html: iconWrap(Icons[t]) }
           }, t);
         }),
-        jsx('div', { style: { width: 1, height: 20, alignSelf: 'center', margin: '0 2px', backgroundColor: 'oklch(0.4 0.02 270)' } }),
+        jsx('div', { style: { width: 1, height: 16, alignSelf: 'center', margin: '0 1px', backgroundColor: 'oklch(0.4 0.02 270)' } }),
         jsx('button', {
-          style: Object.assign({}, btnBase, { width: 'auto', padding: '0 8px', fontSize: 12 }),
+          style: Object.assign({}, btnBase, { width: 'auto', padding: '0 6px', fontSize: 10 }),
           onClick: onToggleEdit,
           onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
           onMouseLeave: function (e) { e.currentTarget.style.background = 'transparent'; },
@@ -677,11 +678,7 @@ var Model3DViewer = (function () {
 
     // Handlers
     var toggleEdit = function () {
-      var next = !editMode;
-      setEditMode(next);
-      if (!next && props.onConfigChange) {
-        props.onConfigChange('pins', pins);
-      }
+      setEditMode(!editMode);
     };
 
     var resetCamera = function () {
