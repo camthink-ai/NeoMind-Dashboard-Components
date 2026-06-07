@@ -6,10 +6,19 @@ A generic, zero-config data list component for the NeoMind Dashboard. Binds to a
 
 ## Component Identity
 
-- **Name**: `data_list`
+- **ID**: `data_list`
+- **Name**: `{ "en": "Data List", "zh": "数据列表" }`
+- **Description**: `{ "en": "A configurable data list with auto-inferred columns and responsive layout", "zh": "可配置的数据列表，自动推断列，响应式布局" }`
+- **Icon**: `List`
+- **Category**: `display`
+- **Version**: `1.0.0`
+- **Author**: `NeoMind Team`
 - **Global Name**: `NeoMind_DataList`
-- **Category**: Display
+- **Export Name**: `DataList`
+- **Size Constraints**: `min_w: 2, min_h: 2, default_w: 4, default_h: 3, max_w: 12, max_h: 8`
 - **Data Source**: `has_data_source: true`, `max_data_sources: 1`
+- **Display Config**: `has_display_config: true`
+- **Actions**: `has_actions: false`
 
 ## File Structure
 
@@ -40,6 +49,12 @@ useDataSource selection  ──→   fetchData() called
 3. Component auto-infers columns from the first array item's keys
 4. Data is rendered as styled list rows
 
+### Refresh Strategy
+
+- Component re-fetches data on mount and when `fetchData` prop reference changes (data source reconfigured)
+- No periodic polling — the component relies on the main project's data freshness management
+- If the main project supports push updates via prop changes, the component reacts automatically
+
 ## Data Format Adaptation
 
 `fetchData()` can return various formats. The component auto-adapts:
@@ -51,7 +66,7 @@ useDataSource selection  ──→   fetchData() called
 | `{ series: [...] }` | Convert series to row data |
 | Incompatible / null | Show "Data format incompatible" empty state |
 
-Optional `data_path` config field allows manual override (e.g., `value.items`, `data.records`).
+Optional `data_path` config field allows manual override (e.g., `value.items`, `data.records`). See Config Schema below.
 
 ## Column Auto-Inference
 
@@ -74,6 +89,7 @@ columns:
   - Values are numbers → `number` (right-aligned, tabular-nums)
   - Values are timestamps (> 1e12) → `time` (relative time display)
   - Values are booleans → `status` (colored dot + text)
+  - String values with fewer than 8 distinct values among first 50 items → `tag` (semi-transparent colored badge)
   - All other → `text`
 - `width`: proportional flex — first text column gets `flex:2`, others get `flex:1`
 - `priority`: inferred order determines responsive hide priority (last columns hidden first)
@@ -95,27 +111,38 @@ Tag colors are auto-assigned from the accent palette (purple, cyan, emerald, ora
 ```json
 {
   "config_schema": {
-    "row_height": {
-      "type": "string",
-      "enum": ["compact", "default"],
-      "default": "default"
-    },
-    "columns": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "key": { "type": "string" },
-          "label": { "type": "string" },
-          "visible": { "type": "boolean", "default": true },
-          "order": { "type": "number" }
-        }
+    "type": "object",
+    "properties": {
+      "row_height": {
+        "type": "string",
+        "enum": ["compact", "default"],
+        "default": "default",
+        "title": "Row Height"
       },
-      "default": []
+      "data_path": {
+        "type": "string",
+        "default": "",
+        "title": "Data Path"
+      },
+      "columns": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "key": { "type": "string" },
+            "label": { "type": "string" },
+            "visible": { "type": "boolean", "default": true },
+            "order": { "type": "number" }
+          }
+        },
+        "default": [],
+        "title": "Columns"
+      }
     }
   },
   "default_config": {
     "row_height": "default",
+    "data_path": "",
     "columns": []
   }
 }
@@ -179,7 +206,7 @@ No required configuration. The component works immediately upon data source bind
 ### Status Column
 - Colored dot (6x6px, `rounded-full`)
 - Online: `bg-success` with glow (`box-shadow: 0 0 6px`)
-- Offline: `bg-error`
+- Offline: `bg-muted-foreground` (not error — offline is distinct from error per STYLE_GUIDE section 5)
 - Label text in matching color
 
 ### Time Column
@@ -206,12 +233,13 @@ In stacked mode (< 300px):
 
 ## Infinite Scroll
 
-- Initial load: `fetchData({ offset: 0, limit: 50 })`
+- Initial load: `fetchData()` — returns all available data
+- If result is an array with 50+ items, component loads first 50 and marks as scrollable
 - Detect scroll to bottom via `onScroll` on the scrollable container
-- Load more: `fetchData({ offset: currentCount, limit: 50 })`
-- Append new items to existing data
+- Load next batch from the already-fetched data (client-side chunking)
+- If the data source supports `fetchData({ limit: N })`, use it for server-side pagination
 - Show loading indicator (animated dots) while fetching
-- Stop loading when `fetchData` returns empty array or fewer items than limit
+- Stop loading when all data is rendered
 
 ## Empty States
 
@@ -220,6 +248,7 @@ In stacked mode (< 300px):
 | No data source bound | `text-muted-foreground` "No data source configured" |
 | Empty data (0 items) | `text-muted-foreground` "No data" with subtle icon |
 | Incompatible format | `text-muted-foreground` "Data format incompatible" |
+| Fetch error | `text-muted-foreground` "Failed to load data" with retry button |
 | Loading | Animated pulse dots |
 
 ## ConfigPanel Export
@@ -249,10 +278,11 @@ No hardcoded Tailwind palette colors. No raw hex/rgb values. All colors adapt to
 
 ## Technical Notes
 
-- IIFE bundle format, following existing component conventions
+- IIFE wrapper: `var NeoMind_DataList = (function() { ... })();`
 - Uses `window.React`, `window.jsxRuntime.jsx`, `window.jsxRuntime.jsxs`
 - No external dependencies
 - All CSS via Tailwind classes + inline styles for dynamic values
 - `key` prop required on all mapped elements (use row index or item id field)
 - React `useEffect` + `useRef` for scroll detection
 - React `useState` for data, loading state, and column config
+- Export: `return { default: DataList, DataList: DataList, ConfigPanel: ConfigPanel };`
