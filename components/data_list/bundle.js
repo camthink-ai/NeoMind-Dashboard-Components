@@ -79,13 +79,18 @@ var NeoMind_DataList = (function () {
 
   function inferColumns(data) {
     if (!data || data.length === 0) return [];
-    var first = data[0];
+    // Find first non-null item to get keys (skip null entries)
+    var first = null;
+    for (var f = 0; f < data.length; f++) {
+      if (data[f] != null && typeof data[f] === 'object') { first = data[f]; break; }
+    }
+    if (!first) return [];
     var keys = Object.keys(first);
     var columns = [];
     var firstTextIdx = -1;
     for (var i = 0; i < keys.length; i++) {
       var key = keys[i];
-      var values = data.map(function (item) { return item[key]; });
+      var values = data.map(function (item) { return item != null && typeof item === 'object' ? item[key] : null; });
       var type = inferColumnType(values);
       var flex = 1;
       if (firstTextIdx === -1 && (type === 'text' || type === 'tag')) {
