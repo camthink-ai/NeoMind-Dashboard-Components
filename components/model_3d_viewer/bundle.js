@@ -1025,13 +1025,13 @@ var Model3DViewer = (function () {
       handle.scene.background = new THREE.Color(color);
     }, [bgColor]);
 
-    // React to autoRotate changes without reloading model
+    // React to autoRotate / editMode changes
     React.useEffect(function () {
       var handle = sceneHandleRef.current;
       if (!handle) return;
-      handle.controls.autoRotate = autoRotate;
+      handle.controls.autoRotate = autoRotate && !editMode;
       handle.controls.autoRotateSpeed = 2.0;
-    }, [autoRotate]);
+    }, [autoRotate, editMode]);
 
     return jsxs('div', {
       ref: containerRef,
