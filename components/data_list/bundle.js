@@ -240,7 +240,9 @@ var NeoMind_DataList = (function () {
       setError(null);
       fn().then(function (result) {
         if (fid !== fetchIdRef.current) return;
+        console.log('[DataList] fetchData result:', dsKey, JSON.stringify(result).slice(0, 300));
         var adapted = adaptData(result, cfg.data_path || '');
+        console.log('[DataList] adapted:', adapted.label, 'items:', adapted.items ? adapted.items.length : 'null');
         if (adapted.items === null) {
           setData(null);
           setEmptyLabel(adapted.label === 'no_source' ? 'no_source' : 'incompatible');
