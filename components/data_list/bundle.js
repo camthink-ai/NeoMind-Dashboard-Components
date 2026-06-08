@@ -67,9 +67,32 @@ var NeoMind_DataList = (function () {
   }
 
   function formatValue(v) {
-    if (v == null || typeof v === 'object') return null;
+    if (v == null) return null;
+    if (typeof v === 'object') return null;
     var s = String(v);
     return s.length > 120 ? s.slice(0, 100) + '...' : s;
+  }
+
+  // Compact display for any value, including objects
+  function displayVal(v) {
+    if (v == null) return '\u2014';
+    if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+    if (typeof v === 'number') return String(v);
+    if (typeof v === 'string') return v.length > 40 ? v.slice(0, 35) + '...' : v;
+    if (Array.isArray(v)) return '[' + v.length + ' items]';
+    if (typeof v === 'object') {
+      var keys = Object.keys(v);
+      if (!keys.length) return '{}';
+      var parts = keys.slice(0, 2).map(function (k) {
+        var sv = v[k];
+        if (typeof sv === 'object') sv = '{...}';
+        else sv = String(sv).slice(0, 12);
+        return k.slice(0, 8) + ':' + sv;
+      });
+      var tail = keys.length > 2 ? ', +' + (keys.length - 2) : '';
+      return parts.join(', ') + tail;
+    }
+    return String(v);
   }
 
   function inferColumnType(values) {
@@ -483,7 +506,7 @@ var NeoMind_DataList = (function () {
         var tsVal = item.timestamp;
         var val = item.value;
         var timeStr = tsVal ? formatTime(tsVal) : '';
-        var valStr = val != null ? String(val) : '\u2014';
+        var valStr = displayVal(val);
         var valColor = 'var(--foreground)';
         if (typeof val === 'number' && val >= 0 && val <= 100) {
           if (val < 20) valColor = 'oklch(0.58 0.22 25)';
@@ -522,7 +545,7 @@ var NeoMind_DataList = (function () {
           style: { borderTop: i > 0 ? '1px solid var(--border)' : 'none' },
           children: [
             jsx('span', { className: 'text-[10px] text-muted-foreground uppercase tracking-wide', children: keyToLabel(k) }),
-            jsx('span', { className: 'text-xs font-semibold tabular-nums truncate ml-3', children: String(fmt) })
+            jsx('span', { className: 'text-xs font-semibold truncate ml-3', children: displayVal(fmt) })
           ]
         }, k);
       });
@@ -616,7 +639,7 @@ var NeoMind_DataList = (function () {
                   return jsx('span', {
                     className: 'text-xs font-semibold tabular-nums truncate',
                     style: { flex: '1 1 0', color: vColor, paddingRight: '4px' },
-                    children: v != null ? String(v) : '\u2014'
+                    children: displayVal(v)
                   }, col.key);
                 });
                 return jsxs('div', {
@@ -653,7 +676,7 @@ var NeoMind_DataList = (function () {
                 },
                 children: [
                   jsx('span', { className: 'text-[11px] text-muted-foreground flex-shrink-0 tabular-nums', children: timeStr }),
-                  jsx('span', { className: 'text-sm font-semibold tabular-nums truncate ml-3', style: { color: valColor }, children: String(val != null ? val : '\u2014') })
+                  jsx('span', { className: 'text-sm font-semibold truncate ml-3', style: { color: valColor }, children: displayVal(val) })
                 ]
               }, idx);
             })
@@ -696,7 +719,7 @@ var NeoMind_DataList = (function () {
                       boxShadow: on ? '0 0 8px oklch(0.72 0.19 155 / 50%)' : 'none'
                     }
                   }),
-                  jsx('span', { className: 'text-[10px] font-medium ' + (on ? '' : 'text-muted-foreground'), style: on ? { color: 'oklch(0.72 0.19 155)' } : {}, children: String(v) })
+                  jsx('span', { className: 'text-[10px] font-medium ' + (on ? '' : 'text-muted-foreground'), style: on ? { color: 'oklch(0.72 0.19 155)' } : {}, children: displayVal(v) })
                 ]
               }, col.key));
             } else if (col.type === 'tag') {
@@ -705,7 +728,7 @@ var NeoMind_DataList = (function () {
               secondaries.push(jsx('span', {
                 className: 'inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold',
                 style: { background: accent.bg, color: accent.fg, border: '1px solid ' + accent.border },
-                children: String(v)
+                children: displayVal(v)
               }, col.key));
             } else if (col.type === 'time') {
               secondaries.push(jsx('span', { className: 'text-[10px] text-muted-foreground tabular-nums', children: formatTimeShort(v) }, col.key));
@@ -715,13 +738,13 @@ var NeoMind_DataList = (function () {
                 if (v < 20) numColor = 'oklch(0.58 0.22 25)';
                 else if (v < 40) numColor = 'oklch(0.72 0.17 65)';
               }
-              secondaries.push(jsx('span', { className: 'text-[10px] tabular-nums font-semibold', style: { color: numColor }, children: String(v) }, col.key));
+              secondaries.push(jsx('span', { className: 'text-[10px] font-semibold', style: { color: numColor }, children: displayVal(v) }, col.key));
             } else {
-              secondaries.push(jsx('span', { className: 'text-[10px] text-muted-foreground', children: String(v).slice(0, 20) }, col.key));
+              secondaries.push(jsx('span', { className: 'text-[10px] text-muted-foreground', children: displayVal(v) }, col.key));
             }
           }
 
-          var primaryText = primaryVal != null && typeof primaryVal !== 'object' ? String(primaryVal) : '\u2014';
+          var primaryText = displayVal(primaryVal);
           if (primary.type === 'time' && typeof primaryVal === 'number') primaryText = formatTime(primaryVal);
 
           var rowChildren = [
