@@ -95,10 +95,18 @@ var NeoMind_DataList = (function () {
   }
 
   var TAG_ACCENTS = [
-    { bg: 'oklch(0.72 0.19 310 / 18%)', fg: 'oklch(0.72 0.19 310)', glass: 'oklch(0.72 0.19 310 / 8%)' },
-    { bg: 'oklch(0.72 0.14 200 / 18%)', fg: 'oklch(0.72 0.14 200)', glass: 'oklch(0.72 0.14 200 / 8%)' },
-    { bg: 'oklch(0.72 0.19 155 / 18%)', fg: 'oklch(0.72 0.19 155)', glass: 'oklch(0.72 0.19 155 / 8%)' },
-    { bg: 'oklch(0.72 0.19 65 / 18%)', fg: 'oklch(0.72 0.19 65)', glass: 'oklch(0.72 0.19 65 / 8%)' }
+    { bg: 'oklch(0.72 0.19 310 / 18%)', fg: 'oklch(0.72 0.19 310)', border: 'oklch(0.72 0.19 310 / 12%)' },
+    { bg: 'oklch(0.72 0.14 200 / 18%)', fg: 'oklch(0.72 0.14 200)', border: 'oklch(0.72 0.14 200 / 12%)' },
+    { bg: 'oklch(0.72 0.19 155 / 18%)', fg: 'oklch(0.72 0.19 155)', border: 'oklch(0.72 0.19 155 / 12%)' },
+    { bg: 'oklch(0.72 0.19 65 / 18%)', fg: 'oklch(0.72 0.19 65)', border: 'oklch(0.72 0.19 65 / 12%)' }
+  ];
+
+  // Accent gradient colors for row left-borders, one per source
+  var SOURCE_GRADIENTS = [
+    { from: 'oklch(0.72 0.19 310)', to: 'oklch(0.72 0.14 200)' },
+    { from: 'oklch(0.72 0.19 155)', to: 'oklch(0.72 0.19 65)' },
+    { from: 'oklch(0.72 0.14 200)', to: 'oklch(0.72 0.19 310)' },
+    { from: 'oklch(0.72 0.19 65)', to: 'oklch(0.72 0.19 155)' }
   ];
 
   function inferColumns(data) {
@@ -108,7 +116,7 @@ var NeoMind_DataList = (function () {
       if (data[f] != null && typeof data[f] === 'object') { first = data[f]; break; }
     }
     if (!first) return [];
-    var keys = Object.keys(first);
+    var keys = Object.keys(first).filter(function (k) { return k !== '__sourceIdx' && k !== '__sourceLabel'; });
     var cols = [];
     for (var i = 0; i < keys.length; i++) {
       var key = keys[i];
@@ -185,10 +193,12 @@ var NeoMind_DataList = (function () {
 
   function getStableDsKey(ds) {
     if (!ds) return '';
+    if (Array.isArray(ds)) return ds.map(function (d) {
+      return [d.source || '', d.mode || d.type || '', d.id || d.sourceId || '', d.field || ''].join('|');
+    }).join('||');
     return [ds.source || '', ds.mode || ds.type || '', ds.id || ds.sourceId || '', ds.field || ''].join('|');
   }
 
-  // ── Detect if data is timeseries (only timestamp + value columns) ──
   function isTimeseries(cols) {
     if (cols.length !== 2) return false;
     var hasTime = false, hasValue = false;
@@ -198,6 +208,16 @@ var NeoMind_DataList = (function () {
     }
     return hasTime && hasValue;
   }
+
+  // ── Glass container style ──
+  var glassContainer = {
+    background: 'linear-gradient(135deg, oklch(1 0 0 / 6%) 0%, oklch(1 0 0 / 2%) 100%)',
+    border: '1px solid var(--border)',
+    borderRadius: '12px',
+    backdropFilter: 'blur(16px)',
+    WebkitBackdropFilter: 'blur(16px)',
+    boxShadow: '0 1px 3px oklch(0 0 0 / 12%), inset 0 1px 0 oklch(1 0 0 / 6%)'
+  };
 
   // ── Main Component ──
 
@@ -218,6 +238,8 @@ var NeoMind_DataList = (function () {
     var columns = colSt[0], setColumns = colSt[1];
     var dispSt = React.useState(50);
     var displayCount = dispSt[0], setDisplayCount = dispSt[1];
+    var srcSt = React.useState([]);
+    var sourceLabels = srcSt[0], setSourceLabels = srcSt[1];
 
     var containerRef = React.useRef(null);
     var tagMaps = React.useRef({});
@@ -229,8 +251,11 @@ var NeoMind_DataList = (function () {
     configRef.current = config;
     onConfigChangeRef.current = props.onConfigChange;
 
+    // Build data source key from single or array
     var dsKey = getStableDsKey(dataSource);
     var lastDsKeyRef = React.useRef(null);
+    var isMulti = Array.isArray(dataSource);
+    var labels = (isMulti ? dataSource : dataSource ? [dataSource] : []).map(getDsLabel).filter(Boolean);
 
     function persistColumns(inferred) {
       var cfg = configRef.current;
@@ -263,21 +288,47 @@ var NeoMind_DataList = (function () {
       setError(null);
       fn().then(function (result) {
         if (fid !== fetchIdRef.current) return;
+
+        // Multi-source: result is an array of FetchDataResult
+        if (isMulti && Array.isArray(result)) {
+          var allItems = [];
+          var srcLabels = [];
+          var hasAny = false;
+          for (var si = 0; si < result.length; si++) {
+            var adapted = adaptData(result[si], cfg.data_path || '');
+            if (adapted.items && adapted.items.length) {
+              var label = labels[si] || ('Source ' + (si + 1));
+              for (var ai = 0; ai < adapted.items.length; ai++) {
+                var item = Object.assign({}, adapted.items[ai]);
+                item.__sourceIdx = si;
+                item.__sourceLabel = label;
+                allItems.push(item);
+              }
+              srcLabels.push(label);
+              hasAny = true;
+            }
+          }
+          if (!hasAny) {
+            setData([]);
+            setEmptyLabel('series_empty');
+            setSourceLabels(srcLabels);
+          } else {
+            setData(allItems);
+            setEmptyLabel('');
+            setSourceLabels(srcLabels);
+            applyData(allItems, cfg);
+          }
+          return;
+        }
+
+        // Single source
         var adapted = adaptData(result, cfg.data_path || '');
         if (adapted.items === null) {
           setData(null);
           setEmptyLabel(adapted.label === 'no_source' ? 'no_source' : 'incompatible');
         } else if (adapted.isEmpty) {
-          var cv = dataSource && dataSource.currentValue != null ? dataSource.currentValue : null;
-          if (cv != null) {
-            var cvItems = (typeof cv === 'object' && cv !== null && !Array.isArray(cv)) ? [cv] : [{ value: cv }];
-            setData(cvItems);
-            setEmptyLabel('');
-            applyData(cvItems, cfg);
-          } else {
-            setData([]);
-            setEmptyLabel(adapted.label);
-          }
+          setData([]);
+          setEmptyLabel(adapted.label);
         } else {
           setData(adapted.items);
           setEmptyLabel('');
@@ -305,19 +356,19 @@ var NeoMind_DataList = (function () {
 
     var compact = config.row_height === 'compact';
     var visibleCols = columns.filter(function (c) { return c.visible; });
-    var metricLabel = getDsLabel(dataSource);
     var ts = isTimeseries(visibleCols);
+    var multiSource = sourceLabels.length > 1;
 
     // ── Empty / Loading / Error ──
 
     if (loading) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex items-center justify-center h-full w-full rounded-lg',
-        style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
-        children: jsx('div', { className: 'flex gap-1', children:
+        className: 'flex items-center justify-center h-full w-full',
+        style: glassContainer,
+        children: jsx('div', { className: 'flex gap-1.5', children:
           [0, 1, 2].map(function (i) {
-            return jsx('div', { style: { width: 4, height: 4, borderRadius: '50%', background: 'var(--muted-foreground)', opacity: 0.3, animation: 'dl-pulse 1s infinite ' + (i * 0.2) + 's' } }, i);
+            return jsx('div', { style: { width: 5, height: 5, borderRadius: '50%', background: 'var(--muted-foreground)', opacity: 0.3, animation: 'dl-pulse 1s infinite ' + (i * 0.2) + 's' } }, i);
           })
         })
       });
@@ -326,8 +377,8 @@ var NeoMind_DataList = (function () {
     if (!fetchData) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full rounded-lg text-muted-foreground',
-        style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
+        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground',
+        style: glassContainer,
         children: jsx('span', { className: 'text-xs', children: 'No data source configured' })
       });
     }
@@ -335,11 +386,11 @@ var NeoMind_DataList = (function () {
     if (error) {
       return jsxs('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full rounded-lg text-muted-foreground gap-2',
-        style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
+        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground gap-2',
+        style: glassContainer,
         children: [
           jsx('span', { key: 'm', className: 'text-xs', children: 'Failed to load data' }),
-          jsx('button', { key: 'r', className: 'text-xs px-2.5 py-1 rounded-md bg-secondary text-secondary-foreground hover:bg-muted transition-colors', onClick: doFetch, children: 'Retry' })
+          jsx('button', { key: 'r', className: 'text-xs px-3 py-1.5 rounded-lg transition-all duration-200', style: { background: 'oklch(1 0 0 / 8%)', border: '1px solid var(--border)', backdropFilter: 'blur(4px)' }, onClick: doFetch, children: 'Retry' })
         ]
       });
     }
@@ -349,13 +400,11 @@ var NeoMind_DataList = (function () {
       if (emptyLabel === 'no_source') msg = 'No data source configured';
       else if (emptyLabel === 'series_empty') msg = 'Waiting for data';
       else if (emptyLabel === 'incompatible') msg = 'Data format incompatible';
-      var emptyCh = [jsx('span', { key: 'm', className: 'text-xs', children: msg })];
-      if (metricLabel) emptyCh.push(jsx('span', { key: 'l', className: 'text-[10px] opacity-50', children: metricLabel }));
-      return jsxs('div', {
+      return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full rounded-lg text-muted-foreground gap-1',
-        style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
-        children: emptyCh
+        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground gap-1',
+        style: glassContainer,
+        children: jsx('span', { className: 'text-xs', children: msg })
       });
     }
 
@@ -364,13 +413,13 @@ var NeoMind_DataList = (function () {
     if (data.length === 1 && typeof data[0] === 'object' && data[0] !== null) {
       var item = data[0];
       var keys = Object.keys(item).filter(function (k) {
-        var v = item[k]; return v != null && typeof v !== 'object';
+        return k !== '__sourceIdx' && k !== '__sourceLabel' && item[k] != null && typeof item[k] !== 'object';
       });
       var titleK = null;
       for (var t = 0; t < keys.length; t++) {
         if (typeof item[keys[t]] === 'string' && item[keys[t]].length) { titleK = keys[t]; break; }
       }
-      var title = titleK ? String(item[titleK]) : (metricLabel || 'Value');
+      var title = titleK ? String(item[titleK]) : (labels[0] || 'Value');
       var rest = keys.filter(function (k) { return k !== titleK; });
       var kvRows = rest.map(function (k, i) {
         var v = item[k];
@@ -379,147 +428,185 @@ var NeoMind_DataList = (function () {
         else if (typeof v === 'boolean') fmt = v ? 'Yes' : 'No';
         else if (typeof v === 'string' && v.length > 120) fmt = v.slice(0, 100) + '...';
         return jsxs('div', {
-          className: 'flex items-center justify-between py-1.5' + (i > 0 ? ' border-t border-border' : ''),
+          className: 'flex items-center justify-between py-2',
+          style: { borderTop: i > 0 ? '1px solid var(--border)' : 'none' },
           children: [
-            jsx('span', { className: 'text-[10px] text-muted-foreground', children: keyToLabel(k) }),
-            jsx('span', { className: 'text-xs font-medium tabular-nums', children: String(fmt) })
+            jsx('span', { className: 'text-[10px] text-muted-foreground uppercase tracking-wide', children: keyToLabel(k) }),
+            jsx('span', { className: 'text-xs font-semibold tabular-nums', children: String(fmt) })
           ]
         }, k);
       });
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full rounded-lg p-3',
-        style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
-        children: jsxs('div', { className: 'flex flex-col items-center gap-2.5 w-full max-w-[240px]', children: [
-          jsxs('div', { className: 'flex items-center gap-2.5', children: [
+        className: 'flex flex-col items-center justify-center h-full w-full p-3',
+        style: glassContainer,
+        children: jsxs('div', { className: 'flex flex-col items-center gap-3 w-full max-w-[260px]', children: [
+          jsxs('div', { className: 'flex items-center gap-3', children: [
             jsx('div', {
-              className: 'flex items-center justify-center w-8 h-8 rounded-lg',
-              style: { background: 'oklch(0.72 0.19 310 / 20%)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', border: '1px solid oklch(0.72 0.19 310 / 15%)' },
-              children:
-              jsx('span', { className: 'text-sm font-bold text-accent-purple', children: title.charAt(0).toUpperCase() })
+              className: 'flex items-center justify-center w-10 h-10 rounded-xl',
+              style: {
+                background: 'linear-gradient(135deg, oklch(0.72 0.19 310 / 25%), oklch(0.72 0.14 200 / 25%))',
+                border: '1px solid oklch(0.72 0.19 310 / 15%)',
+                boxShadow: '0 2px 8px oklch(0.72 0.19 310 / 15%)'
+              },
+              children: jsx('span', { className: 'text-sm font-bold', style: { color: 'oklch(0.72 0.19 310)' }, children: title.charAt(0).toUpperCase() })
             }),
-            jsx('span', { className: 'text-sm font-semibold truncate max-w-[160px]', children: title })
+            jsx('span', { className: 'text-sm font-semibold truncate max-w-[180px]', children: title })
           ]}),
-          rest.length ? jsx('div', { className: 'w-full', children: kvRows }) : null
+          rest.length ? jsx('div', { className: 'w-full rounded-lg p-2', style: { background: 'oklch(1 0 0 / 4%)', border: '1px solid var(--border)' }, children: kvRows }) : null
         ]})
       });
     }
 
-    // ── Multi-item card list ──
+    // ── Multi-item list ──
 
     var rows = data.slice(0, displayCount);
-    var py = compact ? '5px' : '8px';
+    var rowGap = compact ? '4px' : '6px';
 
-    // ── Timeseries card: time left, value right ──
+    // ── Timeseries rows ──
     if (ts) {
-      return jsxs('div', {
+      return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col h-full w-full rounded-lg overflow-hidden',
-        style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
-        children: [
-          // Metric label header — frosted glass bar
-          metricLabel ? jsx('div', {
-            className: 'px-3 py-1.5 border-b',
-            style: { borderColor: 'var(--border)', background: 'oklch(1 0 0 / 4%)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' },
-            children: jsx('span', { className: 'text-[10px] font-semibold uppercase tracking-wider text-muted-foreground', children: metricLabel })
-          }) : null,
-          jsx('div', {
-            className: 'flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent',
-            onScroll: handleScroll,
-            children: rows.map(function (row, idx) {
-              var tsVal = row.timestamp;
-              var val = row.value;
-              var timeStr = tsVal ? formatTimeShort(tsVal) : '';
-              // Determine value color
-              var valColor = 'var(--foreground)';
-              if (typeof val === 'number' && val >= 0 && val <= 100) {
-                if (val < 20) valColor = 'oklch(0.58 0.22 25)';
-                else if (val < 40) valColor = 'oklch(0.72 0.17 65)';
-              }
-              return jsxs('div', {
-                className: 'dl-card-row dl-glass-row flex items-center justify-between px-3 transition-all duration-200',
-                style: { padding: py + ' 12px', borderBottom: idx < rows.length - 1 ? '1px solid var(--border)' : 'none' },
-                children: [
-                  jsx('span', { className: 'text-[11px] text-muted-foreground flex-shrink-0', children: timeStr }),
-                  jsx('span', { className: 'text-sm font-semibold tabular-nums truncate ml-3', style: { color: valColor }, children: String(val != null ? val : '\u2014') })
-                ]
-              }, idx);
-            })
+        className: 'flex flex-col h-full w-full overflow-hidden',
+        style: glassContainer,
+        children: jsx('div', {
+          className: 'flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent dl-scroll-area',
+          style: { padding: '8px 8px ' + rowGap },
+          onScroll: handleScroll,
+          children: rows.map(function (row, idx) {
+            var tsVal = row.timestamp;
+            var val = row.value;
+            var timeStr = tsVal ? formatTimeShort(tsVal) : '';
+            var srcIdx = row.__sourceIdx || 0;
+            var grad = SOURCE_GRADIENTS[srcIdx % SOURCE_GRADIENTS.length];
+            var valColor = 'var(--foreground)';
+            if (typeof val === 'number' && val >= 0 && val <= 100) {
+              if (val < 20) valColor = 'oklch(0.58 0.22 25)';
+              else if (val < 40) valColor = 'oklch(0.72 0.17 65)';
+            }
+            return jsxs('div', {
+              className: 'dl-card-row group',
+              style: {
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: (compact ? '6px' : '9px') + ' 12px',
+                marginBottom: rowGap,
+                borderRadius: '8px',
+                background: 'oklch(1 0 0 / 3%)',
+                border: '1px solid var(--border)',
+                borderLeft: '3px solid transparent',
+                borderImage: 'linear-gradient(to bottom, ' + grad.from + ', ' + grad.to + ') 1',
+                transition: 'all 0.2s ease',
+                position: 'relative'
+              },
+              children: [
+                jsxs('div', { className: 'flex items-center gap-2', children: [
+                  jsx('span', { className: 'text-[11px] text-muted-foreground flex-shrink-0 tabular-nums', children: timeStr }),
+                  multiSource && row.__sourceLabel ? jsx('span', {
+                    className: 'text-[9px] font-medium px-1.5 py-px rounded-md',
+                    style: { background: grad.from.replace(')', ' / 12%)'), color: grad.from, opacity: 0.8 },
+                    children: row.__sourceLabel
+                  }) : null
+                ]}),
+                jsx('span', { className: 'text-sm font-semibold tabular-nums truncate ml-3', style: { color: valColor }, children: String(val != null ? val : '\u2014') })
+              ]
+            }, idx);
           })
-        ]
+        })
       });
     }
 
     // ── Generic multi-column card rows ──
-    return jsxs('div', {
+    return jsx('div', {
       ref: containerRef,
-      className: 'flex flex-col h-full w-full rounded-lg overflow-hidden',
-      style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
-      children: [
-        metricLabel ? jsx('div', {
-          className: 'px-3 py-1.5 border-b',
-          style: { borderColor: 'var(--border)', background: 'oklch(1 0 0 / 4%)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' },
-          children: jsx('span', { className: 'text-[10px] font-semibold uppercase tracking-wider text-muted-foreground', children: metricLabel })
-        }) : null,
-        jsx('div', {
-          className: 'flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent',
-          onScroll: handleScroll,
-          children: rows.map(function (row, idx) {
-            // Primary column (first visible)
-            var primary = visibleCols[0];
-            var primaryVal = row[primary.key];
-            // Secondary columns (rest)
-            var secondaries = [];
-            for (var si = 1; si < visibleCols.length && si < 4; si++) {
-              var col = visibleCols[si];
-              var v = row[col.key];
-              if (v == null || typeof v === 'object') continue;
+      className: 'flex flex-col h-full w-full overflow-hidden',
+      style: glassContainer,
+      children: jsx('div', {
+        className: 'flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent dl-scroll-area',
+        style: { padding: '8px 8px ' + rowGap },
+        onScroll: handleScroll,
+        children: rows.map(function (row, idx) {
+          var primary = visibleCols[0];
+          var primaryVal = row[primary.key];
+          var srcIdx = row.__sourceIdx || 0;
+          var grad = SOURCE_GRADIENTS[srcIdx % SOURCE_GRADIENTS.length];
 
-              if (col.type === 'status') {
-                var on = v === true || v === 'true' || v === 'online' || v === 'on' || v === 1;
-                secondaries.push(jsx('span', {
-                  className: 'inline-flex items-center gap-1',
-                  children: [
-                    jsx('span', { className: 'w-1.5 h-1.5 rounded-full flex-shrink-0 ' + (on ? 'bg-emerald-500' : 'bg-muted-foreground'),
-                      style: on ? { boxShadow: '0 0 6px oklch(0.72 0.19 155 / 60%)' } : {} }),
-                    jsx('span', { className: 'text-[10px] ' + (on ? 'text-emerald-500' : 'text-muted-foreground'), children: String(v) })
-                  ]
-                }, col.key));
-              } else if (col.type === 'tag') {
-                var cm = tagMaps.current[col.key] || {};
-                var accent = cm[v] || TAG_ACCENTS[0];
-                secondaries.push(jsx('span', {
-                  className: 'inline-block px-1.5 py-px rounded text-[10px] font-semibold',
-                  style: { background: accent.bg, color: accent.fg, border: '1px solid ' + accent.glass, backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' },
-                  children: String(v)
-                }, col.key));
-              } else if (col.type === 'time') {
-                secondaries.push(jsx('span', { className: 'text-[10px] text-muted-foreground', children: formatTimeShort(v) }, col.key));
-              } else if (col.type === 'number') {
-                secondaries.push(jsx('span', { className: 'text-[10px] tabular-nums font-medium', children: String(v) }, col.key));
-              } else {
-                secondaries.push(jsx('span', { className: 'text-[10px] text-muted-foreground', children: String(v).slice(0, 20) }, col.key));
+          var secondaries = [];
+          for (var si = 1; si < visibleCols.length && si < 5; si++) {
+            var col = visibleCols[si];
+            var v = row[col.key];
+            if (v == null || typeof v === 'object') continue;
+
+            if (col.type === 'status') {
+              var on = v === true || v === 'true' || v === 'online' || v === 'on' || v === 1;
+              secondaries.push(jsx('span', {
+                className: 'inline-flex items-center gap-1',
+                children: [
+                  jsx('span', { className: 'w-2 h-2 rounded-full flex-shrink-0',
+                    style: {
+                      background: on ? 'oklch(0.72 0.19 155)' : 'var(--muted-foreground)',
+                      boxShadow: on ? '0 0 8px oklch(0.72 0.19 155 / 50%)' : 'none'
+                    }
+                  }),
+                  jsx('span', { className: 'text-[10px] font-medium ' + (on ? '' : 'text-muted-foreground'), style: on ? { color: 'oklch(0.72 0.19 155)' } : {}, children: String(v) })
+                ]
+              }, col.key));
+            } else if (col.type === 'tag') {
+              var cm = tagMaps.current[col.key] || {};
+              var accent = cm[v] || TAG_ACCENTS[0];
+              secondaries.push(jsx('span', {
+                className: 'inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold',
+                style: { background: accent.bg, color: accent.fg, border: '1px solid ' + accent.border },
+                children: String(v)
+              }, col.key));
+            } else if (col.type === 'time') {
+              secondaries.push(jsx('span', { className: 'text-[10px] text-muted-foreground tabular-nums', children: formatTimeShort(v) }, col.key));
+            } else if (col.type === 'number') {
+              var numColor = 'var(--foreground)';
+              if (typeof v === 'number' && v >= 0 && v <= 100) {
+                if (v < 20) numColor = 'oklch(0.58 0.22 25)';
+                else if (v < 40) numColor = 'oklch(0.72 0.17 65)';
               }
+              secondaries.push(jsx('span', { className: 'text-[10px] tabular-nums font-semibold', style: { color: numColor }, children: String(v) }, col.key));
+            } else {
+              secondaries.push(jsx('span', { className: 'text-[10px] text-muted-foreground', children: String(v).slice(0, 20) }, col.key));
             }
+          }
 
-            var primaryText = primaryVal != null && typeof primaryVal !== 'object' ? String(primaryVal) : '\u2014';
-            if (primary.type === 'time' && typeof primaryVal === 'number') primaryText = formatTime(primaryVal);
+          var primaryText = primaryVal != null && typeof primaryVal !== 'object' ? String(primaryVal) : '\u2014';
+          if (primary.type === 'time' && typeof primaryVal === 'number') primaryText = formatTime(primaryVal);
 
-            var rowChildren = [
-              jsx('span', { key: 'p', className: 'text-xs font-medium truncate', children: primaryText })
-            ];
-            if (secondaries.length) {
-              rowChildren.push(jsx('span', { key: 's', className: 'flex items-center gap-1.5 flex-shrink-0', children: secondaries }));
-            }
+          var rowChildren = [
+            jsxs('div', { key: 'p', className: 'flex flex-col gap-0.5 min-w-0', children: [
+              jsx('span', { className: 'text-xs font-medium truncate', children: primaryText }),
+              multiSource && row.__sourceLabel ? jsx('span', {
+                className: 'text-[9px] font-medium truncate',
+                style: { color: grad.from, opacity: 0.7 },
+                children: row.__sourceLabel
+              }) : null
+            ]})
+          ];
+          if (secondaries.length) {
+            rowChildren.push(jsx('span', { key: 's', className: 'flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end', children: secondaries }));
+          }
 
-            return jsx('div', {
-              className: 'dl-card-row dl-glass-row flex items-center justify-between px-3 transition-all duration-200',
-              style: { padding: py + ' 12px', borderBottom: idx < rows.length - 1 ? '1px solid var(--border)' : 'none' },
-              children: rowChildren
-            }, idx);
-          })
+          return jsx('div', {
+            className: 'dl-card-row group',
+            style: {
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: (compact ? '7px' : '10px') + ' 12px',
+              marginBottom: rowGap,
+              borderRadius: '8px',
+              background: 'oklch(1 0 0 / 3%)',
+              border: '1px solid var(--border)',
+              borderLeft: '3px solid transparent',
+              borderImage: 'linear-gradient(to bottom, ' + grad.from + ', ' + grad.to + ') 1',
+              transition: 'all 0.2s ease',
+              position: 'relative'
+            },
+            children: rowChildren
+          }, idx);
         })
-      ]
+      })
     });
   }
 
@@ -596,13 +683,15 @@ var NeoMind_DataList = (function () {
       '  0%, 100% { opacity: 0.3; transform: scale(1); }',
       '  50% { opacity: 1; transform: scale(1.3); }',
       '}',
-      '.dl-glass-row:hover {',
-      '  background: oklch(1 0 0 / 6%) !important;',
-      '  backdrop-filter: blur(4px);',
-      '  -webkit-backdrop-filter: blur(4px);',
-      '  box-shadow: inset 0 0 0 1px oklch(1 0 0 / 6%);',
+      '.dl-card-row:hover {',
+      '  background: oklch(1 0 0 / 8%) !important;',
+      '  box-shadow: 0 2px 12px oklch(0 0 0 / 10%), inset 0 1px 0 oklch(1 0 0 / 8%);',
+      '  transform: translateY(-1px);',
       '}',
-      '.dl-glass-row:first-child { border-radius: 0; }'
+      '.dl-scroll-area::-webkit-scrollbar { width: 4px; }',
+      '.dl-scroll-area::-webkit-scrollbar-track { background: transparent; }',
+      '.dl-scroll-area::-webkit-scrollbar-thumb { background: oklch(1 0 0 / 10%); border-radius: 4px; }',
+      '.dl-scroll-area::-webkit-scrollbar-thumb:hover { background: oklch(1 0 0 / 20%); }'
     ].join('\n');
     document.head.appendChild(s);
   }

@@ -7,11 +7,11 @@
   },
   "icon": "List",
   "category": "display",
-  "version": "3.3.0",
+  "version": "4.0.0",
   "author": "NeoMind Team",
   "size_constraints": { "min_w": 2, "min_h": 2, "default_w": 4, "default_h": 3, "max_w": 12, "max_h": 8 },
   "has_data_source": true,
-  "max_data_sources": 1,
+  "max_data_sources": 5,
   "has_display_config": true,
   "has_actions": false,
   "config_schema": {
