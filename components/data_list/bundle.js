@@ -79,7 +79,7 @@ var NeoMind_DataList = (function () {
       var v = sample[i];
       if (v == null) continue;
       if (typeof v === 'boolean') { bool++; continue; }
-      if (typeof v === 'number') { v > 1e12 ? ts++ : num++; continue; }
+      if (typeof v === 'number') { (v > 1e9 && v < 2e10) || v > 1e12 ? ts++ : num++; continue; }
       if (typeof v === 'string') strs.push(v);
     }
     var total = num + bool + ts + strs.length;
@@ -152,8 +152,14 @@ var NeoMind_DataList = (function () {
     return map;
   }
 
+  function normalizeTs(ts) {
+    if (typeof ts !== 'number') return ts;
+    return ts < 1e12 ? ts * 1000 : ts; // seconds → ms
+  }
+
   function formatTime(ts) {
     if (typeof ts !== 'number') return String(ts);
+    ts = normalizeTs(ts);
     var diff = Date.now() - ts;
     if (diff < 0) diff = 0;
     var sec = Math.floor(diff / 1000);
@@ -169,6 +175,7 @@ var NeoMind_DataList = (function () {
 
   function formatTimeShort(ts) {
     if (typeof ts !== 'number') return String(ts);
+    ts = normalizeTs(ts);
     var d = new Date(ts);
     var mo = String(d.getMonth() + 1).padStart(2, '0');
     var da = String(d.getDate()).padStart(2, '0');
