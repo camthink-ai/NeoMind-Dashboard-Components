@@ -7,7 +7,7 @@
   },
   "icon": "List",
   "category": "display",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "author": "NeoMind Team",
   "size_constraints": { "min_w": 2, "min_h": 2, "default_w": 4, "default_h": 3, "max_w": 12, "max_h": 8 },
   "has_data_source": true,
@@ -17,6 +17,12 @@
   "config_schema": {
     "type": "object",
     "properties": {
+      "time_range": {
+        "type": "number",
+        "enum": [1, 6, 24, 72, 168],
+        "default": 24,
+        "title": "Time Range (hours)"
+      },
       "row_height": {
         "type": "string",
         "enum": ["compact", "default"],
@@ -45,6 +51,7 @@
     }
   },
   "default_config": {
+    "time_range": 24,
     "row_height": "default",
     "data_path": "",
     "columns": []

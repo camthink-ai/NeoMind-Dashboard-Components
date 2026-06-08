@@ -287,8 +287,9 @@ var NeoMind_DataList = (function () {
       var fid = ++fetchIdRef.current;
       if (!fn) { setLoading(false); return; }
       setLoading(true);
+      var fetchOpts = cfg.time_range ? { timeRange: cfg.time_range } : undefined;
       setError(null);
-      fn().then(function (result) {
+      fn(fetchOpts).then(function (result) {
         if (fid !== fetchIdRef.current) return;
 
         // Multi-source: result is an array of FetchDataResult
@@ -344,10 +345,11 @@ var NeoMind_DataList = (function () {
     }
 
     React.useEffect(function () {
-      if (dsKey === lastDsKeyRef.current) return;
-      lastDsKeyRef.current = dsKey;
+      var triggerKey = dsKey + '|' + (config.time_range || 24);
+      if (triggerKey === lastDsKeyRef.current) return;
+      lastDsKeyRef.current = triggerKey;
       doFetch();
-    }, [dsKey]);
+    }, [dsKey, config.time_range]);
 
     function handleScroll(e) {
       var el = e.target;
@@ -654,7 +656,26 @@ var NeoMind_DataList = (function () {
       set('columns', c);
     }
 
+    var trSt = React.useState(config.time_range || 24);
+    var tr = trSt[0], setTr = trSt[1];
+    var trOptions = [
+      { v: 1, l: '1h' }, { v: 6, l: '6h' }, { v: 24, l: '24h' },
+      { v: 72, l: '3d' }, { v: 168, l: '7d' }
+    ];
+
     var ch = [
+      jsxs('div', { key: 'tr', className: 'flex flex-col gap-1.5', children: [
+        jsx('span', { className: 'text-[10px] font-semibold uppercase tracking-wider text-muted-foreground', children: 'Time Range' }),
+        jsxs('div', { className: 'flex gap-1 flex-wrap', children:
+          trOptions.map(function (opt) {
+            return jsx('button', {
+              className: 'px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors ' + (tr === opt.v ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'),
+              onClick: function () { setTr(opt.v); set('time_range', opt.v); },
+              children: opt.l
+            }, opt.v);
+          })
+        })
+      ]}),
       jsxs('div', { key: 'h', className: 'flex flex-col gap-1.5', children: [
         jsx('span', { className: 'text-[10px] font-semibold uppercase tracking-wider text-muted-foreground', children: 'Row Height' }),
         jsxs('div', { className: 'flex gap-1.5', children: [
