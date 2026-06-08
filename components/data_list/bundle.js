@@ -95,10 +95,10 @@ var NeoMind_DataList = (function () {
   }
 
   var TAG_ACCENTS = [
-    { bg: 'oklch(0.72 0.19 310 / 15%)', fg: 'oklch(0.72 0.19 310)' },
-    { bg: 'oklch(0.72 0.14 200 / 15%)', fg: 'oklch(0.72 0.14 200)' },
-    { bg: 'oklch(0.72 0.19 155 / 15%)', fg: 'oklch(0.72 0.19 155)' },
-    { bg: 'oklch(0.72 0.19 65 / 15%)', fg: 'oklch(0.72 0.19 65)' }
+    { bg: 'oklch(0.72 0.19 310 / 18%)', fg: 'oklch(0.72 0.19 310)', glass: 'oklch(0.72 0.19 310 / 8%)' },
+    { bg: 'oklch(0.72 0.14 200 / 18%)', fg: 'oklch(0.72 0.14 200)', glass: 'oklch(0.72 0.14 200 / 8%)' },
+    { bg: 'oklch(0.72 0.19 155 / 18%)', fg: 'oklch(0.72 0.19 155)', glass: 'oklch(0.72 0.19 155 / 8%)' },
+    { bg: 'oklch(0.72 0.19 65 / 18%)', fg: 'oklch(0.72 0.19 65)', glass: 'oklch(0.72 0.19 65 / 8%)' }
   ];
 
   function inferColumns(data) {
@@ -313,7 +313,8 @@ var NeoMind_DataList = (function () {
     if (loading) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex items-center justify-center h-full w-full bg-card border border-border rounded-lg',
+        className: 'flex items-center justify-center h-full w-full rounded-lg',
+        style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
         children: jsx('div', { className: 'flex gap-1', children:
           [0, 1, 2].map(function (i) {
             return jsx('div', { style: { width: 4, height: 4, borderRadius: '50%', background: 'var(--muted-foreground)', opacity: 0.3, animation: 'dl-pulse 1s infinite ' + (i * 0.2) + 's' } }, i);
@@ -325,7 +326,8 @@ var NeoMind_DataList = (function () {
     if (!fetchData) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-border rounded-lg text-muted-foreground',
+        className: 'flex flex-col items-center justify-center h-full w-full rounded-lg text-muted-foreground',
+        style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
         children: jsx('span', { className: 'text-xs', children: 'No data source configured' })
       });
     }
@@ -333,7 +335,8 @@ var NeoMind_DataList = (function () {
     if (error) {
       return jsxs('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-border rounded-lg text-muted-foreground gap-2',
+        className: 'flex flex-col items-center justify-center h-full w-full rounded-lg text-muted-foreground gap-2',
+        style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
         children: [
           jsx('span', { key: 'm', className: 'text-xs', children: 'Failed to load data' }),
           jsx('button', { key: 'r', className: 'text-xs px-2.5 py-1 rounded-md bg-secondary text-secondary-foreground hover:bg-muted transition-colors', onClick: doFetch, children: 'Retry' })
@@ -350,7 +353,8 @@ var NeoMind_DataList = (function () {
       if (metricLabel) emptyCh.push(jsx('span', { key: 'l', className: 'text-[10px] opacity-50', children: metricLabel }));
       return jsxs('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-border rounded-lg text-muted-foreground gap-1',
+        className: 'flex flex-col items-center justify-center h-full w-full rounded-lg text-muted-foreground gap-1',
+        style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
         children: emptyCh
       });
     }
@@ -384,10 +388,14 @@ var NeoMind_DataList = (function () {
       });
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-border rounded-lg p-3',
+        className: 'flex flex-col items-center justify-center h-full w-full rounded-lg p-3',
+        style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
         children: jsxs('div', { className: 'flex flex-col items-center gap-2.5 w-full max-w-[240px]', children: [
           jsxs('div', { className: 'flex items-center gap-2.5', children: [
-            jsx('div', { className: 'flex items-center justify-center w-8 h-8 rounded-lg bg-accent-purple/20', children:
+            jsx('div', {
+              className: 'flex items-center justify-center w-8 h-8 rounded-lg',
+              style: { background: 'oklch(0.72 0.19 310 / 20%)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', border: '1px solid oklch(0.72 0.19 310 / 15%)' },
+              children:
               jsx('span', { className: 'text-sm font-bold text-accent-purple', children: title.charAt(0).toUpperCase() })
             }),
             jsx('span', { className: 'text-sm font-semibold truncate max-w-[160px]', children: title })
@@ -406,11 +414,13 @@ var NeoMind_DataList = (function () {
     if (ts) {
       return jsxs('div', {
         ref: containerRef,
-        className: 'flex flex-col h-full w-full bg-card border border-border rounded-lg overflow-hidden',
+        className: 'flex flex-col h-full w-full rounded-lg overflow-hidden',
+        style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
         children: [
-          // Metric label header
+          // Metric label header — frosted glass bar
           metricLabel ? jsx('div', {
-            className: 'px-3 py-1.5 border-b border-border bg-muted/40',
+            className: 'px-3 py-1.5 border-b',
+            style: { borderColor: 'var(--border)', background: 'oklch(1 0 0 / 4%)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' },
             children: jsx('span', { className: 'text-[10px] font-semibold uppercase tracking-wider text-muted-foreground', children: metricLabel })
           }) : null,
           jsx('div', {
@@ -427,7 +437,7 @@ var NeoMind_DataList = (function () {
                 else if (val < 40) valColor = 'oklch(0.72 0.17 65)';
               }
               return jsxs('div', {
-                className: 'dl-card-row flex items-center justify-between px-3 transition-colors',
+                className: 'dl-card-row dl-glass-row flex items-center justify-between px-3 transition-all duration-200',
                 style: { padding: py + ' 12px', borderBottom: idx < rows.length - 1 ? '1px solid var(--border)' : 'none' },
                 children: [
                   jsx('span', { className: 'text-[11px] text-muted-foreground flex-shrink-0', children: timeStr }),
@@ -443,10 +453,12 @@ var NeoMind_DataList = (function () {
     // ── Generic multi-column card rows ──
     return jsxs('div', {
       ref: containerRef,
-      className: 'flex flex-col h-full w-full bg-card border border-border rounded-lg overflow-hidden',
+      className: 'flex flex-col h-full w-full rounded-lg overflow-hidden',
+      style: { background: 'var(--card)', border: '1px solid var(--border)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' },
       children: [
         metricLabel ? jsx('div', {
-          className: 'px-3 py-1.5 border-b border-border bg-muted/40',
+          className: 'px-3 py-1.5 border-b',
+          style: { borderColor: 'var(--border)', background: 'oklch(1 0 0 / 4%)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' },
           children: jsx('span', { className: 'text-[10px] font-semibold uppercase tracking-wider text-muted-foreground', children: metricLabel })
         }) : null,
         jsx('div', {
@@ -478,7 +490,7 @@ var NeoMind_DataList = (function () {
                 var accent = cm[v] || TAG_ACCENTS[0];
                 secondaries.push(jsx('span', {
                   className: 'inline-block px-1.5 py-px rounded text-[10px] font-semibold',
-                  style: { background: accent.bg, color: accent.fg },
+                  style: { background: accent.bg, color: accent.fg, border: '1px solid ' + accent.glass, backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' },
                   children: String(v)
                 }, col.key));
               } else if (col.type === 'time') {
@@ -501,7 +513,7 @@ var NeoMind_DataList = (function () {
             }
 
             return jsx('div', {
-              className: 'dl-card-row flex items-center justify-between px-3 transition-colors',
+              className: 'dl-card-row dl-glass-row flex items-center justify-between px-3 transition-all duration-200',
               style: { padding: py + ' 12px', borderBottom: idx < rows.length - 1 ? '1px solid var(--border)' : 'none' },
               children: rowChildren
             }, idx);
@@ -584,7 +596,13 @@ var NeoMind_DataList = (function () {
       '  0%, 100% { opacity: 0.3; transform: scale(1); }',
       '  50% { opacity: 1; transform: scale(1.3); }',
       '}',
-      '.dl-card-row:hover { background: var(--muted) !important; }'
+      '.dl-glass-row:hover {',
+      '  background: oklch(1 0 0 / 6%) !important;',
+      '  backdrop-filter: blur(4px);',
+      '  -webkit-backdrop-filter: blur(4px);',
+      '  box-shadow: inset 0 0 0 1px oklch(1 0 0 / 6%);',
+      '}',
+      '.dl-glass-row:first-child { border-radius: 0; }'
     ].join('\n');
     document.head.appendChild(s);
   }
