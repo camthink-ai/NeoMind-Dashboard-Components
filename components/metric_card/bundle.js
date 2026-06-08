@@ -21,25 +21,20 @@ var NeoMind_MetricCard = (function () {
   function extractValue(result) {
     if (result == null) return null;
     if (typeof result === 'number') return result;
-    if (typeof result === 'boolean') return result ? 1 : 0;
-    if (typeof result === 'string') {
-      var n = Number(result);
-      return isNaN(n) ? null : n;
-    }
+    if (typeof result === 'string') return result;
+    if (typeof result === 'boolean') return result ? 'Yes' : 'No';
     if (result.value != null) {
       if (typeof result.value === 'number') return result.value;
-      if (typeof result.value === 'boolean') return result.value ? 1 : 0;
-      if (typeof result.value === 'string') {
-        var nv = Number(result.value);
-        return isNaN(nv) ? null : nv;
-      }
+      if (typeof result.value === 'string') return result.value;
+      if (typeof result.value === 'boolean') return result.value ? 'Yes' : 'No';
     }
     if (result.series != null && Array.isArray(result.series) && result.series.length) {
       var last = result.series[result.series.length - 1];
       if (typeof last === 'number') return last;
+      if (typeof last === 'string') return last;
       if (last && last.value != null) {
         if (typeof last.value === 'number') return last.value;
-        if (typeof last.value === 'string') { var sv = Number(last.value); if (!isNaN(sv)) return sv; }
+        if (typeof last.value === 'string') return last.value;
       }
     }
     return null;
@@ -237,10 +232,8 @@ var NeoMind_MetricCard = (function () {
       var cfg = metrics[i] || {};
       var dp = cfg.decimalPlaces != null ? cfg.decimalPlaces : 1;
       var rawVal = values[i];
-      var formattedVal = null;
-      if (rawVal != null) {
-        formattedVal = typeof rawVal === 'number' ? rawVal.toFixed(dp) : rawVal;
-      }
+      if (rawVal == null) continue;
+      var formattedVal = typeof rawVal === 'number' ? rawVal.toFixed(dp) : String(rawVal);
       slots.push({
         label: cfg.label || getDsLabel(dsList[i]) || ('Value ' + (i + 1)),
         unit: cfg.unit || '',
@@ -248,19 +241,29 @@ var NeoMind_MetricCard = (function () {
       });
     }
 
+    if (slots.length === 0) {
+      return jsx('div', {
+        ref: containerRef,
+        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground',
+        style: glassContainer,
+        children: jsx('span', { className: 'text-xs', children: 'No data' })
+      });
+    }
+
+    var slotCount = slots.length;
     var aspectRatio = containerSize.w && containerSize.h ? containerSize.w / containerSize.h : 2;
-    var layout = getLayout(count, aspectRatio);
-    var valueClass = getValueClass(count);
+    var layout = getLayout(slotCount, aspectRatio);
+    var valueClass = getValueClass(slotCount);
 
     /* ---- render helper ---- */
     function renderCell(idx) {
       var slot = slots[idx];
       var isFirstInRow = (idx % layout.cols === 0);
-      var totalRows = Math.ceil(count / layout.cols);
+      var totalRows = Math.ceil(slotCount / layout.cols);
       var currentRow = Math.floor(idx / layout.cols);
       var isLastRow = (currentRow === totalRows - 1);
-      var displayValue = slot.value != null ? String(slot.value) : '';
-      var valueColor = slot.value != null ? 'var(--foreground)' : 'var(--muted-foreground)';
+      var displayValue = String(slot.value);
+      var valueColor = 'var(--foreground)';
 
       return jsxs('div', {
         className: 'flex flex-col items-center justify-center p-2 text-center' +
@@ -282,7 +285,7 @@ var NeoMind_MetricCard = (function () {
       innerContent = jsx('div', { className: 'flex items-center justify-center h-full', children: renderCell(0) });
     } else {
       var gridChildren = [];
-      for (var j = 0; j < count; j++) {
+      for (var j = 0; j < slotCount; j++) {
         gridChildren.push(renderCell(j));
       }
       innerContent = jsx('div', {
