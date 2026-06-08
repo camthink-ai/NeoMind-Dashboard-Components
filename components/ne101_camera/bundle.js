@@ -1550,9 +1550,9 @@ var NE101CameraPanel = (function () {
         previewLoadingState[1](false);
       }).catch(function () { previewLoadingState[1](false); });
     }
-    // Fetch on mount and when ROI is toggled on (re-fetch for fresh image)
+    // Fetch preview image on mount, when device changes, or when ROI is toggled on (for fresh image)
     React.useEffect(function () {
-      if (roiEnabled) fetchPreview();
+      fetchPreview();
     }, [deviceId, roiEnabled]);
 
     // Toggle
