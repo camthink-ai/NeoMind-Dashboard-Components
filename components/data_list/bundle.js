@@ -287,7 +287,7 @@ var NeoMind_DataList = (function () {
       var fid = ++fetchIdRef.current;
       if (!fn) { setLoading(false); return; }
       setLoading(true);
-      var fetchOpts = cfg.time_range ? { timeRange: cfg.time_range } : undefined;
+      var fetchOpts = { timeRange: cfg.time_range || 24 };
       setError(null);
       fn(fetchOpts).then(function (result) {
         if (fid !== fetchIdRef.current) return;
@@ -493,16 +493,27 @@ var NeoMind_DataList = (function () {
 
     var rows = data.slice(0, displayCount);
     var rowGap = compact ? '4px' : '6px';
+    var listTitle = labels.slice(0, 3).join(' / ') || '';
+    var listHeader = jsxs('div', {
+      className: 'flex items-center justify-between px-3 flex-shrink-0',
+      style: { height: '28px', borderBottom: '1px solid var(--border)', background: 'oklch(1 0 0 / 3%)' },
+      children: [
+        jsx('span', { className: 'text-[11px] font-semibold truncate', style: { color: 'var(--muted-foreground)' }, children: listTitle || 'Data' }),
+        jsx('span', { className: 'text-[10px] tabular-nums', style: { color: 'oklch(0.6 0 0)' }, children: data.length + (data.length !== rows.length ? '+' : '') })
+      ]
+    });
 
     // ── Timeseries rows ──
     if (ts) {
-      return jsx('div', {
+      return jsxs('div', {
         ref: containerRef,
         className: 'flex flex-col h-full w-full overflow-hidden',
         style: glassContainer,
-        children: jsx('div', {
-          className: 'flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent dl-scroll-area',
-          style: { padding: '8px 8px ' + rowGap },
+        children: [
+          listHeader,
+          jsx('div', {
+            className: 'flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent dl-scroll-area',
+            style: { padding: '8px 8px ' + rowGap },
           onScroll: handleScroll,
           children: rows.map(function (row, idx) {
             var tsVal = row.timestamp;
@@ -538,16 +549,18 @@ var NeoMind_DataList = (function () {
               ]
             }, idx);
           })
-        })
+        })]
       });
     }
 
     // ── Generic multi-column card rows ──
-    return jsx('div', {
+    return jsxs('div', {
       ref: containerRef,
       className: 'flex flex-col h-full w-full overflow-hidden',
       style: glassContainer,
-      children: jsx('div', {
+      children: [
+        listHeader,
+        jsx('div', {
         className: 'flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent dl-scroll-area',
         style: { padding: '8px 8px ' + rowGap },
         onScroll: handleScroll,
@@ -629,7 +642,7 @@ var NeoMind_DataList = (function () {
             children: rowChildren
           }, idx);
         })
-      })
+      })]
     });
   }
 
