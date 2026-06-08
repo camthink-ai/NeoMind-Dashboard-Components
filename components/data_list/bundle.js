@@ -43,14 +43,16 @@ var NeoMind_DataList = (function () {
     if (result.series != null && Array.isArray(result.series)) {
       if (result.series.length === 0) return { items: [], isEmpty: true, label: 'series_empty' };
       if (result.series[0] != null && typeof result.series[0] === 'object') {
-        return { items: result.series.map(function (item) {
+        var objItems = result.series.map(function (item) {
           return { timestamp: item.timestamp || item.time || item.ts, value: item.value };
-        }), isEmpty: false, label: 'series_objects' };
+        });
+        return { items: objItems.reverse(), isEmpty: false, label: 'series_objects' };
       }
       var now = Date.now();
-      return { items: result.series.map(function (item, idx) {
+      var primItems = result.series.map(function (item, idx) {
         return { timestamp: now - (result.series.length - 1 - idx) * 60000, value: item };
-      }), isEmpty: false, label: 'series_primitives' };
+      });
+      return { items: primItems.reverse(), isEmpty: false, label: 'series_primitives' };
     }
 
     var topKeys = Object.keys(result);
@@ -415,7 +417,7 @@ var NeoMind_DataList = (function () {
           else if (val < 40) colVar = 'warning';
         }
         var isPct = typeof val === 'number' && val >= 0 && val <= 100;
-        return jsxs('span', { className: 'flex items-center gap-1.5 justify-end font-mono tabular-nums text-foreground', children: [
+        return jsxs('span', { className: 'flex items-center gap-1.5 font-mono tabular-nums text-foreground', children: [
           isPct ? jsx('span', { className: 'inline-block w-6 h-1 rounded-full bg-muted overflow-hidden', children:
             jsx('span', { className: 'block h-full rounded-full', style: { width: val + '%', background: 'var(--' + colVar + ')' } })
           }) : null,
@@ -461,7 +463,7 @@ var NeoMind_DataList = (function () {
             className: 'flex-shrink-0 flex border-b border-border bg-muted/50',
             style: { padding: compact ? '5px 10px' : '6px 12px' },
             children: visibleCols.map(function (col) {
-              var align = col.type === 'number' || col.type === 'time' ? 'text-right' : 'text-left';
+              var align = 'text-left';
               return jsx('span', {
                 className: 'flex-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ' + align,
                 children: col.label
@@ -477,7 +479,7 @@ var NeoMind_DataList = (function () {
                 className: 'dl-row flex items-center border-b border-border last:border-b-0 transition-colors',
                 style: { padding: compact ? '6px 10px' : '8px 12px' },
                 children: visibleCols.map(function (col) {
-                  var align = col.type === 'number' || col.type === 'time' ? 'justify-end' : 'justify-start';
+                  var align = 'justify-start';
                   return jsx('span', {
                     className: 'flex-1 flex items-center text-xs ' + align,
                     children: renderCell(row[col.key], col)
