@@ -1,0 +1,49 @@
+{
+  "id": "metric_card",
+  "name": { "en": "Metric Card", "zh": "指标卡片" },
+  "description": {
+    "en": "A frosted-glass metric card with adaptive layout and multi-data-source support",
+    "zh": "毛玻璃效果指标卡片，自适应布局，支持多数据源绑定"
+  },
+  "icon": "BarChart3",
+  "category": "display",
+  "version": "1.0.0",
+  "author": "NeoMind Team",
+  "size_constraints": {
+    "min_w": 2,
+    "min_h": 2,
+    "default_w": 3,
+    "default_h": 2,
+    "max_w": 6,
+    "max_h": 4
+  },
+  "has_data_source": true,
+  "max_data_sources": 12,
+  "has_device_binding": false,
+  "has_display_config": true,
+  "has_actions": false,
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "metrics": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "label": { "type": "string", "default": "", "title": "Label" },
+            "unit": { "type": "string", "default": "", "title": "Unit" },
+            "decimalPlaces": { "type": "number", "default": 1, "title": "Decimal Places" }
+          }
+        },
+        "maxItems": 12,
+        "default": [],
+        "title": "Metric Slots"
+      }
+    }
+  },
+  "default_config": {
+    "metrics": []
+  },
+  "global_name": "NeoMind_MetricCard",
+  "export_name": "MetricCard"
+}
