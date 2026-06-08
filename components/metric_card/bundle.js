@@ -4,31 +4,16 @@ var NeoMind_MetricCard = (function () {
   var jsxs = window.jsxRuntime.jsxs;
 
   /* ------------------------------------------------------------------ */
-  /*  EmptyState — shown when no data source is bound                    */
+  /*  Glass container style (same pattern as data_list)                   */
   /* ------------------------------------------------------------------ */
-  function EmptyState() {
-    return jsxs('div', {
-      className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground',
-      children: [
-        jsxs('svg', {
-          width: '36',
-          height: '36',
-          viewBox: '0 0 36 36',
-          fill: 'none',
-          stroke: 'currentColor',
-          strokeWidth: '1.5',
-          strokeLinecap: 'round',
-          strokeLinejoin: 'round',
-          children: [
-            jsx('rect', { x: '4', y: '6', width: '28', height: '24', rx: '4' }),
-            jsx('line', { x1: '10', y1: '14', x2: '20', y2: '14' }),
-            jsx('line', { x1: '10', y1: '20', x2: '26', y2: '20' })
-          ]
-        }),
-        jsx('span', { className: 'text-xs mt-2', children: 'Bind a data source' })
-      ]
-    });
-  }
+  var glassContainer = {
+    background: 'linear-gradient(135deg, oklch(1 0 0 / 6%) 0%, oklch(1 0 0 / 2%) 100%)',
+    border: '1px solid var(--border)',
+    borderRadius: '12px',
+    backdropFilter: 'blur(16px)',
+    WebkitBackdropFilter: 'blur(16px)',
+    boxShadow: '0 1px 3px oklch(0 0 0 / 12%), inset 0 1px 0 oklch(1 0 0 / 6%)'
+  };
 
   /* ------------------------------------------------------------------ */
   /*  Helper: stable dataSource key for change detection                 */
@@ -67,48 +52,6 @@ var NeoMind_MetricCard = (function () {
   }
 
   /* ------------------------------------------------------------------ */
-  /*  MetricCell — renders a single metric slot                          */
-  /* ------------------------------------------------------------------ */
-  function MetricCell(props) {
-    var label = props.label;
-    var value = props.value;
-    var unit = props.unit;
-    var valueClass = props.valueClass;
-    var showBorderLeft = props.showBorderLeft;
-    var showBorderBottom = props.showBorderBottom;
-    var loading = props.loading;
-
-    var displayValue = loading ? '--' : (value != null ? String(value) : '--');
-    var valueColor = (loading || value == null) ? 'text-muted-foreground' : 'text-foreground';
-
-    var children = [
-      jsx('div', {
-        key: 'label',
-        className: 'text-xs text-muted-foreground uppercase tracking-wide font-medium mb-1',
-        children: label
-      }),
-      jsxs('div', {
-        key: 'value',
-        className: 'flex items-baseline gap-1',
-        children: [
-          jsx('span', {
-            className: 'font-bold font-mono tabular-nums ' + valueClass + ' ' + valueColor,
-            children: displayValue
-          }),
-          unit ? jsx('span', { key: 'unit', className: 'text-xs text-muted-foreground', children: unit }) : null
-        ]
-      })
-    ];
-
-    return jsxs('div', {
-      className: 'p-2' +
-        (showBorderLeft ? ' border-l border-glass-border' : '') +
-        (showBorderBottom ? ' border-b border-glass-border' : ''),
-      children: children
-    });
-  }
-
-  /* ------------------------------------------------------------------ */
   /*  MetricCard — main component                                        */
   /* ------------------------------------------------------------------ */
   function MetricCard(props) {
@@ -123,7 +66,6 @@ var NeoMind_MetricCard = (function () {
     var loading = loadSt[0], setLoading = loadSt[1];
     var errSt = React.useState(null);
     var error = errSt[0], setError = errSt[1];
-    var hasDataRef = React.useRef(false);
 
     var fetchDataRef = React.useRef(fetchData);
     fetchDataRef.current = fetchData;
@@ -133,9 +75,9 @@ var NeoMind_MetricCard = (function () {
     var lastDsKeyRef = React.useRef(null);
 
     /* container measurement */
+    var containerRef = React.useRef(null);
     var sizeSt = React.useState({ w: 0, h: 0 });
     var containerSize = sizeSt[0], setContainerSize = sizeSt[1];
-    var containerRef = React.useRef(null);
 
     /* ---- doFetch ---- */
     function doFetch() {
@@ -151,7 +93,6 @@ var NeoMind_MetricCard = (function () {
           return (r && r.value != null) ? r.value : null;
         });
         setValues(vals);
-        hasDataRef.current = true;
       }).catch(function () {
         if (fid !== fetchIdRef.current) return;
         setError('fetch');
@@ -163,17 +104,14 @@ var NeoMind_MetricCard = (function () {
 
     /* ---- effects ---- */
 
-    // Fetch on mount / dataSource change
     React.useEffect(function () {
       var triggerKey = getStableDsKey(dataSource);
       if (triggerKey === lastDsKeyRef.current) return;
       lastDsKeyRef.current = triggerKey;
       setValues([]);
-      hasDataRef.current = false;
       doFetch();
     }, [dataSource]);
 
-    // Auto-refresh every 30 s
     React.useEffect(function () {
       var dsKey = getStableDsKey(dataSource);
       if (!dsKey) return;
@@ -184,7 +122,6 @@ var NeoMind_MetricCard = (function () {
       return function () { clearInterval(iv); };
     }, [dataSource]);
 
-    // ResizeObserver for container measurements
     React.useEffect(function () {
       var el = containerRef.current;
       if (!el) return;
@@ -196,12 +133,40 @@ var NeoMind_MetricCard = (function () {
       return function () { ro.disconnect(); };
     }, []);
 
-    /* ---- empty-state guard (after all hooks) ---- */
-    if (!fetchData || !dataSource) {
+    /* ---- Loading ---- */
+    if (loading) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col h-full w-full',
-        children: jsx(EmptyState, {})
+        className: 'flex items-center justify-center h-full w-full',
+        style: glassContainer,
+        children: jsx('div', { className: 'flex gap-1.5', children:
+          [0, 1, 2].map(function (i) {
+            return jsx('div', { style: { width: 5, height: 5, borderRadius: '50%', background: 'var(--muted-foreground)', opacity: 0.3, animation: 'mc-pulse 1s infinite ' + (i * 0.2) + 's' } }, i);
+          })
+        })
+      });
+    }
+
+    /* ---- No data source ---- */
+    if (!fetchData) {
+      return jsx('div', {
+        ref: containerRef,
+        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground',
+        style: glassContainer,
+        children: jsx('span', { className: 'text-xs', children: 'Bind a data source' })
+      });
+    }
+
+    /* ---- Error ---- */
+    if (error) {
+      return jsxs('div', {
+        ref: containerRef,
+        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground gap-2',
+        style: glassContainer,
+        children: [
+          jsx('span', { key: 'm', className: 'text-xs', children: 'Failed to load data' }),
+          jsx('button', { key: 'r', className: 'text-xs px-3 py-1.5 rounded-lg transition-all duration-200', style: { background: 'oklch(1 0 0 / 8%)', border: '1px solid var(--border)', backdropFilter: 'blur(4px)' }, onClick: doFetch, children: 'Retry' })
+        ]
       });
     }
 
@@ -213,8 +178,9 @@ var NeoMind_MetricCard = (function () {
     if (count === 0) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col h-full w-full',
-        children: jsx(EmptyState, {})
+        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground',
+        style: glassContainer,
+        children: jsx('span', { className: 'text-xs', children: 'Bind a data source' })
       });
     }
 
@@ -245,22 +211,21 @@ var NeoMind_MetricCard = (function () {
       var totalRows = Math.ceil(count / layout.cols);
       var currentRow = Math.floor(idx / layout.cols);
       var isLastRow = (currentRow === totalRows - 1);
-      return jsx(MetricCell, {
-        key: 'metric-' + idx,
-        label: slot.label,
-        value: slot.value,
-        unit: slot.unit,
-        valueClass: valueClass,
-        showBorderLeft: !isFirstInRow,
-        showBorderBottom: !isLastRow,
-        loading: loading && !hasDataRef.current
-      });
-    }
+      var displayValue = slot.value != null ? String(slot.value) : '--';
+      var valueColor = slot.value != null ? 'var(--foreground)' : 'var(--muted-foreground)';
 
-    /* ---- build grid children ---- */
-    var gridChildren = [];
-    for (var j = 0; j < count; j++) {
-      gridChildren.push(renderCell(j));
+      return jsxs('div', {
+        className: 'p-2' +
+          (isFirstInRow ? '' : ' border-l border-glass-border') +
+          (isLastRow ? '' : ' border-b border-glass-border'),
+        children: [
+          jsx('div', { className: 'text-xs text-muted-foreground uppercase tracking-wide font-medium mb-1', children: slot.label }),
+          jsxs('div', { className: 'flex items-baseline gap-1', children: [
+            jsx('span', { className: 'font-bold font-mono tabular-nums ' + valueClass, style: { color: valueColor }, children: displayValue }),
+            slot.unit ? jsx('span', { className: 'text-xs text-muted-foreground', children: slot.unit }) : null
+          ]})
+        ]
+      }, 'metric-' + idx);
     }
 
     /* ---- inner content ---- */
@@ -268,6 +233,10 @@ var NeoMind_MetricCard = (function () {
     if (layout.type === 'single') {
       innerContent = jsx('div', { className: 'flex items-center justify-center h-full', children: renderCell(0) });
     } else {
+      var gridChildren = [];
+      for (var j = 0; j < count; j++) {
+        gridChildren.push(renderCell(j));
+      }
       innerContent = jsx('div', {
         style: { display: 'grid', gridTemplateColumns: 'repeat(' + layout.cols + ', 1fr)' },
         className: 'h-full',
@@ -275,27 +244,14 @@ var NeoMind_MetricCard = (function () {
       });
     }
 
-    /* ---- wrap with error retry bar ---- */
-    var contentChildren = [
-      jsx('div', { key: 'grid', className: 'flex-1', children: innerContent })
-    ];
-    if (error) {
-      contentChildren.push(jsx('div', {
-        key: 'retry',
-        className: 'text-xs text-muted-foreground text-center py-1 cursor-pointer',
-        onClick: function () { lastDsKeyRef.current = null; doFetch(); },
-        children: 'Retry'
-      }));
-    }
-
-    /* ---- final render — just fill the container ---- */
-    return jsx('div', {
+    /* ---- final render ---- */
+    return jsxs('div', {
       ref: containerRef,
-      className: 'flex flex-col h-full w-full',
-      children: jsxs('div', {
-        className: 'flex-1 flex flex-col overflow-hidden',
-        children: contentChildren
-      })
+      className: 'flex flex-col h-full w-full overflow-hidden',
+      style: glassContainer,
+      children: [
+        jsx('div', { className: 'flex-1', children: innerContent })
+      ]
     });
   }
 
