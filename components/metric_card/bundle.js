@@ -86,7 +86,7 @@ var NeoMind_MetricCard = (function () {
       if (!fn) { setLoading(false); return; }
       setLoading(true);
       setError(null);
-      fn().then(function (result) {
+      fn({ timeRange: 24 }).then(function (result) {
         if (fid !== fetchIdRef.current) return;
         var results = Array.isArray(result) ? result : (result ? [result] : []);
         var vals = results.map(function (r) {
@@ -211,11 +211,11 @@ var NeoMind_MetricCard = (function () {
       var totalRows = Math.ceil(count / layout.cols);
       var currentRow = Math.floor(idx / layout.cols);
       var isLastRow = (currentRow === totalRows - 1);
-      var displayValue = slot.value != null ? String(slot.value) : '--';
+      var displayValue = slot.value != null ? String(slot.value) : '';
       var valueColor = slot.value != null ? 'var(--foreground)' : 'var(--muted-foreground)';
 
       return jsxs('div', {
-        className: 'p-2' +
+        className: 'flex flex-col items-center justify-center p-2 text-center' +
           (isFirstInRow ? '' : ' border-l border-glass-border') +
           (isLastRow ? '' : ' border-b border-glass-border'),
         children: [
