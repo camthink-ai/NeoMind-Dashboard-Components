@@ -40,8 +40,8 @@ The layout adapts based on two factors: **number of data sources bound** and **c
 | Strategy | When | Columns | Description |
 |---|---|---|---|
 | `single` | 1 metric | 1 | Single large metric, vertically centered (`flex items-center justify-center`) |
-| `columns` | 2+ metrics, wide-ish card | N | Horizontal columns in a single row |
-| `grid` | 3+ metrics, tall/narrow card | 2 | 2-column grid wrapping to multiple rows |
+| `columns` | 2+ metrics, wide-ish card | 2–12 | Horizontal columns in a single row (max 12) |
+| `grid` | 3+ metrics, tall/narrow card | 2–4 | Multi-column grid wrapping to multiple rows |
 
 #### Decision Logic (pseudo-code)
 
@@ -52,8 +52,8 @@ aspectRatio = containerWidth / containerHeight
 
 if count <= 1:
   layout = "single"
-elif count == 2 or aspectRatio >= 1.2:
-  layout = "columns"     // horizontal row
+elif aspectRatio >= 1.2:
+  layout = "columns"     // single row, N = count (max 12)
 elif count >= 3 and aspectRatio < 1.2:
   layout = "grid"        // 2-col grid, wraps
 ```
