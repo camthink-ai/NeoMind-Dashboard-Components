@@ -102,11 +102,11 @@ var NeoMind_DataList = (function () {
   ];
 
   // Accent gradient colors for row left-borders, one per source
-  var SOURCE_GRADIENTS = [
-    { from: 'oklch(0.72 0.19 310)', to: 'oklch(0.72 0.14 200)' },
-    { from: 'oklch(0.72 0.19 155)', to: 'oklch(0.72 0.19 65)' },
-    { from: 'oklch(0.72 0.14 200)', to: 'oklch(0.72 0.19 310)' },
-    { from: 'oklch(0.72 0.19 65)', to: 'oklch(0.72 0.19 155)' }
+  var SOURCE_COLORS = [
+    'oklch(0.72 0.14 200 / 50%)',
+    'oklch(0.72 0.19 155 / 50%)',
+    'oklch(0.72 0.19 310 / 50%)',
+    'oklch(0.72 0.19 65 / 50%)'
   ];
 
   function inferColumns(data) {
@@ -169,17 +169,12 @@ var NeoMind_DataList = (function () {
 
   function formatTimeShort(ts) {
     if (typeof ts !== 'number') return String(ts);
-    var diff = Date.now() - ts;
-    if (diff < 0) diff = 0;
-    var sec = Math.floor(diff / 1000);
-    if (sec < 60) return 'now';
-    var min = Math.floor(sec / 60);
-    if (min < 60) return min + 'm';
-    var hr = Math.floor(min / 60);
-    if (hr < 24) return hr + 'h';
-    var d = Math.floor(hr / 24);
-    if (d < 30) return d + 'd';
-    return new Date(ts).toLocaleDateString();
+    var d = new Date(ts);
+    var mo = String(d.getMonth() + 1).padStart(2, '0');
+    var da = String(d.getDate()).padStart(2, '0');
+    var hr = String(d.getHours()).padStart(2, '0');
+    var mi = String(d.getMinutes()).padStart(2, '0');
+    return mo + '/' + da + ' ' + hr + ':' + mi;
   }
 
   function getDsLabel(ds) {
@@ -478,7 +473,7 @@ var NeoMind_DataList = (function () {
             var val = row.value;
             var timeStr = tsVal ? formatTimeShort(tsVal) : '';
             var srcIdx = row.__sourceIdx || 0;
-            var grad = SOURCE_GRADIENTS[srcIdx % SOURCE_GRADIENTS.length];
+            var srcColor = SOURCE_COLORS[srcIdx % SOURCE_COLORS.length];
             var valColor = 'var(--foreground)';
             if (typeof val === 'number' && val >= 0 && val <= 100) {
               if (val < 20) valColor = 'oklch(0.58 0.22 25)';
@@ -492,18 +487,14 @@ var NeoMind_DataList = (function () {
                 marginBottom: rowGap,
                 borderRadius: '8px',
                 background: 'oklch(1 0 0 / 3%)',
-                border: '1px solid var(--border)',
-                borderLeft: '3px solid transparent',
-                borderImage: 'linear-gradient(to bottom, ' + grad.from + ', ' + grad.to + ') 1',
-                transition: 'all 0.2s ease',
-                position: 'relative'
+                transition: 'all 0.2s ease'
               },
               children: [
                 jsxs('div', { className: 'flex items-center gap-2', children: [
                   jsx('span', { className: 'text-[11px] text-muted-foreground flex-shrink-0 tabular-nums', children: timeStr }),
                   multiSource && row.__sourceLabel ? jsx('span', {
                     className: 'text-[9px] font-medium px-1.5 py-px rounded-md',
-                    style: { background: grad.from.replace(')', ' / 12%)'), color: grad.from, opacity: 0.8 },
+                    style: { background: srcColor.replace('50%', '12%'), color: srcColor },
                     children: row.__sourceLabel
                   }) : null
                 ]}),
@@ -528,7 +519,7 @@ var NeoMind_DataList = (function () {
           var primary = visibleCols[0];
           var primaryVal = row[primary.key];
           var srcIdx = row.__sourceIdx || 0;
-          var grad = SOURCE_GRADIENTS[srcIdx % SOURCE_GRADIENTS.length];
+          var srcColor = SOURCE_COLORS[srcIdx % SOURCE_COLORS.length];
 
           var secondaries = [];
           for (var si = 1; si < visibleCols.length && si < 5; si++) {
@@ -580,7 +571,7 @@ var NeoMind_DataList = (function () {
               jsx('span', { className: 'text-xs font-medium truncate', children: primaryText }),
               multiSource && row.__sourceLabel ? jsx('span', {
                 className: 'text-[9px] font-medium truncate',
-                style: { color: grad.from, opacity: 0.7 },
+                style: { color: srcColor },
                 children: row.__sourceLabel
               }) : null
             ]})
@@ -597,11 +588,7 @@ var NeoMind_DataList = (function () {
               marginBottom: rowGap,
               borderRadius: '8px',
               background: 'oklch(1 0 0 / 3%)',
-              border: '1px solid var(--border)',
-              borderLeft: '3px solid transparent',
-              borderImage: 'linear-gradient(to bottom, ' + grad.from + ', ' + grad.to + ') 1',
-              transition: 'all 0.2s ease',
-              position: 'relative'
+              transition: 'all 0.2s ease'
             },
             children: rowChildren
           }, idx);
