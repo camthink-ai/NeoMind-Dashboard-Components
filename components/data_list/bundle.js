@@ -233,6 +233,17 @@ var NeoMind_DataList = (function () {
       }
     }
 
+    function applyData(items, cfg) {
+      var inferred = inferColumns(items);
+      setColumns(mergeColumns(inferred, cfg.columns));
+      persistColumns(inferred);
+      var maps = {};
+      for (var i = 0; i < inferred.length; i++) {
+        if (inferred[i].type === 'tag') maps[inferred[i].key] = getTagColorMap(items, inferred[i]);
+      }
+      tagMaps.current = maps;
+    }
+
     function doFetch() {
       var fn = fetchDataRef.current;
       var cfg = configRef.current;
@@ -242,9 +253,7 @@ var NeoMind_DataList = (function () {
       setError(null);
       fn().then(function (result) {
         if (fid !== fetchIdRef.current) return;
-        console.log('[DataList] fetchData result:', dsKey, JSON.stringify(result).slice(0, 300));
         var adapted = adaptData(result, cfg.data_path || '');
-        console.log('[DataList] adapted:', adapted.label, 'items:', adapted.items ? adapted.items.length : 'null');
         if (adapted.items === null) {
           setData(null);
           setEmptyLabel(adapted.label === 'no_source' ? 'no_source' : 'incompatible');
@@ -254,9 +263,7 @@ var NeoMind_DataList = (function () {
             var cvItems = (typeof cv === 'object' && cv !== null && !Array.isArray(cv)) ? [cv] : [{ value: cv }];
             setData(cvItems);
             setEmptyLabel('');
-            var cvInf = inferColumns(cvItems);
-            setColumns(mergeColumns(cvInf, cfg.columns));
-            persistColumns(cvInf);
+            applyData(cvItems, cfg);
           } else {
             setData([]);
             setEmptyLabel(adapted.label);
@@ -264,14 +271,7 @@ var NeoMind_DataList = (function () {
         } else {
           setData(adapted.items);
           setEmptyLabel('');
-          var inferred = inferColumns(adapted.items);
-          setColumns(mergeColumns(inferred, cfg.columns));
-          persistColumns(inferred);
-          var maps = {};
-          for (var i = 0; i < inferred.length; i++) {
-            if (inferred[i].type === 'tag') maps[inferred[i].key] = getTagColorMap(adapted.items, inferred[i]);
-          }
-          tagMaps.current = maps;
+          applyData(adapted.items, cfg);
         }
       }).catch(function () {
         if (fid === fetchIdRef.current) setError('fetch');
