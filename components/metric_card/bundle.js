@@ -137,6 +137,10 @@ var NeoMind_MetricCard = (function () {
     var containerSize = sizeSt[0], setContainerSize = sizeSt[1];
     var containerRef = React.useRef(null);
 
+    /* ---- dataSource key (computed at top level, like data_list) ---- */
+    var dsKey = getStableDsKey(dataSource);
+    var isMulti = Array.isArray(dataSource);
+
     /* ---- doFetch ---- */
     function doFetch() {
       var fn = fetchDataRef.current;
@@ -146,7 +150,14 @@ var NeoMind_MetricCard = (function () {
       setError(null);
       fn().then(function (result) {
         if (fid !== fetchIdRef.current) return;
-        var results = Array.isArray(result) ? result : (result ? [result] : []);
+        var results;
+        if (isMulti && Array.isArray(result)) {
+          results = result;
+        } else if (result) {
+          results = [result];
+        } else {
+          results = [];
+        }
         var vals = results.map(function (r) {
           return (r && r.value != null) ? r.value : null;
         });
@@ -163,26 +174,25 @@ var NeoMind_MetricCard = (function () {
 
     /* ---- effects ---- */
 
-    // Fetch on mount / dataSource change
+    // Fetch on mount / dataSource change (dsKey as dependency, like data_list)
     React.useEffect(function () {
-      var triggerKey = getStableDsKey(dataSource);
-      if (triggerKey === lastDsKeyRef.current) return;
-      lastDsKeyRef.current = triggerKey;
+      if (!dsKey) return;
+      if (dsKey === lastDsKeyRef.current) return;
+      lastDsKeyRef.current = dsKey;
       setValues([]);
       hasDataRef.current = false;
       doFetch();
-    }, [dataSource]);
+    }, [dsKey]);
 
-    // Auto-refresh every 30 s
+    // Auto-refresh every 30 s (dsKey as dependency, like data_list)
     React.useEffect(function () {
-      var dsKey = getStableDsKey(dataSource);
       if (!dsKey) return;
       var iv = setInterval(function () {
         lastDsKeyRef.current = null;
         doFetch();
       }, 30000);
       return function () { clearInterval(iv); };
-    }, [dataSource]);
+    }, [dsKey]);
 
     // ResizeObserver for container measurements
     React.useEffect(function () {
@@ -197,7 +207,7 @@ var NeoMind_MetricCard = (function () {
     }, []);
 
     /* ---- empty-state guard (after all hooks) ---- */
-    if (!fetchData || !dataSource) {
+    if (!fetchData) {
       return jsx('div', {
         className: 'flex flex-col h-full w-full p-3',
         children: jsx('div', {
