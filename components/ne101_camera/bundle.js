@@ -1462,6 +1462,9 @@ var NE101CameraPanel = (function () {
     var imgRef = React.useRef(null);
     var imgNatState2 = React.useState({ w: 1, h: 1 });
     var imgNat2 = imgNatState2[0];
+    var editingIdxState = React.useState(-1);
+    var editingIdx = editingIdxState[0];
+    var setEditingIdx = editingIdxState[1];
 
     // objectFit contain transform helper
     function containTransform(imgW, imgH, cW, cH) {
@@ -1665,11 +1668,6 @@ var NE101CameraPanel = (function () {
         var canvasStyle = canvasW > 400
           ? { width: '100%', aspectRatio: String(canvasAspect), maxHeight: '200px', background: '#1a1a2e' }
           : { width: Math.round(canvasW) + 'px', height: canvasH + 'px', background: '#1a1a2e' };
-
-        // ROI list editing state
-        var editingIdxState = React.useState(-1);
-        var editingIdx = editingIdxState[0];
-        var setEditingIdx = editingIdxState[1];
 
         var canvasContainer = jsxs('div', { key: 'roi-canvas-wrap', className: FIELD_CLS, children: [
           jsx('label', { className: 'text-xs font-medium', children:
