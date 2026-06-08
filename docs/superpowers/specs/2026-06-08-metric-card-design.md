@@ -2,7 +2,7 @@
 
 ## Overview
 
-A frosted-glass metric card component for the NeoMind dashboard. Displays 1–5 numeric metrics with left-aligned hierarchy layout, adapting to card dimensions and aspect ratio. Supports both light and dark themes via CSS variables.
+A frosted-glass metric card component for the NeoMind dashboard. Displays 1–12 numeric metrics with left-aligned hierarchy layout, adapting to card dimensions and aspect ratio. Supports both light and dark themes via CSS variables.
 
 ## Visual Design
 
