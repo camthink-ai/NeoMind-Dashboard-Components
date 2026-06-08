@@ -1530,32 +1530,33 @@ var NE101CameraPanel = (function () {
     }, [roiEnabled, rois, currentPts, imgNat2]);
 
     // Fetch preview image from bound device
+    // Priority: 1. deviceImageSrc prop (from platform store, populated by WebSocket)
+    //           2. REST fetch via fetchDeviceValues (fallback)
     var deviceId = config.deviceBinding && config.deviceBinding.deviceId;
+    var propImageSrc = props.deviceImageSrc;
     var previewImgState = React.useState('');
     var previewSrc = previewImgState[0];
     var previewLoadingState = React.useState(false);
     var previewLoading = previewLoadingState[0];
+    // Use prop image immediately if available
+    React.useEffect(function () {
+      if (propImageSrc) previewImgState[1](propImageSrc);
+    }, [propImageSrc]);
     function fetchPreview() {
-      console.log('[ROI fetchPreview] deviceId:', deviceId, 'config.deviceBinding:', config.deviceBinding);
-      if (!deviceId) { console.log('[ROI fetchPreview] no deviceId, abort'); previewImgState[1](''); return; }
+      if (previewSrc) return; // already have image from prop
+      if (!deviceId) { previewImgState[1](''); return; }
       var neomind = window.neomind;
-      if (!neomind || typeof neomind.fetchDeviceValues !== 'function') {
-        console.log('[ROI fetchPreview] neomind or fetchDeviceValues not available');
-        return;
-      }
+      if (!neomind || typeof neomind.fetchDeviceValues !== 'function') return;
       previewLoadingState[1](true);
       neomind.fetchDeviceValues(deviceId).then(function (v) {
-        console.log('[ROI fetchPreview] response keys:', v ? Object.keys(v) : null);
-        if (!v) { console.log('[ROI fetchPreview] null response'); previewLoadingState[1](false); return; }
+        if (!v) { previewLoadingState[1](false); return; }
         var img = getFirst(v, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
-        console.log('[ROI fetchPreview] img found:', !!img, 'type:', typeof img, 'length:', img && img.length);
         if (img && typeof img === 'string') {
           var src = img.indexOf('data:') === 0 ? img : 'data:image/jpeg;base64,' + img;
-          console.log('[ROI fetchPreview] setting previewSrc, length:', src.length);
           previewImgState[1](src);
         }
         previewLoadingState[1](false);
-      }).catch(function (e) { console.log('[ROI fetchPreview] error:', e); previewLoadingState[1](false); });
+      }).catch(function () { previewLoadingState[1](false); });
     }
     // Fetch preview image on mount, when device changes, or when ROI is toggled on (for fresh image)
     React.useEffect(function () {
