@@ -1533,21 +1533,27 @@ var NE101CameraPanel = (function () {
     var deviceId = config.deviceBinding && config.deviceBinding.deviceId;
     var previewImgState = React.useState('');
     var previewSrc = previewImgState[0];
-    React.useEffect(function () {
+    var previewLoadingState = React.useState(false);
+    var previewLoading = previewLoadingState[0];
+    function fetchPreview() {
       if (!deviceId) { previewImgState[1](''); return; }
       var neomind = window.neomind;
       if (!neomind || typeof neomind.fetchDeviceValues !== 'function') return;
-      var cancelled = false;
+      previewLoadingState[1](true);
       neomind.fetchDeviceValues(deviceId).then(function (v) {
-        if (cancelled || !v) return;
+        if (!v) { previewLoadingState[1](false); return; }
         var img = getFirst(v, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
         if (img && typeof img === 'string') {
           var src = img.indexOf('data:') === 0 ? img : 'data:image/jpeg;base64,' + img;
-          if (!cancelled) previewImgState[1](src);
+          previewImgState[1](src);
         }
-      }).catch(function () {});
-      return function () { cancelled = true; };
-    }, [deviceId]);
+        previewLoadingState[1](false);
+      }).catch(function () { previewLoadingState[1](false); });
+    }
+    // Fetch on mount and when ROI is toggled on (re-fetch for fresh image)
+    React.useEffect(function () {
+      if (roiEnabled) fetchPreview();
+    }, [deviceId, roiEnabled]);
 
     // Toggle
     items.push(
@@ -1670,30 +1676,49 @@ var NE101CameraPanel = (function () {
           : { width: Math.round(canvasW) + 'px', height: canvasH + 'px', background: '#1a1a2e' };
 
         var canvasContainer = jsxs('div', { key: 'roi-canvas-wrap', className: FIELD_CLS, children: [
-          jsx('label', { className: 'text-xs font-medium', children:
-            currentPts.length > 0
-              ? 'Click to add points (' + currentPts.length + '/3+). Click first point or "Done" to close.'
-              : 'Click on image to draw ROI polygon'
-          }),
+          jsxs('div', { className: 'flex items-center justify-between', children: [
+            jsx('label', { className: 'text-xs font-medium', children:
+              currentPts.length > 0
+                ? 'Click to add points (' + currentPts.length + '/3+). Click first point or "Done" to close.'
+                : 'Click on image to draw ROI polygon'
+            }),
+            jsx('button', {
+              type: 'button',
+              onClick: function () { fetchPreview(); },
+              disabled: previewLoading,
+              className: 'text-[10px] text-muted-foreground hover:text-primary transition-colors px-1.5 py-0.5 rounded hover:bg-primary/10 flex items-center gap-1',
+              children: previewLoading ? 'Loading...' : 'Refresh Image'
+            })
+          ]}),
           jsxs('div', {
             className: 'relative rounded-md border border-border overflow-hidden cursor-crosshair',
             style: canvasStyle,
             children: [
-              previewSrc
-                ? jsx('img', {
-                    ref: imgRef,
-                    src: previewSrc,
-                    style: { width: '100%', height: '100%', objectFit: 'contain', opacity: 0.7 },
-                    crossOrigin: 'anonymous',
-                    onLoad: function (e) {
-                      var img = e.target;
-                      if (img && img.naturalWidth) imgNatState2[1]({ w: img.naturalWidth, h: img.naturalHeight });
-                    }
+              previewLoading
+                ? jsx('div', {
+                    style: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1a1a2e' },
+                    children: jsx('span', { style: { color: '#999', fontSize: '11px' }, children: 'Loading camera image...' })
                   })
-                : jsx('div', {
-                    style: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-                    children: jsx('span', { style: { color: '#666', fontSize: '10px' }, children: 'No camera image for reference' })
-                  }),
+                : previewSrc
+                  ? jsx('img', {
+                      ref: imgRef,
+                      src: previewSrc,
+                      style: { width: '100%', height: '100%', objectFit: 'contain', opacity: 0.85 },
+                      crossOrigin: 'anonymous',
+                      onLoad: function (e) {
+                        var img = e.target;
+                        if (img && img.naturalWidth) imgNatState2[1]({ w: img.naturalWidth, h: img.naturalHeight });
+                      }
+                    })
+                  : jsxs('div', {
+                      style: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#1a1a2e' },
+                      children: [
+                        jsx('svg', { width: '24', height: '24', viewBox: '0 0 24 24', fill: 'none', stroke: '#555', strokeWidth: '1.5', children:
+                          jsx('path', { d: 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M13.8 12H3' })
+                        }),
+                        jsx('span', { style: { color: '#777', fontSize: '10px' }, children: 'No camera image — click Refresh' })
+                      ]
+                    }),
               jsx('canvas', {
                 ref: canvasRef,
                 className: 'absolute inset-0 w-full h-full',
