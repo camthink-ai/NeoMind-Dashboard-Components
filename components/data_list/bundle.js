@@ -39,7 +39,6 @@ var NeoMind_DataList = (function () {
       return { items: [{ value: result.value }], isEmpty: false, label: 'value_scalar' };
     if (result.series != null && Array.isArray(result.series)) {
       if (!result.series.length) return { items: [], isEmpty: true, label: 'series_empty' };
-      console.log('[DataList] series[0]:', JSON.stringify(result.series[0]).slice(0, 200));
       if (result.series[0] != null && typeof result.series[0] === 'object') {
         return { items: result.series.map(function (item) {
           return { timestamp: item.timestamp || item.time || item.ts, value: item.value };
@@ -291,8 +290,6 @@ var NeoMind_DataList = (function () {
       setError(null);
       fn().then(function (result) {
         if (fid !== fetchIdRef.current) return;
-        console.log('[DataList] fetchData result:', JSON.stringify(result).slice(0, 500));
-        console.log('[DataList] dataSource:', JSON.stringify(dataSource).slice(0, 300));
 
         // Multi-source: result is an array of FetchDataResult
         if (isMulti && Array.isArray(result)) {
@@ -417,6 +414,33 @@ var NeoMind_DataList = (function () {
 
     if (data.length === 1 && typeof data[0] === 'object' && data[0] !== null) {
       var item = data[0];
+      var srcIdx = item.__sourceIdx || 0;
+      var srcColor = SOURCE_COLORS[srcIdx % SOURCE_COLORS.length];
+
+      // Timeseries single point: show big value + timestamp
+      if (ts) {
+        var tsVal = item.timestamp;
+        var val = item.value;
+        var timeStr = tsVal ? formatTime(tsVal) : '';
+        var valStr = val != null ? String(val) : '\u2014';
+        var valColor = 'var(--foreground)';
+        if (typeof val === 'number' && val >= 0 && val <= 100) {
+          if (val < 20) valColor = 'oklch(0.58 0.22 25)';
+          else if (val < 40) valColor = 'oklch(0.72 0.17 65)';
+        }
+        return jsxs('div', {
+          ref: containerRef,
+          className: 'flex flex-col items-center justify-center h-full w-full p-4',
+          style: glassContainer,
+          children: [
+            labels[0] ? jsx('span', { className: 'text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-3', children: labels[0] }) : null,
+            jsx('span', { className: 'text-3xl font-bold tabular-nums', style: { color: valColor, lineHeight: 1.2 }, children: valStr }),
+            timeStr ? jsx('span', { className: 'text-[10px] text-muted-foreground mt-2', children: timeStr }) : null
+          ]
+        });
+      }
+
+      // Generic single-item: show key-value card
       var keys = Object.keys(item).filter(function (k) {
         return k !== '__sourceIdx' && k !== '__sourceLabel' && item[k] != null && typeof item[k] !== 'object';
       });
@@ -429,7 +453,7 @@ var NeoMind_DataList = (function () {
       var kvRows = rest.map(function (k, i) {
         var v = item[k];
         var fmt = v;
-        if (typeof v === 'number' && v > 1e12) fmt = formatTime(v);
+        if (typeof v === 'number' && (v > 1e9 && v < 2e10 || v > 1e12)) fmt = formatTime(v);
         else if (typeof v === 'boolean') fmt = v ? 'Yes' : 'No';
         else if (typeof v === 'string' && v.length > 120) fmt = v.slice(0, 100) + '...';
         return jsxs('div', {
@@ -437,15 +461,15 @@ var NeoMind_DataList = (function () {
           style: { borderTop: i > 0 ? '1px solid var(--border)' : 'none' },
           children: [
             jsx('span', { className: 'text-[10px] text-muted-foreground uppercase tracking-wide', children: keyToLabel(k) }),
-            jsx('span', { className: 'text-xs font-semibold tabular-nums', children: String(fmt) })
+            jsx('span', { className: 'text-xs font-semibold tabular-nums truncate ml-3', children: String(fmt) })
           ]
         }, k);
       });
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full p-3',
+        className: 'flex flex-col items-center justify-center h-full w-full p-4',
         style: glassContainer,
-        children: jsxs('div', { className: 'flex flex-col items-center gap-3 w-full max-w-[260px]', children: [
+        children: jsxs('div', { className: 'flex flex-col gap-3 w-full max-w-[260px]', children: [
           jsxs('div', { className: 'flex items-center gap-3', children: [
             jsx('div', {
               className: 'flex items-center justify-center w-10 h-10 rounded-xl',
@@ -458,7 +482,7 @@ var NeoMind_DataList = (function () {
             }),
             jsx('span', { className: 'text-sm font-semibold truncate max-w-[180px]', children: title })
           ]}),
-          rest.length ? jsx('div', { className: 'w-full rounded-lg p-2', style: { background: 'oklch(1 0 0 / 4%)', border: '1px solid var(--border)' }, children: kvRows }) : null
+          rest.length ? jsx('div', { className: 'w-full rounded-lg p-2.5', style: { background: 'oklch(1 0 0 / 4%)', border: '1px solid var(--border)' }, children: kvRows }) : null
         ]})
       });
     }
