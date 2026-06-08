@@ -543,14 +543,15 @@ var NeoMind_DataList = (function () {
     var rows = data.slice(0, displayCount);
     var rowGap = compact ? '4px' : '6px';
     var listTitle = labels.slice(0, 3).join(' / ') || '';
-    var listHeader = jsxs('div', {
+    var showListHeader = !(mergedCols && multiSource);
+    var listHeader = showListHeader ? jsxs('div', {
       className: 'flex items-center justify-between px-3 flex-shrink-0',
       style: { height: '28px', borderBottom: '1px solid var(--border)', background: 'oklch(1 0 0 / 3%)' },
       children: [
         jsx('span', { className: 'text-[11px] font-semibold truncate', style: { color: 'var(--muted-foreground)' }, children: listTitle || 'Data' }),
         jsx('span', { className: 'text-[10px] tabular-nums', style: { color: 'oklch(0.6 0 0)' }, children: data.length + (data.length !== rows.length ? '+' : '') })
       ]
-    });
+    }) : null;
 
     // ── Timeseries rows ──
     if (ts) {
