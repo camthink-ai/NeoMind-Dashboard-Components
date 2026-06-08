@@ -16,185 +16,156 @@ var NeoMind_DataList = (function () {
     return cur;
   }
 
-  /**
-   * Adapt fetchData result to displayable array.
-   * Returns { items: [...], isEmpty: bool, label: string }
-   */
   function adaptData(result, dataPath) {
-    // null/undefined → no data source or empty
     if (result == null) return { items: null, isEmpty: true, label: 'no_source' };
-
-    // data_path override
     if (dataPath) {
       var resolved = resolveByPath(result, dataPath);
       if (Array.isArray(resolved)) return { items: resolved, isEmpty: resolved.length === 0, label: 'path' };
       if (resolved != null && typeof resolved === 'object') return { items: [resolved], isEmpty: false, label: 'path_obj' };
       return { items: null, isEmpty: true, label: 'path_empty' };
     }
-
-    // Direct array
     if (Array.isArray(result)) return { items: result, isEmpty: result.length === 0, label: 'array' };
 
-    // ── { value: ... } branches ──
-
-    // { value: [...] } — array of items
-    if (result.value != null && Array.isArray(result.value)) {
+    if (result.value != null && Array.isArray(result.value))
       return { items: result.value, isEmpty: result.value.length === 0, label: 'value_array' };
-    }
 
-    // { value: { ... } } — plain object, search for arrays inside
     if (result.value != null && typeof result.value === 'object' && !Array.isArray(result.value)) {
       var vKeys = Object.keys(result.value);
       for (var vi = 0; vi < vKeys.length; vi++) {
-        if (Array.isArray(result.value[vKeys[vi]])) {
+        if (Array.isArray(result.value[vKeys[vi]]))
           return { items: result.value[vKeys[vi]], isEmpty: result.value[vKeys[vi]].length === 0, label: 'value_nested_array' };
-        }
       }
-      // Plain object with properties → show as key-value card
       return { items: [result.value], isEmpty: false, label: 'value_object' };
     }
-
-    // { value: <primitive> } — scalar value (number, string, boolean)
-    if (result.value != null && typeof result.value !== 'object') {
+    if (result.value != null && typeof result.value !== 'object')
       return { items: [{ value: result.value }], isEmpty: false, label: 'value_scalar' };
-    }
-
-    // ── { series: [...] } branches ──
 
     if (result.series != null && Array.isArray(result.series)) {
       if (result.series.length === 0) return { items: [], isEmpty: true, label: 'series_empty' };
-      // Objects with timestamp/value
       if (result.series[0] != null && typeof result.series[0] === 'object') {
-        var items = result.series.map(function (item, idx) {
-          return { index: idx + 1, timestamp: item.timestamp, value: item.value };
-        });
-        return { items: items, isEmpty: false, label: 'series_objects' };
+        return { items: result.series.map(function (item) {
+          return { timestamp: item.timestamp || item.time || item.ts, value: item.value };
+        }), isEmpty: false, label: 'series_objects' };
       }
-      // Primitive values (numbers/strings)
-      var primItems = result.series.map(function (item, idx) {
-        return { index: idx + 1, value: item };
-      });
-      return { items: primItems, isEmpty: false, label: 'series_primitives' };
+      var now = Date.now();
+      return { items: result.series.map(function (item, idx) {
+        return { timestamp: now - (result.series.length - 1 - idx) * 60000, value: item };
+      }), isEmpty: false, label: 'series_primitives' };
     }
-
-    // ── Fallback: search all top-level fields for arrays ──
 
     var topKeys = Object.keys(result);
     for (var k = 0; k < topKeys.length; k++) {
-      if (Array.isArray(result[topKeys[k]]) && result[topKeys[k]].length > 0) {
+      if (Array.isArray(result[topKeys[k]]) && result[topKeys[k]].length > 0)
         return { items: result[topKeys[k]], isEmpty: false, label: 'top_array' };
-      }
     }
-
-    // Last resort: wrap result itself as a row
-    if (topKeys.length > 0) {
-      return { items: [result], isEmpty: false, label: 'wrap' };
-    }
-
-    // Truly empty object
+    if (topKeys.length > 0) return { items: [result], isEmpty: false, label: 'wrap' };
     return { items: null, isEmpty: true, label: 'empty' };
   }
 
+  // ── Column inference ──
+
   function keyToLabel(key) {
-    var s = key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ');
-    return s.charAt(0).toUpperCase() + s.slice(1);
+    // Take last segment of dot-path: "values.battery" → "Battery"
+    var last = key.split('.').pop() || key;
+    return last.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ')
+      .replace(/^\w/, function (c) { return c.toUpperCase(); });
+  }
+
+  // Format a value for display; skip nested objects and truncate long strings
+  function formatValue(v) {
+    if (v == null) return null;
+    if (typeof v === 'object') return null; // nested objects — skip
+    var s = String(v);
+    if (s.length > 120) return s.slice(0, 100) + '...';
+    return s;
   }
 
   function inferColumnType(values) {
     var sample = values.slice(0, 50);
-    var numCount = 0, boolCount = 0, tsCount = 0, strValues = [];
+    var num = 0, bool = 0, ts = 0, strs = [];
     for (var i = 0; i < sample.length; i++) {
       var v = sample[i];
       if (v == null) continue;
-      if (typeof v === 'boolean') { boolCount++; continue; }
-      if (typeof v === 'number') {
-        if (v > 1e12) tsCount++;
-        else numCount++;
-        continue;
-      }
-      if (typeof v === 'string') strValues.push(v);
+      if (typeof v === 'boolean') { bool++; continue; }
+      if (typeof v === 'number') { v > 1e12 ? ts++ : num++; continue; }
+      if (typeof v === 'string') strs.push(v);
     }
-    var total = numCount + boolCount + tsCount + strValues.length;
+    var total = num + bool + ts + strs.length;
     if (total === 0) return 'text';
-    if (boolCount / total > 0.7) return 'status';
-    if (tsCount / total > 0.7) return 'time';
-    if (numCount / total > 0.7) return 'number';
-    if (strValues.length / total > 0.5) {
+    if (bool / total > 0.7) return 'status';
+    if (ts / total > 0.7) return 'time';
+    if (num / total > 0.7) return 'number';
+    if (strs.length / total > 0.5) {
       var distinct = {};
-      for (var j = 0; j < strValues.length; j++) distinct[strValues[j]] = true;
+      for (var j = 0; j < strs.length; j++) distinct[strs[j]] = true;
       if (Object.keys(distinct).length < 8) return 'tag';
     }
     return 'text';
   }
 
+  var TAG_ACCENTS = [
+    { light: 'oklch(0.72 0.19 310 / 15%)', text: 'oklch(0.72 0.19 310)' },
+    { light: 'oklch(0.72 0.14 200 / 15%)', text: 'oklch(0.72 0.14 200)' },
+    { light: 'oklch(0.72 0.19 155 / 15%)', text: 'oklch(0.72 0.19 155)' },
+    { light: 'oklch(0.72 0.19 65 / 15%)', text: 'oklch(0.72 0.19 65)' }
+  ];
+
   function inferColumns(data) {
-    if (!data || data.length === 0) return [];
+    if (!data || !data.length) return [];
     var first = null;
     for (var f = 0; f < data.length; f++) {
       if (data[f] != null && typeof data[f] === 'object') { first = data[f]; break; }
     }
     if (!first) return [];
     var keys = Object.keys(first);
-    var columns = [];
-    var firstTextIdx = -1;
+    var cols = [];
     for (var i = 0; i < keys.length; i++) {
       var key = keys[i];
-      var values = data.map(function (item) { return item != null && typeof item === 'object' ? item[key] : null; });
-      var type = inferColumnType(values);
-      var flex = 1;
-      if (firstTextIdx === -1 && (type === 'text' || type === 'tag')) {
-        flex = 2;
-        firstTextIdx = i;
+      var vals = data.map(function (d) { return d != null && typeof d === 'object' ? d[key] : null; });
+      // Skip columns where ALL values are non-displayable (nested objects)
+      var displayable = 0;
+      for (var vi = 0; vi < vals.length; vi++) {
+        var fv = formatValue(vals[vi]);
+        if (fv !== null) displayable++;
       }
-      columns.push({ key: key, label: keyToLabel(key), type: type, flex: flex, visible: true, order: i });
+      if (displayable === 0) continue;
+      var type = inferColumnType(vals);
+      cols.push({ key: key, label: keyToLabel(key), type: type, visible: true, order: i });
     }
-    return columns;
+    return cols;
   }
 
   function mergeColumns(inferred, configured) {
-    if (!configured || configured.length === 0) return inferred;
-    var configMap = {};
-    for (var i = 0; i < configured.length; i++) {
-      configMap[configured[i].key] = configured[i];
-    }
+    if (!configured || !configured.length) return inferred;
+    var map = {};
+    for (var i = 0; i < configured.length; i++) map[configured[i].key] = configured[i];
     return inferred.map(function (col) {
-      var cfg = configMap[col.key];
-      if (!cfg) return col;
-      return {
-        key: col.key, label: cfg.label || col.label, type: col.type, flex: col.flex,
-        visible: cfg.visible !== false, order: cfg.order != null ? cfg.order : col.order
-      };
+      var c = map[col.key];
+      if (!c) return col;
+      return { key: col.key, label: c.label || col.label, type: col.type,
+        visible: c.visible !== false, order: c.order != null ? c.order : col.order };
     }).sort(function (a, b) { return a.order - b.order; });
   }
 
-  // ── Accent colors (CSS variables only) ──
-
-  var ACCENT_COLORS = [
-    { bg: 'bg-accent-purple-light', text: 'text-accent-purple', grad: 'linear-gradient(135deg, var(--accent-purple), color-mix(in oklch, var(--accent-purple) 70%, white))' },
-    { bg: 'bg-accent-cyan-light', text: 'text-accent-cyan', grad: 'linear-gradient(135deg, var(--accent-cyan), color-mix(in oklch, var(--accent-cyan) 70%, white))' },
-    { bg: 'bg-accent-emerald-light', text: 'text-accent-emerald', grad: 'linear-gradient(135deg, var(--accent-emerald), color-mix(in oklch, var(--accent-emerald) 70%, white))' },
-    { bg: 'bg-accent-orange-light', text: 'text-accent-orange', grad: 'linear-gradient(135deg, var(--accent-orange), color-mix(in oklch, var(--accent-orange) 70%, white))' }
-  ];
-
-  function getTagColorMap(data, column) {
+  function getTagColorMap(data, col) {
     var seen = {}, order = [];
     for (var i = 0; i < data.length; i++) {
-      var v = data[i][column.key];
+      var v = data[i][col.key];
       if (v != null && !seen[v]) { seen[v] = true; order.push(v); }
     }
     var map = {};
-    for (var j = 0; j < order.length; j++) map[order[j]] = ACCENT_COLORS[j % ACCENT_COLORS.length];
+    for (var j = 0; j < order.length; j++) map[order[j]] = TAG_ACCENTS[j % TAG_ACCENTS.length];
     return map;
   }
 
-  function formatRelativeTime(ts) {
+  function formatTime(ts) {
     if (typeof ts !== 'number') return String(ts);
     var diff = Date.now() - ts;
     if (diff < 0) diff = 0;
     var sec = Math.floor(diff / 1000);
     if (sec < 60) return 'Just now';
     var min = Math.floor(sec / 60);
-    if (min < 60) return min + ' min ago';
+    if (min < 60) return min + 'm ago';
     var hr = Math.floor(min / 60);
     if (hr < 24) return hr + 'h ago';
     var d = Math.floor(hr / 24);
@@ -202,19 +173,15 @@ var NeoMind_DataList = (function () {
     return new Date(ts).toLocaleDateString();
   }
 
-  // ── Get label from dataSource ──
-
-  function getDataSourceLabel(ds) {
+  function getDsLabel(ds) {
     if (!ds) return '';
     if (ds.field) return keyToLabel(ds.field);
     if (ds.infoProperty) return keyToLabel(ds.infoProperty);
     if (ds.systemMetric) return keyToLabel(ds.systemMetric);
     if (ds.extensionMetric) return ds.extensionMetric;
-    if (ds.type) return keyToLabel(ds.type);
     return '';
   }
 
-  // ── Stable key from dataSource identifying fields only ──
   function getStableDsKey(ds) {
     if (!ds) return '';
     return [ds.source || '', ds.mode || ds.type || '', ds.id || ds.sourceId || '', ds.field || ''].join('|');
@@ -227,87 +194,89 @@ var NeoMind_DataList = (function () {
     var fetchData = props.fetchData;
     var dataSource = props.dataSource;
 
-    var dataState = React.useState(null);
-    var data = dataState[0], setData = dataState[1];
-
-    var loadingState = React.useState(true);
-    var loading = loadingState[0], setLoading = loadingState[1];
-
-    var emptyLabelState = React.useState('');
-    var emptyLabel = emptyLabelState[0], setEmptyLabel = emptyLabelState[1];
-
-    var errorState = React.useState(null);
-    var error = errorState[0], setError = errorState[1];
-
-    var colsState = React.useState([]);
-    var columns = colsState[0], setColumns = colsState[1];
-
-    var displayCountState = React.useState(50);
-    var displayCount = displayCountState[0], setDisplayCount = displayCountState[1];
+    var dataSt = React.useState(null);
+    var data = dataSt[0], setData = dataSt[1];
+    var loadSt = React.useState(true);
+    var loading = loadSt[0], setLoading = loadSt[1];
+    var emptySt = React.useState('');
+    var emptyLabel = emptySt[0], setEmptyLabel = emptySt[1];
+    var errSt = React.useState(null);
+    var error = errSt[0], setError = errSt[1];
+    var colSt = React.useState([]);
+    var columns = colSt[0], setColumns = colSt[1];
+    var dispSt = React.useState(50);
+    var displayCount = dispSt[0], setDisplayCount = dispSt[1];
 
     var containerRef = React.useRef(null);
-    var tagColorMaps = React.useRef({});
+    var tagMaps = React.useRef({});
     var fetchDataRef = React.useRef(fetchData);
     var configRef = React.useRef(config);
+    var onConfigChangeRef = React.useRef(props.onConfigChange);
     var fetchIdRef = React.useRef(0);
     fetchDataRef.current = fetchData;
     configRef.current = config;
+    onConfigChangeRef.current = props.onConfigChange;
 
-    // Only use stable identifying fields — NOT currentValue, params, etc.
     var dsKey = getStableDsKey(dataSource);
     var lastDsKeyRef = React.useRef(null);
+
+    function persistColumns(inferred) {
+      var cfg = configRef.current;
+      if ((!cfg.columns || !cfg.columns.length) && inferred.length && onConfigChangeRef.current) {
+        onConfigChangeRef.current(Object.assign({}, cfg, {
+          columns: inferred.map(function (c) {
+            return { key: c.key, label: c.label, visible: c.visible !== false, order: c.order };
+          })
+        }));
+      }
+    }
 
     function doFetch() {
       var fn = fetchDataRef.current;
       var cfg = configRef.current;
-      var thisFetchId = ++fetchIdRef.current;
+      var fid = ++fetchIdRef.current;
       if (!fn) { setLoading(false); return; }
       setLoading(true);
       setError(null);
-      fn()
-        .then(function (result) {
-          if (thisFetchId !== fetchIdRef.current) return;
-          var adapted = adaptData(result, cfg.data_path || '');
-          console.log('[DataList]', dsKey, '→', adapted.label, adapted.items ? adapted.items.length : 'null');
-          if (adapted.items === null) {
-            setData(null);
-            setEmptyLabel(adapted.label === 'no_source' ? 'no_source' : 'incompatible');
-          } else if (adapted.isEmpty) {
-            // If timeseries is empty but dataSource has a currentValue, show that
-            var cv = dataSource && dataSource.currentValue != null ? dataSource.currentValue : null;
-            if (cv != null) {
-              var cvItems = (typeof cv === 'object' && cv !== null && !Array.isArray(cv))
-                ? [cv]
-                : [{ value: cv }];
-              setData(cvItems);
-              setEmptyLabel('');
-              var cvInferred = inferColumns(cvItems);
-              setColumns(mergeColumns(cvInferred, cfg.columns));
-            } else {
-              setData([]);
-              setEmptyLabel(adapted.label);
-            }
-          } else {
-            setData(adapted.items);
+      fn().then(function (result) {
+        if (fid !== fetchIdRef.current) return;
+        var adapted = adaptData(result, cfg.data_path || '');
+        if (adapted.items === null) {
+          setData(null);
+          setEmptyLabel(adapted.label === 'no_source' ? 'no_source' : 'incompatible');
+        } else if (adapted.isEmpty) {
+          var cv = dataSource && dataSource.currentValue != null ? dataSource.currentValue : null;
+          if (cv != null) {
+            var cvItems = (typeof cv === 'object' && cv !== null && !Array.isArray(cv)) ? [cv] : [{ value: cv }];
+            setData(cvItems);
             setEmptyLabel('');
-            var inferred = inferColumns(adapted.items);
-            setColumns(mergeColumns(inferred, cfg.columns));
-            var maps = {};
-            for (var i = 0; i < inferred.length; i++) {
-              if (inferred[i].type === 'tag') maps[inferred[i].key] = getTagColorMap(adapted.items, inferred[i]);
-            }
-            tagColorMaps.current = maps;
+            var cvInf = inferColumns(cvItems);
+            setColumns(mergeColumns(cvInf, cfg.columns));
+            persistColumns(cvInf);
+          } else {
+            setData([]);
+            setEmptyLabel(adapted.label);
           }
-        })
-        .catch(function (e) {
-          if (thisFetchId === fetchIdRef.current) setError('fetch');
-          console.error('[DataList] fetchData error:', e);
-        })
-        .finally(function () { if (thisFetchId === fetchIdRef.current) setLoading(false); });
+        } else {
+          setData(adapted.items);
+          setEmptyLabel('');
+          var inferred = inferColumns(adapted.items);
+          setColumns(mergeColumns(inferred, cfg.columns));
+          persistColumns(inferred);
+          var maps = {};
+          for (var i = 0; i < inferred.length; i++) {
+            if (inferred[i].type === 'tag') maps[inferred[i].key] = getTagColorMap(adapted.items, inferred[i]);
+          }
+          tagMaps.current = maps;
+        }
+      }).catch(function () {
+        if (fid === fetchIdRef.current) setError('fetch');
+      }).finally(function () {
+        if (fid === fetchIdRef.current) setLoading(false);
+      });
     }
 
     React.useEffect(function () {
-      // Skip if same stable key (prevents re-fetch on every render)
       if (dsKey === lastDsKeyRef.current) return;
       lastDsKeyRef.current = dsKey;
       doFetch();
@@ -316,433 +285,327 @@ var NeoMind_DataList = (function () {
     function handleScroll(e) {
       var el = e.target;
       if (!data || displayCount >= data.length) return;
-      if (el.scrollHeight - el.scrollTop - el.clientHeight < 40) {
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 40)
         setDisplayCount(Math.min(displayCount + 50, data.length));
-      }
     }
 
-    var widthState = React.useState(9999);
-    var containerWidth = widthState[0], setContainerWidth = widthState[1];
-
+    var wSt = React.useState(9999);
+    var cw = wSt[0], setCw = wSt[1];
     React.useEffect(function () {
       if (!containerRef.current) return;
       var el = containerRef.current;
-      var observer = new ResizeObserver(function (entries) {
-        if (entries[0]) setContainerWidth(entries[0].contentRect.width);
-      });
-      observer.observe(el);
-      return function () { observer.disconnect(); };
+      var obs = new ResizeObserver(function (e) { if (e[0]) setCw(e[0].contentRect.width); });
+      obs.observe(el);
+      return function () { obs.disconnect(); };
     }, [data]);
 
     var compact = config.row_height === 'compact';
     var visibleCols = columns.filter(function (c) { return c.visible; });
-    var mode = 'full';
-    if (containerWidth < 300) mode = 'stacked';
-    else if (containerWidth < 400) mode = 'narrow';
-    var displayCols = visibleCols;
-    if (mode === 'narrow') {
-      var keepCount = Math.max(2, Math.floor(containerWidth / 100));
-      displayCols = visibleCols.slice(0, keepCount);
-    }
+    var isSmall = cw < 320;
 
-    var metricLabel = getDataSourceLabel(dataSource);
+    var metricLabel = getDsLabel(dataSource);
 
-    // ── Render states ──
+    // ── Empty / Loading / Error ──
 
     if (loading) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex items-center justify-center h-full w-full bg-card border border-glass-border rounded-lg',
-        children: jsxs('div', { style: { display: 'flex', gap: '4px' }, children: [
-          jsx('div', { style: { width: '5px', height: '5px', borderRadius: '50%', background: 'var(--text-muted-foreground)', opacity: 0.3, animation: 'data-list-pulse 1s infinite' } }),
-          jsx('div', { style: { width: '5px', height: '5px', borderRadius: '50%', background: 'var(--text-muted-foreground)', opacity: 0.3, animation: 'data-list-pulse 1s infinite 0.2s' } }),
-          jsx('div', { style: { width: '5px', height: '5px', borderRadius: '50%', background: 'var(--text-muted-foreground)', opacity: 0.3, animation: 'data-list-pulse 1s infinite 0.4s' } })
-        ]})
+        className: 'flex items-center justify-center h-full w-full bg-card border border-border rounded-lg',
+        children: jsx('div', { className: 'flex gap-1', children:
+          [0, 1, 2].map(function (i) {
+            return jsx('div', { style: { width: 4, height: 4, borderRadius: '50%', background: 'var(--muted-foreground)', opacity: 0.3, animation: 'dl-pulse 1s infinite ' + (i * 0.2) + 's' } }, i);
+          })
+        })
       });
     }
 
     if (!fetchData) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-glass-border rounded-lg text-muted-foreground gap-1',
-        children: jsxs('span', { className: 'text-xs', children: ['No data source configured'] })
+        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-border rounded-lg text-muted-foreground',
+        children: jsx('span', { className: 'text-xs', children: 'No data source configured' })
       });
     }
 
-    if (error === 'fetch') {
+    if (error) {
       return jsxs('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-glass-border rounded-lg text-muted-foreground gap-2',
+        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-border rounded-lg text-muted-foreground gap-2',
         children: [
-          jsx('span', { key: 'msg', className: 'text-sm', children: 'Failed to load data' }),
-          jsx('button', { key: 'retry', className: 'text-xs px-3 py-1 rounded bg-muted-30 text-foreground hover:bg-muted transition-colors', onClick: doFetch, children: 'Retry' })
+          jsx('span', { key: 'm', className: 'text-xs', children: 'Failed to load data' }),
+          jsx('button', { key: 'r', className: 'text-xs px-2.5 py-1 rounded-md bg-secondary text-secondary-foreground hover:bg-muted transition-colors', onClick: doFetch, children: 'Retry' })
         ]
       });
     }
 
-    // No data / empty states — show metric name if available
-    if (!data || data.length === 0) {
-      var emptyMsg = 'No data';
-      if (emptyLabel === 'no_source') emptyMsg = 'No data source configured';
-      else if (emptyLabel === 'series_empty') emptyMsg = 'Waiting for data';
-      else if (emptyLabel === 'incompatible') emptyMsg = 'Data format incompatible';
-      var emptyChildren = [jsx('span', { key: 'msg', className: 'text-sm', children: emptyMsg })];
-      if (metricLabel) {
-        emptyChildren.push(jsx('span', { key: 'metric', className: 'text-xs opacity-60', children: metricLabel }));
-      }
+    if (!data || !data.length) {
+      var msg = 'No data';
+      if (emptyLabel === 'no_source') msg = 'No data source configured';
+      else if (emptyLabel === 'series_empty') msg = 'Waiting for data';
+      else if (emptyLabel === 'incompatible') msg = 'Data format incompatible';
+      var emptyCh = [jsx('span', { key: 'm', className: 'text-xs', children: msg })];
+      if (metricLabel) emptyCh.push(jsx('span', { key: 'l', className: 'text-[10px] opacity-50', children: metricLabel }));
       return jsxs('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-glass-border rounded-lg text-muted-foreground gap-1',
-        children: emptyChildren
+        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-border rounded-lg text-muted-foreground gap-1',
+        children: emptyCh
       });
     }
 
-    // ── Single item: card layout ──
+    // ── Single-item card ──
+
     if (data.length === 1 && typeof data[0] === 'object' && data[0] !== null) {
-      var singleItem = data[0];
-      var singleKeys = Object.keys(singleItem).filter(function (k) { return singleItem[k] != null; });
-      var singleAccent = ACCENT_COLORS[0];
-      var titleKey = null;
-      for (var ti = 0; ti < singleKeys.length; ti++) {
-        var tv = singleItem[singleKeys[ti]];
-        if (typeof tv === 'string' && tv.length > 0) { titleKey = singleKeys[ti]; break; }
+      var item = data[0];
+      var keys = Object.keys(item).filter(function (k) {
+        var v = item[k];
+        return v != null && typeof v !== 'object';
+      });
+      var titleK = null;
+      for (var t = 0; t < keys.length; t++) {
+        if (typeof item[keys[t]] === 'string' && item[keys[t]].length) { titleK = keys[t]; break; }
       }
-      var titleValue = titleKey ? String(singleItem[titleKey]) : (metricLabel || '');
-      var kvPairs = singleKeys.filter(function (k) { return k !== titleKey; });
-      var kvChildren = [];
-      for (var ki = 0; ki < kvPairs.length; ki++) {
-        var kk = kvPairs[ki];
-        var kv = singleItem[kk];
-        var kvFormatted = kv;
-        if (typeof kv === 'number' && kv > 1e12) kvFormatted = formatRelativeTime(kv);
-        else if (typeof kv === 'boolean') kvFormatted = kv ? 'Yes' : 'No';
-        kvChildren.push(jsxs('div', {
-          key: kk,
-          style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: ki > 0 ? '1px solid var(--border-glass-border, var(--border))' : 'none' },
+      var title = titleK ? String(item[titleK]) : (metricLabel || 'Value');
+      var rest = keys.filter(function (k) { return k !== titleK; });
+      var kvRows = rest.map(function (k, i) {
+        var v = item[k];
+        var fmt = v;
+        if (typeof v === 'number' && v > 1e12) fmt = formatTime(v);
+        else if (typeof v === 'boolean') fmt = v ? 'Yes' : 'No';
+        else if (typeof v === 'string' && v.length > 120) fmt = v.slice(0, 100) + '...';
+        return jsxs('div', {
+          className: 'flex items-center justify-between py-1.5' + (i > 0 ? ' border-t border-border' : ''),
           children: [
-            jsx('span', { key: 'k', style: { fontSize: '11px', color: 'var(--text-muted-foreground)' }, children: keyToLabel(kk) }),
-            jsx('span', { key: 'v', style: { fontSize: '13px', color: 'var(--text-foreground)', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }, children: String(kvFormatted) })
+            jsx('span', { className: 'text-[10px] text-muted-foreground', children: keyToLabel(k) }),
+            jsx('span', { className: 'text-xs font-medium tabular-nums', children: String(fmt) })
           ]
-        }));
-      }
-      var cardChildren = [];
-      cardChildren.push(jsxs('div', {
-        key: 'title',
-        style: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: kvPairs.length > 0 ? '10px' : '0' },
-        children: [
-          jsx('span', {
-            key: 'icon',
-            style: { width: '32px', height: '32px', borderRadius: '8px', background: singleAccent.grad, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-            children: jsx('span', { style: { color: 'var(--text-primary-foreground)', fontSize: '14px', fontWeight: 700 }, children: titleValue ? titleValue.charAt(0).toUpperCase() : '?' })
-          }),
-          jsx('span', { key: 'txt', style: { fontSize: '14px', fontWeight: 600, color: 'var(--text-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: titleValue })
-        ]
-      }));
-      if (kvPairs.length > 0) {
-        cardChildren.push(jsx('div', { key: 'kv', style: { width: '100%', maxWidth: '260px' }, children: kvChildren }));
-      }
-      return jsxs('div', {
+        }, k);
+      });
+
+      return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-glass-border rounded-lg overflow-hidden',
-        style: { padding: '14px' },
-        children: cardChildren
+        className: 'flex flex-col items-center justify-center h-full w-full bg-card border border-border rounded-lg p-3',
+        children: jsxs('div', { className: 'flex flex-col items-center gap-2.5 w-full max-w-[240px]', children: [
+          jsxs('div', { className: 'flex items-center gap-2.5', children: [
+            jsx('div', { className: 'flex items-center justify-center w-8 h-8 rounded-lg bg-accent-purple/20', children:
+              jsx('span', { className: 'text-sm font-bold text-accent-purple', children: title.charAt(0).toUpperCase() })
+            }),
+            jsx('span', { className: 'text-sm font-semibold truncate max-w-[160px]', children: title })
+          ]}),
+          rest.length ? jsx('div', { className: 'w-full', children: kvRows }) : null
+        ]})
       });
     }
+
+    // ── Multi-item list ──
 
     var rows = data.slice(0, displayCount);
 
-    // ── Table header ──
-    function renderHeader() {
-      if (mode === 'stacked') return null;
-      return jsx('div', {
-        key: 'header',
-        className: 'flex-shrink-0',
-        style: { display: 'flex', gap: '12px', padding: compact ? '6px 12px' : '8px 14px', borderBottom: '1px solid var(--border-glass-border, var(--border))' },
-        children: displayCols.map(function (col) {
-          return jsx('span', {
-            key: col.key,
-            style: {
-              flex: col.flex, fontSize: '10px', color: 'var(--text-muted-foreground)',
-              textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 500,
-              textAlign: 'center'
-            },
-            children: col.label
-          });
-        })
-      });
-    }
-
-    function renderCell(item, col, rowIdx) {
-      var val = item[col.key];
-      if (val == null) return '';
+    // Cell renderer
+    function renderCell(val, col) {
+      if (val == null) return jsx('span', { className: 'text-muted-foreground/40', children: '\u2014' });
+      // Nested objects — not displayable as text
+      if (typeof val === 'object') return jsx('span', { className: 'text-muted-foreground/40', children: '\u2014' });
 
       if (col.type === 'number') {
-        var colorVar = 'var(--text-foreground)';
+        var colVar = 'foreground';
         if (typeof val === 'number' && val >= 0 && val <= 100) {
-          if (val < 20) colorVar = 'var(--text-error)';
-          else if (val < 40) colorVar = 'var(--text-warning)';
+          if (val < 20) colVar = 'destructive';
+          else if (val < 40) colVar = 'warning';
         }
-        var barWidth = (typeof val === 'number' && val >= 0 && val <= 100) ? val : -1;
-        var numChildren = [];
-        if (barWidth >= 0) {
-          numChildren.push(jsx('span', {
-            key: 'bar',
-            style: { width: '32px', height: '4px', borderRadius: '2px', background: 'var(--bg-muted-30, var(--bg-muted))', overflow: 'hidden', display: 'inline-block' },
-            children: jsx('span', { style: { display: 'block', height: '100%', width: barWidth + '%', background: colorVar, borderRadius: '2px' } })
-          }));
-        }
-        numChildren.push(jsx('span', { key: 'val', style: { color: colorVar }, children: val }));
-        return jsxs('span', {
-          style: { display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'center', width: '100%', fontVariantNumeric: 'tabular-nums' },
-          children: numChildren
-        });
+        var isPct = typeof val === 'number' && val >= 0 && val <= 100;
+        return jsxs('span', { className: 'flex items-center gap-1.5 justify-end font-mono tabular-nums text-foreground', children: [
+          isPct ? jsx('span', { className: 'inline-block w-6 h-1 rounded-full bg-muted overflow-hidden', children:
+            jsx('span', { className: 'block h-full rounded-full', style: { width: val + '%', background: 'var(--' + colVar + ')' } })
+          }) : null,
+          jsx('span', { style: { color: isPct ? 'var(--' + colVar + ')' : undefined }, children: String(val) })
+        ]});
       }
 
       if (col.type === 'time') {
-        return jsx('span', { children: formatRelativeTime(val) });
+        return jsx('span', { className: 'text-muted-foreground', children: formatTime(val) });
       }
 
       if (col.type === 'status') {
-        var isTrue = val === true || val === 'true' || val === 'online' || val === 'on' || val === 1;
-        var dotColor = isTrue ? 'var(--text-success)' : 'var(--text-muted-foreground)';
-        var glow = isTrue ? '0 0 6px oklch(0.72 0.19 155)' : 'none';
-        return jsxs('span', {
-          style: { display: 'inline-flex', alignItems: 'center', gap: '4px' },
-          children: [
-            jsx('span', { key: 'dot', style: { width: '6px', height: '6px', borderRadius: '50%', background: dotColor, boxShadow: glow } }),
-            jsx('span', { key: 'lbl', style: { fontSize: '11px', color: dotColor }, children: String(val) })
-          ]
-        });
+        var on = val === true || val === 'true' || val === 'online' || val === 'on' || val === 1;
+        return jsxs('span', { className: 'inline-flex items-center gap-1.5', children: [
+          jsx('span', { className: 'w-1.5 h-1.5 rounded-full flex-shrink-0 ' + (on ? 'bg-emerald-500' : 'bg-muted-foreground'),
+            style: on ? { boxShadow: '0 0 6px oklch(0.72 0.19 155 / 60%)' } : {} }),
+          jsx('span', { className: 'text-[11px] ' + (on ? 'text-emerald-500' : 'text-muted-foreground'), children: String(val) })
+        ]});
       }
 
       if (col.type === 'tag') {
-        var colorMap = tagColorMaps.current[col.key] || {};
-        var accent = colorMap[val] || ACCENT_COLORS[0];
+        var cm = tagMaps.current[col.key] || {};
+        var accent = cm[val] || TAG_ACCENTS[0];
         return jsx('span', {
-          className: accent.bg + ' ' + accent.text,
-          style: { fontSize: '10px', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 },
+          className: 'inline-block px-1.5 py-px rounded text-[10px] font-semibold',
+          style: { background: accent.light, color: accent.text },
           children: String(val)
         });
       }
 
-      // text — first text column (flex:2) gets gradient icon
-      if (col.flex === 2) {
-        var iconAccent = ACCENT_COLORS[rowIdx % ACCENT_COLORS.length];
-        return jsxs('span', {
-          style: { display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' },
-          children: [
-            jsx('span', {
-              key: 'icon',
-              style: {
-                width: compact ? '24px' : '28px', height: compact ? '24px' : '28px',
-                borderRadius: '6px', background: iconAccent.grad,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-              },
-              children: jsx('span', { style: { color: 'var(--text-primary-foreground)', fontSize: compact ? '11px' : '13px' }, children: '\u25CF' })
-            }),
-            jsx('span', {
-              key: 'txt',
-              style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500, color: 'var(--text-foreground)' },
-              children: String(val)
-            })
-          ]
-        });
-      }
-
-      return jsx('span', { children: String(val) });
+      // text
+      return jsx('span', { className: 'text-foreground', children: String(val) });
     }
 
-    function renderRow(item, idx) {
-      var bgColor = idx % 2 === 1 ? 'var(--bg-muted-30, var(--bg-muted))' : 'transparent';
-      var padV = compact ? '8px' : '10px';
-      var padH = compact ? '12px' : '14px';
-      return jsx('div', {
-        key: item.id || idx,
-        className: 'data-list-row',
-        style: {
-          display: 'flex', gap: '12px', alignItems: 'center',
-          padding: padV + ' ' + padH,
-          borderTop: idx > 0 ? '1px solid var(--border-glass-border, var(--border))' : 'none',
-          background: bgColor, transition: 'background 0.15s'
-        },
-        children: displayCols.map(function (col) {
-          return jsx('span', {
-            key: col.key,
-            style: { flex: col.flex, textAlign: 'center', fontSize: '12px', color: 'var(--text-muted-foreground)' },
-            children: renderCell(item, col, idx)
-          });
-        })
-      });
-    }
-
-    function renderStackedRow(item, idx) {
-      var bgColor = idx % 2 === 1 ? 'var(--bg-muted-30, var(--bg-muted))' : 'transparent';
-      var firstCol = visibleCols[0] || displayCols[0];
-      var name = firstCol ? String(item[firstCol.key] || '') : '';
-      var iconAccent = ACCENT_COLORS[idx % ACCENT_COLORS.length];
-      var parts = [];
-      for (var i = 1; i < visibleCols.length && i < 3; i++) {
-        var c = visibleCols[i];
-        var v = item[c.key];
-        if (v != null) { parts.push(c.type === 'time' ? formatRelativeTime(v) : String(v)); }
-      }
-      var subtitle = parts.join(' \u00B7 ');
-      var statusCol = null;
-      for (var j = 0; j < visibleCols.length; j++) {
-        if (visibleCols[j].type === 'status') { statusCol = visibleCols[j]; break; }
-      }
-      var statusVal = statusCol ? item[statusCol.key] : null;
-      var isOnline = statusVal === true || statusVal === 'true' || statusVal === 'online' || statusVal === 1;
-      var dotColor = isOnline ? 'var(--text-success)' : statusVal != null ? 'var(--text-muted-foreground)' : null;
-      var topChildren = [
-        jsx('span', { key: 'name', style: { color: 'var(--text-foreground)', fontWeight: 500, fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: name })
-      ];
-      if (dotColor) {
-        topChildren.push(jsx('span', { key: 'dot', style: { width: '5px', height: '5px', borderRadius: '50%', background: dotColor, flexShrink: 0 } }));
-      }
-      var contentChildren = [
-        jsxs('div', {
-          key: 'top',
-          style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' },
-          children: topChildren
-        }),
-        jsx('div', { key: 'sub', style: { color: 'var(--text-muted-foreground)', fontSize: '9px', marginTop: '1px' }, children: subtitle })
-      ];
+    // Full/narrow table
+    if (!isSmall) {
       return jsxs('div', {
-        key: item.id || idx,
-        style: {
-          display: 'flex', alignItems: 'center', gap: '6px',
-          padding: '7px 10px',
-          borderTop: idx > 0 ? '1px solid var(--border-glass-border, var(--border))' : 'none',
-          background: bgColor
-        },
+        ref: containerRef,
+        className: 'flex flex-col h-full w-full bg-card border border-border rounded-lg overflow-hidden',
         children: [
-          jsx('span', {
-            key: 'icon',
-            style: { width: '22px', height: '22px', borderRadius: '5px', background: iconAccent.grad, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-            children: jsx('span', { style: { color: 'var(--text-primary-foreground)', fontSize: '10px' }, children: '\u25CF' })
+          // Header
+          jsx('div', {
+            className: 'flex-shrink-0 flex border-b border-border bg-muted/50',
+            style: { padding: compact ? '5px 10px' : '6px 12px' },
+            children: visibleCols.map(function (col) {
+              var align = col.type === 'number' || col.type === 'time' ? 'text-right' : 'text-left';
+              return jsx('span', {
+                className: 'flex-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ' + align,
+                children: col.label
+              }, col.key);
+            })
           }),
-          jsxs('span', { key: 'content', style: { flex: 1, minWidth: 0 }, children: contentChildren })
+          // Body
+          jsx('div', {
+            className: 'flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent',
+            onScroll: handleScroll,
+            children: rows.map(function (row, idx) {
+              return jsx('div', {
+                className: 'dl-row flex items-center border-b border-border last:border-b-0 transition-colors',
+                style: { padding: compact ? '6px 10px' : '8px 12px' },
+                children: visibleCols.map(function (col) {
+                  var align = col.type === 'number' || col.type === 'time' ? 'justify-end' : 'justify-start';
+                  return jsx('span', {
+                    className: 'flex-1 flex items-center text-xs ' + align,
+                    children: renderCell(row[col.key], col)
+                  }, col.key);
+                })
+              }, row.id || idx);
+            })
+          })
         ]
       });
     }
 
-    var rowRenderer = mode === 'stacked' ? renderStackedRow : renderRow;
-
-    var bodyChildren = rows.map(function (item, idx) { return rowRenderer(item, idx); });
-    if (displayCount < data.length) {
-      bodyChildren.push(jsxs('div', {
-        key: 'loader',
-        style: { display: 'flex', justifyContent: 'center', padding: '8px', gap: '4px' },
-        children: [
-          jsx('div', { key: 'd1', style: { width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-muted-foreground)', opacity: 0.3, animation: 'data-list-pulse 1s infinite' } }),
-          jsx('div', { key: 'd2', style: { width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-muted-foreground)', opacity: 0.3, animation: 'data-list-pulse 1s infinite 0.2s' } }),
-          jsx('div', { key: 'd3', style: { width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-muted-foreground)', opacity: 0.3, animation: 'data-list-pulse 1s infinite 0.4s' } })
-        ]
-      }));
-    }
-
+    // Small/stacked layout
     return jsxs('div', {
       ref: containerRef,
-      className: 'flex flex-col h-full w-full bg-card border border-glass-border rounded-lg overflow-hidden',
+      className: 'flex flex-col h-full w-full bg-card border border-border rounded-lg overflow-hidden',
       children: [
-        renderHeader(),
-        jsx('div', { key: 'body', className: 'flex-1 overflow-y-auto', onScroll: handleScroll, children: bodyChildren })
+        jsx('div', {
+          className: 'flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent',
+          children: rows.map(function (row, idx) {
+            var nameCol = visibleCols[0];
+            var name = nameCol ? String(row[nameCol.key] || '') : '';
+            var parts = [];
+            for (var i = 1; i < visibleCols.length && i < 3; i++) {
+              var c = visibleCols[i];
+              var v = row[c.key];
+              if (v != null) parts.push(c.type === 'time' ? formatTime(v) : String(v));
+            }
+            var statusCol = null;
+            for (var j = 0; j < visibleCols.length; j++) {
+              if (visibleCols[j].type === 'status') { statusCol = visibleCols[j]; break; }
+            }
+            var sv = statusCol ? row[statusCol.key] : null;
+            var on = sv === true || sv === 'true' || sv === 'online' || sv === 1;
+            var topCh = [jsx('span', { key: 'n', className: 'text-[11px] font-medium truncate', children: name })];
+            if (sv != null) topCh.push(jsx('span', { key: 'd', className: 'w-1.5 h-1.5 rounded-full flex-shrink-0 ' + (on ? 'bg-emerald-500' : 'bg-muted-foreground') }));
+            return jsxs('div', {
+              className: 'dl-row flex items-center gap-2 border-b border-border last:border-b-0 px-2.5 py-1.5 transition-colors',
+              children: [
+                jsx('div', { className: 'w-5 h-5 rounded flex-shrink-0 flex items-center justify-center', style: { background: 'oklch(0.72 0.19 310 / 15%)' }, children:
+                  jsx('span', { className: 'text-[9px] font-bold', style: { color: 'oklch(0.72 0.19 310)' }, children: '\u25CF' })
+                }),
+                jsxs('div', { className: 'flex-1 min-w-0', children: [
+                  jsxs('div', { className: 'flex items-center justify-between gap-1', children: topCh }),
+                  parts.length ? jsx('div', { className: 'text-[9px] text-muted-foreground mt-px', children: parts.join(' \u00B7 ') }) : null
+                ]})
+              ]
+            }, row.id || idx);
+          })
+        })
       ]
     });
   }
 
   // ── ConfigPanel ──
+
   function ConfigPanel(props) {
     var config = props.config || {};
-    var onConfigChange = props.onConfigChange || function () {};
+    var onChange = props.onChange || function () {};
     var columns = config.columns || [];
+    var hSt = React.useState(config.row_height || 'default');
+    var rh = hSt[0], setRh = hSt[1];
 
-    var heightState = React.useState(config.row_height || 'default');
-    var rowHeight = heightState[0], setRowHeight = heightState[1];
+    function set(key, val) { onChange(key, val); }
 
-    function updateConfig(newConfig) {
-      onConfigChange(Object.assign({}, config, newConfig));
+    function toggleCol(idx) {
+      var c = columns.slice();
+      c[idx] = Object.assign({}, c[idx], { visible: !c[idx].visible });
+      set('columns', c);
     }
 
-    function toggleColumnVisibility(idx) {
-      var cols = columns.slice();
-      cols[idx] = Object.assign({}, cols[idx], { visible: !cols[idx].visible });
-      updateConfig({ columns: cols });
+    function renameCol(idx, label) {
+      var c = columns.slice();
+      c[idx] = Object.assign({}, c[idx], { label: label });
+      set('columns', c);
     }
 
-    function updateColumnLabel(idx, newLabel) {
-      var cols = columns.slice();
-      cols[idx] = Object.assign({}, cols[idx], { label: newLabel });
-      updateConfig({ columns: cols });
-    }
-
-    var children = [
-      jsxs('div', { key: 'height', className: 'flex flex-col gap-1', children: [
-        jsx('span', { className: 'text-xs font-semibold text-muted-foreground uppercase tracking-wide', children: 'Row Height' }),
-        jsxs('div', { className: 'flex gap-2', children: [
+    var ch = [
+      jsxs('div', { key: 'h', className: 'flex flex-col gap-1.5', children: [
+        jsx('span', { className: 'text-[10px] font-semibold uppercase tracking-wider text-muted-foreground', children: 'Row Height' }),
+        jsxs('div', { className: 'flex gap-1.5', children: [
           jsx('button', {
-            className: 'px-3 py-1 rounded text-xs font-medium transition-colors ' + (rowHeight === 'default' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted-30'),
-            onClick: function () { setRowHeight('default'); updateConfig({ row_height: 'default' }); },
+            className: 'px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ' + (rh === 'default' ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'),
+            onClick: function () { setRh('default'); set('row_height', 'default'); },
             children: 'Default'
           }),
           jsx('button', {
-            className: 'px-3 py-1 rounded text-xs font-medium transition-colors ' + (rowHeight === 'compact' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted-30'),
-            onClick: function () { setRowHeight('compact'); updateConfig({ row_height: 'compact' }); },
+            className: 'px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ' + (rh === 'compact' ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'),
+            onClick: function () { setRh('compact'); set('row_height', 'compact'); },
             children: 'Compact'
           })
         ]})
       ]})
     ];
 
-    if (columns.length > 0) {
-      var colItems = columns.map(function (col, idx) {
-        return jsxs('div', {
-          key: col.key,
-          className: 'flex items-center gap-2 py-1',
-          children: [
-            jsx('input', {
-              key: 'cb',
-              type: 'checkbox',
-              checked: col.visible !== false,
-              onChange: function () { toggleColumnVisibility(idx); },
-              className: 'accent-foreground'
-            }),
-            jsx('input', {
-              key: 'lbl',
-              type: 'text',
-              value: col.label || '',
-              onChange: function (e) { updateColumnLabel(idx, e.target.value); },
-              className: 'text-xs bg-transparent border-b border-glass-border text-foreground px-1 py-0.5 focus:outline-none focus:border-foreground',
-              style: { flex: 1 }
-            })
-          ]
-        });
-      });
-      children.push(jsxs('div', { key: 'cols', className: 'flex flex-col gap-1', children: [
-        jsx('span', { className: 'text-xs font-semibold text-muted-foreground uppercase tracking-wide', children: 'Columns' }),
-        colItems
+    if (columns.length) {
+      ch.push(jsxs('div', { key: 'c', className: 'flex flex-col gap-1.5', children: [
+        jsx('span', { className: 'text-[10px] font-semibold uppercase tracking-wider text-muted-foreground', children: 'Columns' }),
+        jsx('div', { className: 'flex flex-col gap-1', children:
+          columns.map(function (col, i) {
+            return jsxs('div', {
+              className: 'flex items-center gap-2',
+              children: [
+                jsx('input', { type: 'checkbox', checked: col.visible !== false, onChange: function () { toggleCol(i); }, className: 'accent-foreground w-3.5 h-3.5' }),
+                jsx('input', { type: 'text', value: col.label || '', onChange: function (e) { renameCol(i, e.target.value); },
+                  className: 'text-[11px] bg-transparent border-b border-border text-foreground px-1 py-0.5 flex-1 focus:outline-none focus:border-foreground transition-colors' })
+              ]
+            }, col.key);
+          })
+        })
       ]}));
     } else {
-      children.push(jsx('div', { key: 'no-cols', className: 'text-xs text-muted-foreground', children: 'Columns will appear after data is loaded' }));
+      ch.push(jsx('span', { key: 'nc', className: 'text-[10px] text-muted-foreground', children: 'Columns will appear after data loads' }));
     }
 
-    return jsxs('div', { className: 'flex flex-col gap-3 p-3', children: children });
+    return jsxs('div', { className: 'flex flex-col gap-3 p-3', children: ch });
   }
 
-  // ── Inject styles ──
-  if (!document.getElementById('data-list-styles')) {
-    var styleEl = document.createElement('style');
-    styleEl.id = 'data-list-styles';
-    styleEl.textContent = [
-      '@keyframes data-list-pulse {',
+  // ── Styles ──
+  if (!document.getElementById('dl-styles')) {
+    var s = document.createElement('style');
+    s.id = 'dl-styles';
+    s.textContent = [
+      '@keyframes dl-pulse {',
       '  0%, 100% { opacity: 0.3; transform: scale(1); }',
       '  50% { opacity: 1; transform: scale(1.3); }',
       '}',
-      '.data-list-row:hover { background: var(--bg-muted) !important; border-left: 2px solid var(--accent-purple); }',
-      '.data-list-row { border-left: 2px solid transparent; }'
+      '.dl-row:hover { background: var(--muted) !important; }'
     ].join('\n');
-    document.head.appendChild(styleEl);
+    document.head.appendChild(s);
   }
 
   return { default: DataList, DataList: DataList, ConfigPanel: ConfigPanel };
