@@ -597,10 +597,13 @@ var NeoMind_DataList = (function () {
           children: mergedCols.map(function (col, ci) {
             var flex = ci === 0 ? '0 0 90px' : '1 1 0';
             var colColor = ci > 0 ? SOURCE_COLORS[(ci - 1) % SOURCE_COLORS.length] : 'var(--muted-foreground)';
-            return jsx('span', {
-              className: 'text-[10px] font-semibold uppercase tracking-wide truncate',
-              style: { flex: flex, color: colColor, paddingRight: '4px' },
-              children: col.label
+            return jsxs('span', {
+              className: 'text-[10px] font-semibold uppercase tracking-wide truncate flex items-center gap-1',
+              style: { flex: flex, color: 'var(--muted-foreground)', paddingRight: '4px' },
+              children: [
+                ci > 0 ? jsx('span', { style: { width: 6, height: 6, borderRadius: '50%', background: colColor, flexShrink: 0 } }, 'dot') : null,
+                jsx('span', { children: col.label }, 'txt')
+              ]
             }, col.key);
           })
         });
