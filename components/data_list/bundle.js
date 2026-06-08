@@ -39,6 +39,7 @@ var NeoMind_DataList = (function () {
       return { items: [{ value: result.value }], isEmpty: false, label: 'value_scalar' };
     if (result.series != null && Array.isArray(result.series)) {
       if (!result.series.length) return { items: [], isEmpty: true, label: 'series_empty' };
+      console.log('[DataList] series[0]:', JSON.stringify(result.series[0]).slice(0, 200));
       if (result.series[0] != null && typeof result.series[0] === 'object') {
         return { items: result.series.map(function (item) {
           return { timestamp: item.timestamp || item.time || item.ts, value: item.value };
@@ -290,6 +291,8 @@ var NeoMind_DataList = (function () {
       setError(null);
       fn().then(function (result) {
         if (fid !== fetchIdRef.current) return;
+        console.log('[DataList] fetchData result:', JSON.stringify(result).slice(0, 500));
+        console.log('[DataList] dataSource:', JSON.stringify(dataSource).slice(0, 300));
 
         // Multi-source: result is an array of FetchDataResult
         if (isMulti && Array.isArray(result)) {
