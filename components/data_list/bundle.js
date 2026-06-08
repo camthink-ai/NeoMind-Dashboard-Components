@@ -399,6 +399,16 @@ var NeoMind_DataList = (function () {
       doFetch();
     }, [dsKey, config.time_range]);
 
+    // Auto-refresh every 30s to pick up WebSocket updates
+    React.useEffect(function () {
+      if (!dsKey) return;
+      var iv = setInterval(function () {
+        lastDsKeyRef.current = null; // force re-fetch
+        doFetch();
+      }, 30000);
+      return function () { clearInterval(iv); };
+    }, [dsKey]);
+
     function handleScroll(e) {
       var el = e.target;
       if (!data || displayCount >= data.length) return;
