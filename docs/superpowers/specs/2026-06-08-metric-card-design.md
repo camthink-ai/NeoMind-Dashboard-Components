@@ -65,17 +65,18 @@ elif count >= 3 and aspectRatio < 1.2:
 | 1 | `text-4xl` | Maximize single value impact |
 | 2 | `text-3xl` | Generous spacing for two values |
 | 3 | `text-2xl` | Still comfortable in 2-col or 3-col |
-| 4–5 | `text-xl` | Compact to fit more cells |
+| 4–6 | `text-xl` | Compact for multi-column |
+| 7–12 | `text-sm`–`text-base` | Dense grid, labels may abbreviate |
 
 #### Aspect Ratio Examples
 
 ```
 2×2 (square)  → 1 metric: single, 2 metrics: columns
 3×2 (wide)    → 1-3 metrics: columns
-2×3 (tall)    → 1 metric: single, 2-5 metrics: grid (2-col)
-4×3 (wide)    → up to 4 metrics: columns
-6×2 (very wide) → up to 5 metrics: columns
-4×4 (square large) → 1-2: columns, 3-5: grid
+2×3 (tall)    → 1 metric: single, 2-12 metrics: grid (2-col)
+4×3 (wide)    → up to 6 metrics: columns, 7+: grid (3-col)
+6×2 (very wide) → up to 12 metrics: grid (6×2)
+6×4 (max)     → up to 12 metrics: grid (4×3)
 ```
 
 Grid dividers: vertical separators use `border-glass-border`, horizontal row separators use a subtle `bg-muted-30` line.
@@ -105,7 +106,7 @@ Grid dividers: vertical separators use `border-glass-border`, horizontal row sep
 ### Configuration
 
 - `has_data_source: true`
-- `max_data_sources: 5`
+- `max_data_sources: 12`
 
 ### Config Schema
 
@@ -123,7 +124,7 @@ Grid dividers: vertical separators use `border-glass-border`, horizontal row sep
           "decimalPlaces": { "type": "number", "default": 1, "title": "Decimal Places" }
         }
       },
-      "maxItems": 5,
+      "maxItems": 12,
       "default": [],
       "title": "Metric Slots"
     }
@@ -187,7 +188,7 @@ Each array index maps to the corresponding metric slot. If `results[i]` is `null
     "max_w": 6, "max_h": 4
   },
   "has_data_source": true,
-  "max_data_sources": 5,
+  "max_data_sources": 12,
   "has_device_binding": false,
   "has_display_config": true,
   "has_actions": false,
@@ -204,7 +205,7 @@ Each array index maps to the corresponding metric slot. If `results[i]` is `null
             "decimalPlaces": { "type": "number", "default": 1, "title": "Decimal Places" }
           }
         },
-        "maxItems": 5,
+        "maxItems": 12,
         "default": [],
         "title": "Metric Slots"
       }
