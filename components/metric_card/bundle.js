@@ -199,12 +199,9 @@ var NeoMind_MetricCard = (function () {
     /* ---- empty-state guard (after all hooks) ---- */
     if (!fetchData || !dataSource) {
       return jsx('div', {
-        className: 'flex flex-col h-full w-full p-3',
-        children: jsx('div', {
-          className: 'bg-card border border-glass-border rounded-xl flex-1',
-          style: { backdropFilter: 'blur(20px)', boxShadow: '0 4px 30px oklch(0.18 0.02 270 / 10%)' },
-          children: jsx(EmptyState, {})
-        })
+        ref: containerRef,
+        className: 'flex flex-col h-full w-full',
+        children: jsx(EmptyState, {})
       });
     }
 
@@ -215,12 +212,9 @@ var NeoMind_MetricCard = (function () {
 
     if (count === 0) {
       return jsx('div', {
-        className: 'flex flex-col h-full w-full p-3',
-        children: jsx('div', {
-          className: 'bg-card border border-glass-border rounded-xl flex-1',
-          style: { backdropFilter: 'blur(20px)', boxShadow: '0 4px 30px oklch(0.18 0.02 270 / 10%)' },
-          children: jsx(EmptyState, {})
-        })
+        ref: containerRef,
+        className: 'flex flex-col h-full w-full',
+        children: jsx(EmptyState, {})
       });
     }
 
@@ -282,11 +276,11 @@ var NeoMind_MetricCard = (function () {
     }
 
     /* ---- wrap with error retry bar ---- */
-    var cardChildren = [
+    var contentChildren = [
       jsx('div', { key: 'grid', className: 'flex-1', children: innerContent })
     ];
     if (error) {
-      cardChildren.push(jsx('div', {
+      contentChildren.push(jsx('div', {
         key: 'retry',
         className: 'text-xs text-muted-foreground text-center py-1 cursor-pointer',
         onClick: function () { lastDsKeyRef.current = null; doFetch(); },
@@ -294,14 +288,13 @@ var NeoMind_MetricCard = (function () {
       }));
     }
 
-    /* ---- final render ---- */
+    /* ---- final render — just fill the container ---- */
     return jsx('div', {
       ref: containerRef,
-      className: 'flex flex-col h-full w-full p-3',
+      className: 'flex flex-col h-full w-full',
       children: jsxs('div', {
-        className: 'bg-card border border-glass-border rounded-xl flex-1 flex flex-col overflow-hidden',
-        style: { backdropFilter: 'blur(20px)', boxShadow: '0 4px 30px oklch(0.18 0.02 270 / 10%)' },
-        children: cardChildren
+        className: 'flex-1 flex flex-col overflow-hidden',
+        children: contentChildren
       })
     });
   }
