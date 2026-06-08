@@ -242,6 +242,8 @@ var NeoMind_DataList = (function () {
     var displayCount = dispSt[0], setDisplayCount = dispSt[1];
     var srcSt = React.useState([]);
     var sourceLabels = srcSt[0], setSourceLabels = srcSt[1];
+    var mcSt = React.useState(null);
+    var mergedCols = mcSt[0], setMergedCols = mcSt[1];
 
     var containerRef = React.useRef(null);
     var tagMaps = React.useRef({});
@@ -294,37 +296,83 @@ var NeoMind_DataList = (function () {
 
         // Multi-source: result is an array of FetchDataResult
         if (isMulti && Array.isArray(result)) {
-          var allItems = [];
           var srcLabels = [];
+          var srcItems = []; // per-source adapted items
           var hasAny = false;
+          var allTimeseries = true;
+
           for (var si = 0; si < result.length; si++) {
+            var label = labels[si] || ('Source ' + (si + 1));
+            srcLabels.push(label);
             var adapted = adaptData(result[si], cfg.data_path || '');
             if (adapted.items && adapted.items.length) {
-              var label = labels[si] || ('Source ' + (si + 1));
-              for (var ai = 0; ai < adapted.items.length; ai++) {
-                var item = Object.assign({}, adapted.items[ai]);
-                item.__sourceIdx = si;
-                item.__sourceLabel = label;
-                allItems.push(item);
-              }
-              srcLabels.push(label);
               hasAny = true;
+              srcItems.push(adapted.items);
+              // Check if this source is timeseries (items have timestamp + value)
+              if (!adapted.items[0] || adapted.items[0].timestamp == null) allTimeseries = false;
+            } else {
+              srcItems.push([]);
             }
           }
+
           if (!hasAny) {
             setData([]);
             setEmptyLabel('series_empty');
             setSourceLabels(srcLabels);
-          } else {
-            setData(allItems);
+            setMergedCols(null);
+            return;
+          }
+
+          setSourceLabels(srcLabels);
+
+          // ── Timeseries join: merge by timestamp (round to minute) ──
+          if (allTimeseries) {
+            var tsMap = {}; // minuteKey -> { timestamp, s0: val, s1: val, ... }
+            var tsOrder = [];
+            for (var si2 = 0; si2 < srcItems.length; si2++) {
+              var items = srcItems[si2];
+              for (var ii = 0; ii < items.length; ii++) {
+                var ts = normalizeTs(items[ii].timestamp);
+                var minKey = Math.round(ts / 60000); // round to minute
+                if (!tsMap[minKey]) {
+                  tsMap[minKey] = { timestamp: ts };
+                  tsOrder.push(minKey);
+                }
+                tsMap[minKey]['s' + si2] = items[ii].value;
+              }
+            }
+            tsOrder.sort(function (a, b) { return a - b; });
+            var mergedRows = tsOrder.map(function (mk) { return tsMap[mk]; });
+
+            // Build column defs for merged view
+            var mergedCols = [{ key: 'timestamp', label: 'Time', type: 'time', visible: true, order: 0 }];
+            for (var sc = 0; sc < srcLabels.length; sc++) {
+              mergedCols.push({ key: 's' + sc, label: srcLabels[sc], type: 'number', visible: true, order: sc + 1 });
+            }
+            setMergedCols(mergedCols);
+            setData(mergedRows);
             setEmptyLabel('');
-            setSourceLabels(srcLabels);
-            applyData(allItems, cfg);
+          } else {
+            // ── Non-timeseries: still flatten with source labels ──
+            var flatItems = [];
+            for (var si3 = 0; si3 < srcItems.length; si3++) {
+              for (var ai = 0; ai < srcItems[si3].length; ai++) {
+                var item = Object.assign({}, srcItems[si3][ai]);
+                item.__sourceIdx = si3;
+                item.__sourceLabel = srcLabels[si3];
+                flatItems.push(item);
+              }
+            }
+            setMergedCols(null);
+            setData(flatItems);
+            setEmptyLabel('');
+            applyData(flatItems, cfg);
           }
           return;
         }
 
         // Single source
+        setMergedCols(null);
         var adapted = adaptData(result, cfg.data_path || '');
         if (adapted.items === null) {
           setData(null);
@@ -359,8 +407,9 @@ var NeoMind_DataList = (function () {
     }
 
     var compact = config.row_height === 'compact';
-    var visibleCols = columns.filter(function (c) { return c.visible; });
-    var ts = isTimeseries(visibleCols);
+    var activeCols = mergedCols || columns;
+    var visibleCols = activeCols.filter(function (c) { return c.visible; });
+    var ts = isTimeseries(visibleCols) || !!mergedCols; // merged is always timeseries-like
     var multiSource = sourceLabels.length > 1;
 
     // ── Empty / Loading / Error ──
@@ -505,51 +554,100 @@ var NeoMind_DataList = (function () {
 
     // ── Timeseries rows ──
     if (ts) {
+      // Build column header labels for merged multi-source view
+      var tsHeaderRow = null;
+      if (mergedCols && multiSource) {
+        tsHeaderRow = jsxs('div', {
+          className: 'flex items-center flex-shrink-0',
+          style: { padding: '4px 12px', borderBottom: '1px solid var(--border)', background: 'oklch(1 0 0 / 2%)' },
+          children: mergedCols.map(function (col, ci) {
+            var flex = ci === 0 ? '0 0 90px' : '1 1 0';
+            var colColor = ci > 0 ? SOURCE_COLORS[(ci - 1) % SOURCE_COLORS.length] : 'var(--muted-foreground)';
+            return jsx('span', {
+              className: 'text-[10px] font-semibold uppercase tracking-wide truncate',
+              style: { flex: flex, color: colColor, paddingRight: '4px' },
+              children: col.label
+            }, col.key);
+          })
+        });
+      }
+
       return jsxs('div', {
         ref: containerRef,
         className: 'flex flex-col h-full w-full overflow-hidden',
         style: glassContainer,
         children: [
           listHeader,
+          tsHeaderRow,
           jsx('div', {
             className: 'flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent dl-scroll-area',
             style: { padding: '8px 8px ' + rowGap },
-          onScroll: handleScroll,
-          children: rows.map(function (row, idx) {
-            var tsVal = row.timestamp;
-            var val = row.value;
-            var timeStr = tsVal ? formatTimeShort(tsVal) : '';
-            var srcIdx = row.__sourceIdx || 0;
-            var srcColor = SOURCE_COLORS[srcIdx % SOURCE_COLORS.length];
-            var valColor = 'var(--foreground)';
-            if (typeof val === 'number' && val >= 0 && val <= 100) {
-              if (val < 20) valColor = 'oklch(0.58 0.22 25)';
-              else if (val < 40) valColor = 'oklch(0.72 0.17 65)';
-            }
-            return jsxs('div', {
-              className: 'dl-card-row group',
-              style: {
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: (compact ? '6px' : '9px') + ' 12px',
-                marginBottom: rowGap,
-                borderRadius: '8px',
-                background: 'oklch(1 0 0 / 3%)',
-                transition: 'all 0.2s ease'
-              },
-              children: [
-                jsxs('div', { className: 'flex items-center gap-2', children: [
+            onScroll: handleScroll,
+            children: rows.map(function (row, idx) {
+              var tsVal = row.timestamp;
+
+              // Merged multi-source row: timestamp + each source column
+              if (mergedCols && multiSource) {
+                var cells = mergedCols.map(function (col, ci) {
+                  if (ci === 0) {
+                    return jsx('span', {
+                      className: 'text-[11px] text-muted-foreground tabular-nums',
+                      style: { flex: '0 0 90px', paddingRight: '4px' },
+                      children: tsVal ? formatTimeShort(tsVal) : '\u2014'
+                    }, col.key);
+                  }
+                  var v = row[col.key];
+                  var vColor = 'var(--foreground)';
+                  if (typeof v === 'number' && v >= 0 && v <= 100) {
+                    if (v < 20) vColor = 'oklch(0.58 0.22 25)';
+                    else if (v < 40) vColor = 'oklch(0.72 0.17 65)';
+                  }
+                  return jsx('span', {
+                    className: 'text-xs font-semibold tabular-nums truncate',
+                    style: { flex: '1 1 0', color: vColor, paddingRight: '4px' },
+                    children: v != null ? String(v) : '\u2014'
+                  }, col.key);
+                });
+                return jsxs('div', {
+                  className: 'dl-card-row group',
+                  style: {
+                    display: 'flex', alignItems: 'center',
+                    padding: (compact ? '6px' : '9px') + ' 12px',
+                    marginBottom: rowGap,
+                    borderRadius: '8px',
+                    background: 'oklch(1 0 0 / 3%)',
+                    transition: 'all 0.2s ease'
+                  },
+                  children: cells
+                }, idx);
+              }
+
+              // Single-source timeseries row
+              var val = row.value;
+              var timeStr = tsVal ? formatTimeShort(tsVal) : '';
+              var valColor = 'var(--foreground)';
+              if (typeof val === 'number' && val >= 0 && val <= 100) {
+                if (val < 20) valColor = 'oklch(0.58 0.22 25)';
+                else if (val < 40) valColor = 'oklch(0.72 0.17 65)';
+              }
+              return jsxs('div', {
+                className: 'dl-card-row group',
+                style: {
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: (compact ? '6px' : '9px') + ' 12px',
+                  marginBottom: rowGap,
+                  borderRadius: '8px',
+                  background: 'oklch(1 0 0 / 3%)',
+                  transition: 'all 0.2s ease'
+                },
+                children: [
                   jsx('span', { className: 'text-[11px] text-muted-foreground flex-shrink-0 tabular-nums', children: timeStr }),
-                  multiSource && row.__sourceLabel ? jsx('span', {
-                    className: 'text-[9px] font-medium px-1.5 py-px rounded-md',
-                    style: { background: srcColor.replace('50%', '12%'), color: srcColor },
-                    children: row.__sourceLabel
-                  }) : null
-                ]}),
-                jsx('span', { className: 'text-sm font-semibold tabular-nums truncate ml-3', style: { color: valColor }, children: String(val != null ? val : '\u2014') })
-              ]
-            }, idx);
+                  jsx('span', { className: 'text-sm font-semibold tabular-nums truncate ml-3', style: { color: valColor }, children: String(val != null ? val : '\u2014') })
+                ]
+              }, idx);
+            })
           })
-        })]
+        ]
       });
     }
 
