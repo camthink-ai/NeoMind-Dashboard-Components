@@ -1674,14 +1674,9 @@ var NE101CameraPanel = (function () {
         );
 
         // ROI drawing canvas — visual polygon drawing on top of the camera image
-        var canvasAspect = imgNat2.w > 0 && imgNat2.h > 0 ? (imgNat2.w / imgNat2.h) : (16 / 9);
-        // Max height 200px, width auto based on aspect
-        var canvasH = 180;
-        var canvasW = canvasH * canvasAspect;
-        // If canvas is wider than container, constrain to container width
-        var canvasStyle = canvasW > 400
-          ? { width: '100%', aspectRatio: String(canvasAspect), maxHeight: '200px', background: '#1a1a2e' }
-          : { width: Math.round(canvasW) + 'px', height: canvasH + 'px', background: '#1a1a2e' };
+        // Fixed height container, width fills parent. Image uses objectFit:contain,
+        // containTransform() handles coordinate mapping for clicks and drawing.
+        var canvasStyle = { width: '100%', height: '180px', background: '#1a1a2e' };
 
         var canvasContainer = jsxs('div', { key: 'roi-canvas-wrap', className: FIELD_CLS, children: [
           jsxs('div', { className: 'flex items-center justify-between', children: [
