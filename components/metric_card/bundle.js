@@ -16,6 +16,54 @@ var NeoMind_MetricCard = (function () {
   };
 
   /* ------------------------------------------------------------------ */
+  /*  Helper: extract numeric value from various result formats           */
+  /* ------------------------------------------------------------------ */
+  function extractValue(result) {
+    if (result == null) return null;
+    if (typeof result === 'number') return result;
+    if (typeof result === 'boolean') return result ? 1 : 0;
+    if (typeof result === 'string') {
+      var n = Number(result);
+      return isNaN(n) ? null : n;
+    }
+    if (result.value != null) {
+      if (typeof result.value === 'number') return result.value;
+      if (typeof result.value === 'boolean') return result.value ? 1 : 0;
+      if (typeof result.value === 'string') {
+        var nv = Number(result.value);
+        return isNaN(nv) ? null : nv;
+      }
+    }
+    if (result.series != null && Array.isArray(result.series) && result.series.length) {
+      var last = result.series[result.series.length - 1];
+      if (typeof last === 'number') return last;
+      if (last && last.value != null) {
+        if (typeof last.value === 'number') return last.value;
+        if (typeof last.value === 'string') { var sv = Number(last.value); if (!isNaN(sv)) return sv; }
+      }
+    }
+    return null;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Helper: derive label from dataSource config (mirrors data_list)    */
+  /* ------------------------------------------------------------------ */
+  function keyToLabel(key) {
+    var last = key.split('.').pop() || key;
+    return last.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ')
+      .replace(/^\w/, function (c) { return c.toUpperCase(); });
+  }
+
+  function getDsLabel(ds) {
+    if (!ds) return '';
+    if (ds.field) return keyToLabel(ds.field);
+    if (ds.infoProperty) return keyToLabel(ds.infoProperty);
+    if (ds.systemMetric) return keyToLabel(ds.systemMetric);
+    if (ds.extensionMetric) return ds.extensionMetric;
+    return '';
+  }
+
+  /* ------------------------------------------------------------------ */
   /*  Helper: stable dataSource key for change detection                 */
   /* ------------------------------------------------------------------ */
   function getStableDsKey(ds) {
@@ -90,7 +138,7 @@ var NeoMind_MetricCard = (function () {
         if (fid !== fetchIdRef.current) return;
         var results = Array.isArray(result) ? result : (result ? [result] : []);
         var vals = results.map(function (r) {
-          return (r && r.value != null) ? r.value : null;
+          return extractValue(r);
         });
         setValues(vals);
       }).catch(function () {
@@ -194,7 +242,7 @@ var NeoMind_MetricCard = (function () {
         formattedVal = typeof rawVal === 'number' ? rawVal.toFixed(dp) : rawVal;
       }
       slots.push({
-        label: cfg.label || ('Value ' + (i + 1)),
+        label: cfg.label || getDsLabel(dsList[i]) || ('Value ' + (i + 1)),
         unit: cfg.unit || '',
         value: formattedVal
       });
