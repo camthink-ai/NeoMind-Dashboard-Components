@@ -88,6 +88,25 @@
       "has_actions": false,
       "manifest_url": "https://raw.githubusercontent.com/camthink-ai/NeoMind-Dashboard-Components/main/components/metric_card/manifest.json",
       "bundle_url": "https://raw.githubusercontent.com/camthink-ai/NeoMind-Dashboard-Components/main/components/metric_card/bundle.js"
+    },
+    {
+      "id": "text_display",
+      "name": { "en": "Text Display", "zh": "文本展示" },
+      "description": {
+        "en": "Renders structured data as formatted text with highlighted values",
+        "zh": "将结构化数据格式化为带高亮的可读文本展示"
+      },
+      "icon": "FileText",
+      "category": "display",
+      "version": "1.0.0",
+      "author": "NeoMind Team",
+      "size_constraints": { "min_w": 2, "min_h": 2, "default_w": 3, "default_h": 3, "max_w": 6, "max_h": 6 },
+      "has_data_source": true,
+      "max_data_sources": 5,
+      "has_display_config": true,
+      "has_actions": false,
+      "manifest_url": "https://raw.githubusercontent.com/camthink-ai/NeoMind-Dashboard-Components/main/components/text-display/manifest.json",
+      "bundle_url": "https://raw.githubusercontent.com/camthink-ai/NeoMind-Dashboard-Components/main/components/text-display/bundle.js"
     }
   ]
 }
