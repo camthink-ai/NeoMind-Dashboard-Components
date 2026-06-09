@@ -7,13 +7,32 @@ var NeoMind_MetricCard = (function () {
   /*  Glass container style (same pattern as data_list)                   */
   /* ------------------------------------------------------------------ */
   var glassContainer = {
-    background: 'linear-gradient(135deg, oklch(1 0 0 / 6%) 0%, oklch(1 0 0 / 2%) 100%)',
+    background: 'linear-gradient(135deg, oklch(1 0 0 / 6%) 0%, oklch(0.75 0.06 270 / 5%) 40%, oklch(1 0 0 / 3%) 60%, oklch(0.75 0.06 200 / 4%) 100%)',
+    backgroundSize: '300% 300%',
+    animation: 'mc-shimmer 12s ease infinite',
     border: '1px solid var(--border)',
     borderRadius: '12px',
     backdropFilter: 'blur(16px)',
     WebkitBackdropFilter: 'blur(16px)',
     boxShadow: '0 1px 3px oklch(0 0 0 / 12%), inset 0 1px 0 oklch(1 0 0 / 6%)'
   };
+
+  /* ---- inject keyframes ---- */
+  if (!document.getElementById('mc-styles')) {
+    var mcStyle = document.createElement('style');
+    mcStyle.id = 'mc-styles';
+    mcStyle.textContent = [
+      '@keyframes mc-shimmer {',
+      '  0%, 100% { background-position: 0% 50%; }',
+      '  50% { background-position: 100% 50%; }',
+      '}',
+      '@keyframes mc-pulse {',
+      '  0%, 100% { opacity: 0.3; transform: scale(1); }',
+      '  50% { opacity: 1; transform: scale(1.3); }',
+      '}'
+    ].join('\n');
+    document.head.appendChild(mcStyle);
+  }
 
   /* ------------------------------------------------------------------ */
   /*  Helper: extract numeric value from various result formats           */

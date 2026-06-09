@@ -7,7 +7,7 @@
   },
   "icon": "BarChart3",
   "category": "display",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "author": "NeoMind Team",
   "size_constraints": {
     "min_w": 2,
