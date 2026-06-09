@@ -1410,26 +1410,16 @@ var NE101CameraPanel = (function () {
       if (onChange) onChange(key, value);
     }
 
-    // Input with local state — immediately reflects typing, syncs to config on change/blur.
-    // Avoids frozen-input issue where shared composingRef or delayed parent re-render
-    // prevents the controlled value from updating.
+    // Uncontrolled input — uses defaultValue so it always responds to typing.
+    // Syncs to config via onChange. No hooks needed, avoids hook-count mismatch
+    // when fields appear/disappear based on mode.
     function imeInput(key, value, placeholder) {
-      var ls = React.useState(value);
-      var lv = ls[0];
-      var setLv = ls[1];
-      // Sync from prop when parent updates (e.g., config loaded)
-      var prevRef = React.useRef(value);
-      if (prevRef.current !== value) { prevRef.current = value; setLv(value); }
       return jsx('input', {
         className: INPUT_CLS,
-        value: lv,
+        defaultValue: value,
         placeholder: placeholder,
         onChange: function (e) {
-          setLv(e.target.value);
           update(key, e.target.value);
-        },
-        onBlur: function () {
-          update(key, lv);
         }
       });
     }
