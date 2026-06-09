@@ -104,27 +104,16 @@ var NeoMind_TextDisplay = (function () {
       var item = arr[i];
       if (item == null) continue;
       if (typeof item === 'object' && !Array.isArray(item)) {
-        var keys = Object.keys(item);
-        for (var j = 0; j < keys.length; j++) {
-          var v = item[keys[j]];
-          if (v == null) continue;
-          if (typeof v === 'object' && !Array.isArray(v)) {
-            var nested = flattenObject(v, prefix || keys[j], (depth || 0) + 1);
-            for (var ni = 0; ni < nested.length; ni++) lines.push(nested[ni]);
-          } else if (Array.isArray(v)) {
-            var arrNested = formatArray(v, prefix || keys[j], (depth || 0) + 1);
-            for (var ai = 0; ai < arrNested.length; ai++) lines.push(arrNested[ai]);
-          } else {
-            var fmt = formatValue(v);
-            lines.push({ key: prefix || keys[j], value: fmt.text, valueType: fmt.type });
-          }
-        }
+        // Object in array: use prefix + field name as full path
+        var objPrefix = prefix ? prefix + '[' + i + ']' : '[' + i + ']';
+        var nested = flattenObject(item, objPrefix, (depth || 0) + 1);
+        for (var ni = 0; ni < nested.length; ni++) lines.push(nested[ni]);
       } else if (Array.isArray(item)) {
         var nested = formatArray(item, prefix, (depth || 0) + 1);
         for (var k = 0; k < nested.length; k++) lines.push(nested[k]);
       } else {
         var fmt = formatValue(item);
-        lines.push({ key: '', value: fmt.text, valueType: fmt.type });
+        lines.push({ key: prefix || '', value: fmt.text, valueType: fmt.type });
       }
     }
     return lines;
