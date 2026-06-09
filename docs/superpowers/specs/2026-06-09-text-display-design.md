@@ -30,44 +30,80 @@ A dashboard component that renders structured data (JSON, key-value pairs, array
 | String | Direct display, numbers within text auto-highlighted |
 | Number | Displayed with highlighting |
 
-### Highlight Colors
+### Highlight Colors (Design Tokens)
 
-- **Cyan** (`#7dd3fc`): string values (IDs, names, types)
-- **Yellow** (`#fbbf24`): numeric values (counts, measurements, durations)
-- **Green** (`#4ade80`): status-like values (online, success, percentages)
+Uses OKLCH design tokens per STYLE_GUIDE.md — no hardcoded hex colors:
+
+- **Cyan** (`text-accent-cyan` / `bg-accent-cyan-light`): string values (IDs, names, types)
+- **Warning** (`text-warning` / `bg-warning-light`): numeric values (counts, measurements, durations)
+- **Success** (`text-success` / `bg-success-light`): status-like values (online, success, percentages)
 
 ### Value Formatting
 
 - Numbers between 0-1 with decimal: auto-convert to percentage (0.985 → 98.5%)
 - Boolean: displayed as text (true/false or custom labels)
 
-## Component Configuration (Manifest)
+## Manifest
 
 ```json
 {
-  "settings": {
-    "title": {
-      "type": "string",
-      "default": "Text Display",
-      "description": "Component title displayed at top"
-    },
-    "maxHeight": {
-      "type": "number",
-      "default": 300,
-      "description": "Maximum content height in px, scrollable when exceeded"
-    },
-    "fontSize": {
-      "type": "string",
-      "default": "medium",
-      "enum": ["small", "medium", "large"],
-      "description": "Content font size"
-    },
-    "highlightNumbers": {
-      "type": "boolean",
-      "default": true,
-      "description": "Auto-highlight numeric values in text"
+  "id": "text_display",
+  "name": { "en": "Text Display", "zh": "文本展示" },
+  "description": {
+    "en": "Renders structured data as formatted text with highlighted values",
+    "zh": "将结构化数据格式化为带高亮的可读文本展示"
+  },
+  "icon": "FileText",
+  "category": "display",
+  "version": "1.0.0",
+  "author": "NeoMind Team",
+  "size_constraints": {
+    "min_w": 2,
+    "min_h": 2,
+    "default_w": 3,
+    "default_h": 3,
+    "max_w": 6,
+    "max_h": 6
+  },
+  "has_data_source": true,
+  "max_data_sources": 5,
+  "has_device_binding": false,
+  "has_display_config": true,
+  "has_actions": false,
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "default": "Text Display",
+        "title": "Title"
+      },
+      "maxHeight": {
+        "type": "number",
+        "default": 300,
+        "title": "Max Height (px)"
+      },
+      "fontSize": {
+        "type": "string",
+        "default": "medium",
+        "enum": ["small", "medium", "large"],
+        "title": "Font Size"
+      },
+      "highlightNumbers": {
+        "type": "boolean",
+        "default": true,
+        "title": "Highlight Numbers"
+      }
     }
-  }
+  },
+  "default_config": {
+    "title": "Text Display",
+    "maxHeight": 300,
+    "fontSize": "medium",
+    "highlightNumbers": true
+  },
+  "global_name": "NeoMind_TextDisplay",
+  "export_name": "TextDisplay"
 }
 ```
 
@@ -85,7 +121,7 @@ A dashboard component that renders structured data (JSON, key-value pairs, array
 └─────────────────────────────────────┘
 ```
 
-- Title: purple accent (`#c084fc`), bottom border separator
+- Title: `text-accent-purple`, bottom border separator
 - Content: monospace, line-height 1.8
 - Values rendered as inline pills with semi-transparent background
 - Max height configurable, overflow scrolls
@@ -132,12 +168,15 @@ NeoMind DataSource → raw data → formatData() → [{key, value, type}] → re
 ## Data Source Integration
 
 - Component declares up to 5 data source slots in manifest
-- All bound data sources are merged; each source's data is formatted independently
+- Uses `props.fetchData()` to fetch data (see STYLE_GUIDE section 11)
+- `useEffect` with `[props.fetchData]` dependency triggers fetch on mount and source change
+- `fetchData()` returns `{ value: <any> }` — the `value` field is passed to `formatData()`
 - If multiple sources are bound, their content is rendered sequentially with a subtle separator
+- Each rendered line uses `key + '_' + index` as the React key to guarantee uniqueness
 
 ## Edge Cases
 
-- Empty/null data: show "No data" placeholder
+- Empty/null data: show "No data" placeholder with `text-muted-foreground`
 - Very long string values: truncate with ellipsis in display, full text on hover via title attribute
-- Circular references: max recursion depth of 10 levels
+- Deeply nested objects: flatten up to 10 levels deep
 - Mixed-type arrays: handle each element by its own type
