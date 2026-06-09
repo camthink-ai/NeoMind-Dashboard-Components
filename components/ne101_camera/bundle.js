@@ -1115,7 +1115,7 @@ var NE101CameraPanel = (function () {
                   style: { background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.1) 40%, rgba(0,0,0,0.45) 100%)' }
                 }),
                 // ROI polygon overlays — SVG for proper polygon rendering
-                processingEnabled && roiPolygons.length > 0
+                processingEnabled && roiPolygons.length > 0 && ovTf
                   ? jsx('svg', {
                       key: 'roi-svg',
                       className: 'absolute inset-0 w-full h-full',
@@ -1150,7 +1150,7 @@ var NE101CameraPanel = (function () {
                     })
                   : null,
                 // Detection boxes overlay — adjusted for object-cover image scaling
-                (processingEnabled && detections.length > 0)
+                (processingEnabled && detections.length > 0 && ovTf)
                   ? jsx('div', {
                       key: 'det-boxes',
                       className: 'absolute inset-0',
@@ -1460,7 +1460,7 @@ var NE101CameraPanel = (function () {
     var setCurrentPts = drawState[1];
     var canvasRef = React.useRef(null);
     var imgRef = React.useRef(null);
-    var imgNatState2 = React.useState({ w: 1, h: 1 });
+    var imgNatState2 = React.useState({ w: 0, h: 0 });
     var imgNat2 = imgNatState2[0];
     var editingIdxState = React.useState(-1);
     var editingIdx = editingIdxState[0];
@@ -1480,6 +1480,7 @@ var NE101CameraPanel = (function () {
       if (!roiEnabled) return;
       var canvas = canvasRef.current;
       if (!canvas) return;
+      if (imgNat2.w <= 0 || imgNat2.h <= 0) return;
       var ctx = canvas.getContext('2d');
       var dpr = window.devicePixelRatio || 1;
       var rect = canvas.getBoundingClientRect();
@@ -1676,7 +1677,7 @@ var NE101CameraPanel = (function () {
         // ROI drawing canvas — visual polygon drawing on top of the camera image
         // Fixed height container, width fills parent. Image uses objectFit:contain,
         // containTransform() handles coordinate mapping for clicks and drawing.
-        var canvasStyle = { width: '100%', height: '180px', background: '#1a1a2e' };
+        var canvasStyle = { width: '100%', height: '280px', background: '#1a1a2e' };
 
         var canvasContainer = jsxs('div', { key: 'roi-canvas-wrap', className: FIELD_CLS, children: [
           jsxs('div', { className: 'flex items-center justify-between', children: [
@@ -1728,6 +1729,7 @@ var NE101CameraPanel = (function () {
                 onClick: function (e) {
                   var canvas = canvasRef.current;
                   if (!canvas) return;
+                  if (imgNat2.w <= 0 || imgNat2.h <= 0) return;
                   var rect = canvas.getBoundingClientRect();
                   var ct = containTransform(imgNat2.w, imgNat2.h, rect.width, rect.height);
                   var px = e.clientX - rect.left;
