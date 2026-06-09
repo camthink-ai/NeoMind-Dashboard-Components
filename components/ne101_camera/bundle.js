@@ -485,16 +485,23 @@ var NE101CameraPanel = (function () {
     var mediaRef = React.useRef(null);
     var ctrSizeState = React.useState({ w: 0, h: 0 });
     var setCtrSize = ctrSizeState[1];
-    React.useEffect(function () {
-      var el = mediaRef.current;
-      if (!el) return;
-      var ro = new ResizeObserver(function (entries) {
-        var e = entries[0];
-        if (e && e.contentRect) setCtrSize({ w: e.contentRect.width, h: e.contentRect.height });
-      });
-      ro.observe(el);
-      return function () { ro.disconnect(); };
-    }, []);
+    // ResizeObserver via callback ref — ensures observer is set up even when
+    // the media div mounts after initial render (image arrives asynchronously)
+    var roRef = React.useRef(null);
+    var cbRef = React.useRef(null);
+    if (!cbRef.current) {
+      cbRef.current = function (el) {
+        if (roRef.current) { roRef.current.disconnect(); roRef.current = null; }
+        mediaRef.current = el;
+        if (!el) return;
+        var ro = new ResizeObserver(function (entries) {
+          var e = entries[0];
+          if (e && e.contentRect) setCtrSize({ w: e.contentRect.width, h: e.contentRect.height });
+        });
+        ro.observe(el);
+        roRef.current = ro;
+      };
+    }
 
     // Track latest device.currentValues (updated by WS via ComponentRenderer)
     var wsValues = device ? (device.currentValues || {}) : {};
@@ -1095,7 +1102,7 @@ var NE101CameraPanel = (function () {
         hasImage
           ? jsxs('div', {
               key: 'media',
-              ref: mediaRef,
+              ref: cbRef.current,
               className: 'relative w-full h-full',
               children: [
                 jsx('img', {
