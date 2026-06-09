@@ -116,7 +116,7 @@ var NeoMind_TextDisplay = (function () {
             for (var ai = 0; ai < arrNested.length; ai++) lines.push(arrNested[ai]);
           } else {
             var fmt = formatValue(v);
-            lines.push({ key: (prefix ? prefix : keys[j]) + '.' + i, value: fmt.text, valueType: fmt.type });
+            lines.push({ key: prefix || keys[j], value: fmt.text, valueType: fmt.type });
           }
         }
       } else if (Array.isArray(item)) {
