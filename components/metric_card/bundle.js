@@ -78,13 +78,15 @@ var NeoMind_MetricCard = (function () {
     if (count <= 1) return { cols: 1 };
     if (containerW <= 0 || containerH <= 0) return { cols: count };
     var aspect = containerW / containerH;
+    var minRows = count >= 3 ? 2 : 1;
     var bestCols = count;
     var bestDiff = Infinity;
     for (var c = 1; c <= count; c++) {
       var r = Math.ceil(count / c);
+      if (r < minRows) continue;
       var gridAspect = c / r;
       var diff = Math.abs(gridAspect - aspect);
-      if (diff < bestDiff) {
+      if (diff < bestDiff || (diff === bestDiff && c > bestCols)) {
         bestDiff = diff;
         bestCols = c;
       }
@@ -266,23 +268,36 @@ var NeoMind_MetricCard = (function () {
     /* ---- render helper ---- */
     function renderCell(idx) {
       var slot = slots[idx];
-      var isFirstInRow = (idx % layout.cols === 0);
-      var totalRows = Math.ceil(slotCount / layout.cols);
-      var currentRow = Math.floor(idx / layout.cols);
-      var isLastRow = (currentRow === totalRows - 1);
       var displayValue = String(slot.value);
-      var valueColor = 'var(--foreground)';
 
       return jsxs('div', {
-        className: 'flex flex-col items-center justify-center p-2 text-center min-w-0 overflow-hidden' +
-          (isFirstInRow ? '' : ' border-l border-glass-border') +
-          (isLastRow ? '' : ' border-b border-glass-border'),
+        className: 'flex flex-col items-center justify-center min-w-0',
+        style: {
+          padding: slotCount === 1 ? '16px' : '10px 6px',
+          background: 'oklch(1 0 0 / 3%)',
+          borderRadius: '8px'
+        },
         children: [
-          jsx('div', { className: 'text-xs text-muted-foreground uppercase tracking-wide font-medium mb-1 truncate max-w-full', children: slot.label }),
-          jsxs('div', { className: 'flex items-baseline gap-1 min-w-0 max-w-full', children: [
-            jsx('span', { className: 'font-bold font-mono tabular-nums truncate ' + valueClass, style: { color: valueColor }, children: displayValue }),
-            slot.unit ? jsx('span', { className: 'text-xs text-muted-foreground flex-shrink-0', children: slot.unit }) : null
-          ]})
+          jsx('div', {
+            className: 'text-[10px] uppercase tracking-wider font-semibold truncate max-w-full',
+            style: { color: 'var(--muted-foreground)', marginBottom: '6px' },
+            children: slot.label
+          }),
+          jsxs('div', {
+            className: 'flex items-baseline gap-1 justify-center min-w-0 max-w-full',
+            children: [
+              jsx('span', {
+                className: 'font-bold font-mono tabular-nums truncate ' + valueClass,
+                style: { color: 'var(--foreground)', letterSpacing: '-0.02em' },
+                children: displayValue
+              }),
+              slot.unit ? jsx('span', {
+                className: 'text-[10px] font-medium flex-shrink-0',
+                style: { color: 'var(--muted-foreground)' },
+                children: slot.unit
+              }) : null
+            ]
+          })
         ]
       }, 'metric-' + idx);
     }
@@ -290,14 +305,14 @@ var NeoMind_MetricCard = (function () {
     /* ---- inner content ---- */
     var innerContent;
     if (slotCount === 1) {
-      innerContent = jsx('div', { className: 'flex items-center justify-center h-full', children: renderCell(0) });
+      innerContent = jsx('div', { className: 'flex items-center justify-center h-full p-1', children: renderCell(0) });
     } else {
       var gridChildren = [];
       for (var j = 0; j < slotCount; j++) {
         gridChildren.push(renderCell(j));
       }
       innerContent = jsx('div', {
-        style: { display: 'grid', gridTemplateColumns: 'repeat(' + layout.cols + ', 1fr)' },
+        style: { display: 'grid', gridTemplateColumns: 'repeat(' + layout.cols + ', 1fr)', gap: '4px', padding: '4px' },
         className: 'h-full',
         children: gridChildren
       });
