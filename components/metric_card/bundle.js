@@ -72,15 +72,24 @@ var NeoMind_MetricCard = (function () {
   }
 
   /* ------------------------------------------------------------------ */
-  /*  Helper: determine column count based on container pixel width      */
-  /*  Each metric cell needs ~110px minimum                              */
+  /*  Helper: find columns so grid aspect ≈ container aspect → even cells */
   /* ------------------------------------------------------------------ */
-  function getLayout(count, containerW) {
+  function getLayout(count, containerW, containerH) {
     if (count <= 1) return { cols: 1 };
-    if (containerW <= 0) return { cols: count };
-    var minCellWidth = 110;
-    var maxCols = Math.max(2, Math.floor(containerW / minCellWidth));
-    return { cols: Math.min(count, maxCols) };
+    if (containerW <= 0 || containerH <= 0) return { cols: count };
+    var aspect = containerW / containerH;
+    var bestCols = count;
+    var bestDiff = Infinity;
+    for (var c = 1; c <= count; c++) {
+      var r = Math.ceil(count / c);
+      var gridAspect = c / r;
+      var diff = Math.abs(gridAspect - aspect);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestCols = c;
+      }
+    }
+    return { cols: bestCols };
   }
 
   /* ------------------------------------------------------------------ */
@@ -251,7 +260,7 @@ var NeoMind_MetricCard = (function () {
     }
 
     var slotCount = slots.length;
-    var layout = getLayout(slotCount, containerSize.w);
+    var layout = getLayout(slotCount, containerSize.w, containerSize.h);
     var valueClass = getValueClass(layout.cols);
 
     /* ---- render helper ---- */
