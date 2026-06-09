@@ -266,14 +266,14 @@ var NeoMind_MetricCard = (function () {
       var valueColor = 'var(--foreground)';
 
       return jsxs('div', {
-        className: 'flex flex-col items-center justify-center p-2 text-center' +
+        className: 'flex flex-col items-center justify-center p-2 text-center min-w-0 overflow-hidden' +
           (isFirstInRow ? '' : ' border-l border-glass-border') +
           (isLastRow ? '' : ' border-b border-glass-border'),
         children: [
-          jsx('div', { className: 'text-xs text-muted-foreground uppercase tracking-wide font-medium mb-1', children: slot.label }),
-          jsxs('div', { className: 'flex items-baseline gap-1', children: [
-            jsx('span', { className: 'font-bold font-mono tabular-nums ' + valueClass, style: { color: valueColor }, children: displayValue }),
-            slot.unit ? jsx('span', { className: 'text-xs text-muted-foreground', children: slot.unit }) : null
+          jsx('div', { className: 'text-xs text-muted-foreground uppercase tracking-wide font-medium mb-1 truncate max-w-full', children: slot.label }),
+          jsxs('div', { className: 'flex items-baseline gap-1 min-w-0 max-w-full', children: [
+            jsx('span', { className: 'font-bold font-mono tabular-nums truncate ' + valueClass, style: { color: valueColor }, children: displayValue }),
+            slot.unit ? jsx('span', { className: 'text-xs text-muted-foreground flex-shrink-0', children: slot.unit }) : null
           ]})
         ]
       }, 'metric-' + idx);
