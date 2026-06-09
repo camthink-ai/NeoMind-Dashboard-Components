@@ -72,25 +72,25 @@ var NeoMind_MetricCard = (function () {
   }
 
   /* ------------------------------------------------------------------ */
-  /*  Helper: determine layout type based on metric count & aspect ratio */
+  /*  Helper: determine column count based on container pixel width      */
+  /*  Each metric cell needs ~110px minimum                              */
   /* ------------------------------------------------------------------ */
-  function getLayout(count, aspectRatio) {
-    if (count <= 1) return { type: 'single', cols: 1 };
-    if (aspectRatio >= 1.2) return { type: 'columns', cols: count };
-    var cols;
-    if (count <= 6) cols = 2;
-    else cols = 4;
-    return { type: 'grid', cols: cols };
+  function getLayout(count, containerW) {
+    if (count <= 1) return { cols: 1 };
+    if (containerW <= 0) return { cols: count };
+    var minCellWidth = 110;
+    var maxCols = Math.max(2, Math.floor(containerW / minCellWidth));
+    return { cols: Math.min(count, maxCols) };
   }
 
   /* ------------------------------------------------------------------ */
-  /*  Helper: value text size class based on metric count                */
+  /*  Helper: value text size based on columns (wider cells = bigger)    */
   /* ------------------------------------------------------------------ */
-  function getValueClass(count) {
-    if (count <= 1) return 'text-4xl';
-    if (count === 2) return 'text-3xl';
-    if (count === 3) return 'text-2xl';
-    if (count <= 6) return 'text-xl';
+  function getValueClass(cols) {
+    if (cols <= 1) return 'text-4xl';
+    if (cols === 2) return 'text-2xl';
+    if (cols === 3) return 'text-xl';
+    if (cols <= 5) return 'text-lg';
     return 'text-base';
   }
 
@@ -251,9 +251,8 @@ var NeoMind_MetricCard = (function () {
     }
 
     var slotCount = slots.length;
-    var aspectRatio = containerSize.w && containerSize.h ? containerSize.w / containerSize.h : 2;
-    var layout = getLayout(slotCount, aspectRatio);
-    var valueClass = getValueClass(slotCount);
+    var layout = getLayout(slotCount, containerSize.w);
+    var valueClass = getValueClass(layout.cols);
 
     /* ---- render helper ---- */
     function renderCell(idx) {
@@ -281,7 +280,7 @@ var NeoMind_MetricCard = (function () {
 
     /* ---- inner content ---- */
     var innerContent;
-    if (layout.type === 'single') {
+    if (slotCount === 1) {
       innerContent = jsx('div', { className: 'flex items-center justify-center h-full', children: renderCell(0) });
     } else {
       var gridChildren = [];
