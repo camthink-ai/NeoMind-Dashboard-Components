@@ -1410,21 +1410,26 @@ var NE101CameraPanel = (function () {
       if (onChange) onChange(key, value);
     }
 
-    // IME-safe input: tracks composition state so Chinese/Japanese/Korean input
-    // methods work correctly with React controlled inputs.
-    var composingRef = React.useRef(false);
+    // Input with local state — immediately reflects typing, syncs to config on change/blur.
+    // Avoids frozen-input issue where shared composingRef or delayed parent re-render
+    // prevents the controlled value from updating.
     function imeInput(key, value, placeholder) {
+      var ls = React.useState(value);
+      var lv = ls[0];
+      var setLv = ls[1];
+      // Sync from prop when parent updates (e.g., config loaded)
+      var prevRef = React.useRef(value);
+      if (prevRef.current !== value) { prevRef.current = value; setLv(value); }
       return jsx('input', {
         className: INPUT_CLS,
-        value: value,
+        value: lv,
         placeholder: placeholder,
         onChange: function (e) {
-          if (!composingRef.current) update(key, e.target.value);
-        },
-        onCompositionStart: function () { composingRef.current = true; },
-        onCompositionEnd: function (e) {
-          composingRef.current = false;
+          setLv(e.target.value);
           update(key, e.target.value);
+        },
+        onBlur: function () {
+          update(key, lv);
         }
       });
     }
