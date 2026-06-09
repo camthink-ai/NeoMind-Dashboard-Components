@@ -316,7 +316,7 @@ var NE101CameraPanel = (function () {
       });
       L.push('var roiRegions = ' + JSON.stringify(roiSer) + ';');
       // Overlap-based ROI: detection is "in" if >=60% of its area overlaps the ROI polygon
-      L.push('var OVERLAP_TH = 0.6;');
+      L.push('var OVERLAP_TH = ' + (pipe.overlapThreshold != null ? pipe.overlapThreshold : 0.6) + ';');
       L.push('var lerpPt = function(a, b, t) { return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]; };');
       L.push('var clipEdge = function(inp, inside, isect) {');
       L.push('  var out = [];');
@@ -472,6 +472,7 @@ var NE101CameraPanel = (function () {
     var processingClassFilter = config.processingClassFilter || '';
     var processingRoiEnabled = config.processingRoiEnabled === true;
     var processingRoiAction = config.processingRoiAction || 'count';
+    var processingRoiOverlap = config.processingRoiOverlap != null ? config.processingRoiOverlap : 0.6;
     var processingRoiX = config.processingRoiX != null ? config.processingRoiX : 0.1;
     var processingRoiY = config.processingRoiY != null ? config.processingRoiY : 0.1;
     var processingRoiW = config.processingRoiW != null ? config.processingRoiW : 0.8;
@@ -624,7 +625,7 @@ var NE101CameraPanel = (function () {
     var _storedTid = config._transformId || '';
     var _configHash = processingExtId + ':' + processingTemplate + ':' +
       (processingCategories || '') + ':' + (processingPhrase || '') + ':' + (processingClassFilter || '') + ':' +
-      (processingRoiEnabled ? '1' : '0') + ':' + (processingRoiAction || '') + ':' +
+      (processingRoiEnabled ? '1' : '0') + ':' + (processingRoiAction || '') + ':' + processingRoiOverlap + ':' +
       processingRoiX + ':' + processingRoiY + ':' + processingRoiW + ':' + processingRoiH + ':' +
       JSON.stringify(processingRois);
     var _storedHash = config._transformHash || '';
@@ -665,7 +666,7 @@ var NE101CameraPanel = (function () {
       var pipe = {
         id: 'main', deviceId: device.id, extId: processingExtId, template: processingTemplate,
         categories: processingCategories, phrase: processingPhrase, classFilter: processingClassFilter,
-        roiEnabled: processingRoiEnabled, roiAction: processingRoiAction,
+        roiEnabled: processingRoiEnabled, roiAction: processingRoiAction, overlapThreshold: processingRoiOverlap,
         roiX: processingRoiX, roiY: processingRoiY, roiW: processingRoiW, roiH: processingRoiH,
         rois: processingRois
       };
@@ -1699,6 +1700,18 @@ var NE101CameraPanel = (function () {
           jsxs('div', { key: 'roi-act', className: FIELD_CLS, children: [
             jsx('label', { className: 'text-xs font-medium', children: 'ROI Action' }),
             jsx('div', { className: 'flex flex-wrap gap-1.5', children: actionChips })
+          ]})
+        );
+
+        // Overlap threshold slider
+        var roiOverlap = config.processingRoiOverlap != null ? config.processingRoiOverlap : 0.6;
+        items.push(
+          jsxs('div', { key: 'roi-overlap', className: FIELD_CLS, children: [
+            jsxs('div', { className: 'flex justify-between', children: [
+              jsx('span', { className: DESC_CLS, children: 'Overlap Threshold' }),
+              jsx('span', { className: DESC_CLS + ' font-mono', children: (roiOverlap * 100).toFixed(0) + '%' })
+            ]}),
+            jsx('input', { type: 'range', min: 0.1, max: 1, step: 0.05, value: roiOverlap, onChange: function (e) { update('processingRoiOverlap', Number(e.target.value)); }, className: 'w-full h-1.5 rounded-full appearance-none bg-muted accent-primary cursor-pointer' })
           ]})
         );
 
