@@ -96,7 +96,8 @@ var NeoMind_TextDisplay = (function () {
     return lines;
   }
 
-  function formatArray(arr, prefix) {
+  function formatArray(arr, prefix, depth) {
+    if (depth > 10) return [];
     var lines = [];
     for (var i = 0; i < arr.length; i++) {
       var item = arr[i];
@@ -105,12 +106,20 @@ var NeoMind_TextDisplay = (function () {
         var keys = Object.keys(item);
         for (var j = 0; j < keys.length; j++) {
           var v = item[keys[j]];
-          if (v == null || typeof v === 'object') continue;
-          var fmt = formatValue(v);
-          lines.push({ key: prefix || keys[j], value: fmt.text, valueType: fmt.type });
+          if (v == null) continue;
+          if (typeof v === 'object' && !Array.isArray(v)) {
+            var nested = flattenObject(v, prefix || keys[j], (depth || 0) + 1);
+            for (var ni = 0; ni < nested.length; ni++) lines.push(nested[ni]);
+          } else if (Array.isArray(v)) {
+            var arrNested = formatArray(v, prefix || keys[j], (depth || 0) + 1);
+            for (var ai = 0; ai < arrNested.length; ai++) lines.push(arrNested[ai]);
+          } else {
+            var fmt = formatValue(v);
+            lines.push({ key: prefix || keys[j], value: fmt.text, valueType: fmt.type });
+          }
         }
       } else if (Array.isArray(item)) {
-        var nested = formatArray(item, prefix);
+        var nested = formatArray(item, prefix, (depth || 0) + 1);
         for (var k = 0; k < nested.length; k++) lines.push(nested[k]);
       } else {
         var fmt = formatValue(item);
@@ -323,8 +332,8 @@ var NeoMind_TextDisplay = (function () {
         return jsxs('div', {
           className: 'flex items-baseline gap-2',
           children: [
-            jsx('span', { className: 'text-muted-foreground flex-shrink-0', children: keyLabel }),
-            valueEl
+            jsx('span', { key: 'label', className: 'text-muted-foreground flex-shrink-0', children: keyLabel }),
+            jsx('span', { key: 'value', children: valueEl })
           ]
         }, line.key + '_' + idx);
       }
@@ -341,11 +350,13 @@ var NeoMind_TextDisplay = (function () {
       style: glassContainer,
       children: [
         jsx('div', {
+          key: 'header',
           className: 'flex-shrink-0 px-3 py-2 text-sm font-semibold text-accent-purple',
           style: { borderBottom: '1px solid var(--border)' },
           children: title
         }),
         jsx('div', {
+          key: 'content',
           className: 'flex-1 overflow-y-auto td-scroll font-mono ' + fontSizeClass,
           style: { maxHeight: maxHeight + 'px', padding: '12px 16px', lineHeight: '1.8' },
           children: lineElements
