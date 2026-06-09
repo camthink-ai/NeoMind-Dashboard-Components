@@ -307,7 +307,7 @@ var NE101CameraPanel = (function () {
     }
     L.push('');
 
-    // ROI filter (supports multiple named polygons via ray-casting point-in-polygon)
+    // ROI filter (overlap-based: detection is "in" if >=60% of bbox area overlaps ROI polygon)
     if (rois.length > 0) {
       L.push('// ROI regions: ' + rois.length);
       // Serialize: [{ name, poly: [[x,y],...] }, ...]
@@ -315,21 +315,42 @@ var NE101CameraPanel = (function () {
         return { name: roi.name, poly: roi.points.map(function(p) { return [p.x, p.y]; }) };
       });
       L.push('var roiRegions = ' + JSON.stringify(roiSer) + ';');
-      L.push('var pointInPoly = function(px, py, poly) {');
-      L.push('  var inside = false;');
-      L.push('  for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {');
-      L.push('    var xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];');
-      L.push('    if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {');
-      L.push('      inside = !inside;');
-      L.push('    }');
+      // Overlap-based ROI: detection is "in" if >=60% of its area overlaps the ROI polygon
+      L.push('var OVERLAP_TH = 0.6;');
+      L.push('var lerpPt = function(a, b, t) { return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]; };');
+      L.push('var clipEdge = function(inp, inside, isect) {');
+      L.push('  var out = [];');
+      L.push('  for (var i = 0; i < inp.length; i++) {');
+      L.push('    var j = (i + 1) % inp.length;');
+      L.push('    if (inside(inp[i])) { if (inside(inp[j])) out.push(inp[j]); else out.push(isect(inp[i], inp[j])); }');
+      L.push('    else if (inside(inp[j])) { out.push(isect(inp[i], inp[j])); out.push(inp[j]); }');
       L.push('  }');
-      L.push('  return inside;');
+      L.push('  return out;');
       L.push('};');
-      L.push('var detCenter = function(d) { return { cx: (d.bbox[0] + d.bbox[2]) / 2, cy: (d.bbox[1] + d.bbox[3]) / 2 }; };');
+      L.push('var clipPolyRect = function(poly, rx1, ry1, rx2, ry2) {');
+      L.push('  var r = poly.slice();');
+      L.push('  r = clipEdge(r, function(p){return p[0] >= rx1;}, function(a,b){return lerpPt(a,b,(rx1-a[0])/(b[0]-a[0]));});');
+      L.push('  r = clipEdge(r, function(p){return p[0] <= rx2;}, function(a,b){return lerpPt(a,b,(rx2-a[0])/(b[0]-a[0]));});');
+      L.push('  r = clipEdge(r, function(p){return p[1] >= ry1;}, function(a,b){return lerpPt(a,b,(ry1-a[1])/(b[1]-a[1]));});');
+      L.push('  r = clipEdge(r, function(p){return p[1] <= ry2;}, function(a,b){return lerpPt(a,b,(ry2-a[1])/(b[1]-a[1]));});');
+      L.push('  return r;');
+      L.push('};');
+      L.push('var polyArea = function(p) {');
+      L.push('  var a = 0;');
+      L.push('  for (var i = 0; i < p.length; i++) { var j = (i + 1) % p.length; a += p[i][0] * p[j][1] - p[j][0] * p[i][1]; }');
+      L.push('  return Math.abs(a) / 2;');
+      L.push('};');
+      L.push('var detOverlapsRoi = function(d, poly) {');
+      L.push('  var dx1 = d.bbox[0], dy1 = d.bbox[1], dx2 = d.bbox[2], dy2 = d.bbox[3];');
+      L.push('  var detArea = (dx2 - dx1) * (dy2 - dy1);');
+      L.push('  if (detArea <= 0) return false;');
+      L.push('  var clipped = clipPolyRect(poly, dx1, dy1, dx2, dy2);');
+      L.push('  if (clipped.length < 3) return false;');
+      L.push('  return polyArea(clipped) / detArea >= OVERLAP_TH;');
+      L.push('};');
       L.push('var inAnyRoi = function(d) {');
-      L.push('  var c = detCenter(d);');
       L.push('  for (var r = 0; r < roiRegions.length; r++) {');
-      L.push('    if (pointInPoly(c.cx, c.cy, roiRegions[r].poly)) return true;');
+      L.push('    if (detOverlapsRoi(d, roiRegions[r].poly)) return true;');
       L.push('  }');
       L.push('  return false;');
       L.push('};');
@@ -376,7 +397,7 @@ var NE101CameraPanel = (function () {
       L.push('for (var ri = 0; ri < roiRegions.length; ri++) {');
       L.push('  var rn = roiRegions[ri].name;');
       L.push('  var rp = roiRegions[ri].poly;');
-      L.push('  var rd = dets.filter(function(d) { var c = detCenter(d); return pointInPoly(c.cx, c.cy, rp); });');
+      L.push('  var rd = dets.filter(function(d) { return detOverlapsRoi(d, rp); });');
       L.push('  out[\'' + pfx + '\' + rn + \'_count\'] = rd.length;');
       L.push('  out[\'' + pfx + '\' + rn + \'_detections\'] = rd;');
       if (templateName === 'object_detection') {
