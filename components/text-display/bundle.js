@@ -39,10 +39,10 @@ var NeoMind_TextDisplay = (function () {
   // ── Data Formatting Engine ──
 
   var VALUE_STYLES = {
-    string:  { color: 'var(--accent-cyan)',        bg: 'oklch(0.75 0.12 200 / 10%)' },
-    number:  { color: 'var(--warning)',             bg: 'oklch(0.8 0.12 85 / 10%)' },
-    status:  { color: 'var(--success)',             bg: 'oklch(0.72 0.14 155 / 10%)' },
-    boolean: { color: 'var(--muted-foreground)',    bg: 'oklch(0.7 0 0 / 8%)' }
+    string:  { color: 'oklch(0.72 0.14 200)',       bg: 'oklch(0.72 0.14 200 / 10%)' },
+    number:  { color: 'oklch(0.75 0.15 80)',        bg: 'oklch(0.75 0.15 80 / 10%)' },
+    status:  { color: 'oklch(0.72 0.19 155)',       bg: 'oklch(0.72 0.19 155 / 10%)' },
+    boolean: { color: 'oklch(0.6 0 0)',             bg: 'oklch(0.6 0 0 / 8%)' }
   };
 
   var STATUS_VALUES = {
@@ -65,6 +65,7 @@ var NeoMind_TextDisplay = (function () {
     if (v == null) return { text: '--', type: 'string' };
     if (typeof v === 'boolean') return { text: v ? 'Yes' : 'No', type: 'boolean' };
     if (typeof v === 'number') {
+      if (!isFinite(v)) return { text: isNaN(v) ? 'N/A' : (v > 0 ? '+' : '-') + 'Infinity', type: 'string' };
       if (v > 0 && v < 1 && v !== Math.floor(v)) {
         return { text: (v * 100).toFixed(1) + '%', type: 'number' };
       }
@@ -86,7 +87,7 @@ var NeoMind_TextDisplay = (function () {
         var nested = flattenObject(v, fullKey, depth + 1);
         for (var ni = 0; ni < nested.length; ni++) lines.push(nested[ni]);
       } else if (Array.isArray(v)) {
-        var arrLines = formatArray(v, fullKey);
+        var arrLines = formatArray(v, fullKey, depth + 1);
         for (var ai = 0; ai < arrLines.length; ai++) lines.push(arrLines[ai]);
       } else {
         var fmt = formatValue(v);
@@ -115,7 +116,7 @@ var NeoMind_TextDisplay = (function () {
             for (var ai = 0; ai < arrNested.length; ai++) lines.push(arrNested[ai]);
           } else {
             var fmt = formatValue(v);
-            lines.push({ key: prefix || keys[j], value: fmt.text, valueType: fmt.type });
+            lines.push({ key: (prefix ? prefix : keys[j]) + '.' + i, value: fmt.text, valueType: fmt.type });
           }
         }
       } else if (Array.isArray(item)) {
@@ -163,7 +164,7 @@ var NeoMind_TextDisplay = (function () {
       .replace(/^\w/, function (c) { return c.toUpperCase(); });
   }
 
-  var FONT_SIZES = { small: 'text-[11px]', medium: 'text-xs', large: 'text-sm' };
+  var FONT_SIZES = { small: 'text-[10px]', medium: 'text-xs', large: 'text-sm' };
 
   // ── Main Component ──
 
@@ -391,7 +392,7 @@ var NeoMind_TextDisplay = (function () {
         jsx('input', {
           type: 'text', value: title,
           onChange: function (e) { setTitle(e.target.value); onChange('title', e.target.value); },
-          className: 'text-[11px] bg-transparent border-b border-border text-foreground px-1 py-0.5 focus:outline-none focus:border-foreground transition-colors'
+          className: 'text-xs bg-transparent border-b border-border text-foreground px-1 py-0.5 focus:outline-none focus:border-foreground transition-colors'
         })
       ]}),
       jsxs('div', { key: 'mh', className: 'flex flex-col gap-1.5', children: [
@@ -399,7 +400,7 @@ var NeoMind_TextDisplay = (function () {
         jsx('input', {
           type: 'number', value: maxH,
           onChange: function (e) { var v = parseInt(e.target.value) || 300; setMaxH(v); onChange('maxHeight', v); },
-          className: 'text-[11px] bg-transparent border-b border-border text-foreground px-1 py-0.5 focus:outline-none focus:border-foreground transition-colors'
+          className: 'text-xs bg-transparent border-b border-border text-foreground px-1 py-0.5 focus:outline-none focus:border-foreground transition-colors'
         })
       ]}),
       jsxs('div', { key: 'fs', className: 'flex flex-col gap-1.5', children: [
@@ -407,7 +408,7 @@ var NeoMind_TextDisplay = (function () {
         jsxs('div', { className: 'flex gap-1', children:
           fsOptions.map(function (opt) {
             return jsx('button', {
-              className: 'px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ' + (fs === opt.v ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'),
+              className: 'px-2.5 py-1 rounded-md text-xs font-medium transition-colors ' + (fs === opt.v ? 'bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted'),
               onClick: function () { setFs(opt.v); onChange('fontSize', opt.v); },
               children: opt.l
             }, opt.v);
@@ -420,7 +421,7 @@ var NeoMind_TextDisplay = (function () {
           onChange: function () { var nv = !hl; setHl(nv); onChange('highlightNumbers', nv); },
           className: 'accent-foreground w-3.5 h-3.5'
         }),
-        jsx('span', { className: 'text-[11px] text-muted-foreground', children: 'Highlight Numbers' })
+        jsx('span', { className: 'text-xs text-muted-foreground', children: 'Highlight Numbers' })
       ]})
     ]});
   }
