@@ -299,6 +299,7 @@ var NE101CameraPanel = (function () {
       L.push('  var b2 = b.bbox || {};');
       L.push('  return {');
       L.push('    bbox: [b2.x, b2.y, (b2.x||0) + (b2.width||0), (b2.y||0) + (b2.height||0)],');
+      L.push('    polygon: b.polygon || null,');
       L.push('    label: b.text || \'\',');
       L.push('    confidence: b.confidence || null');
       L.push('  };');
@@ -1178,52 +1179,62 @@ var NE101CameraPanel = (function () {
                       })
                     })
                   : null,
-                // Detection boxes overlay — adjusted for object-cover image scaling
+                // Detection boxes overlay — SVG (polygon when available, rect fallback) adjusted for object-cover image scaling
                 (processingEnabled && detections.length > 0 && ovTf)
-                  ? jsx('div', {
-                      key: 'det-boxes',
-                      className: 'absolute inset-0',
+                  ? jsx('svg', {
+                      key: 'det-svg',
+                      className: 'absolute inset-0 w-full h-full',
                       style: { pointerEvents: 'none' },
+                      viewBox: '0 0 100 100',
+                      preserveAspectRatio: 'none',
                       children: detections.map(function (det, i) {
-                        if (!det.bbox || det.bbox.length < 4) return null;
-                        var bx1 = det.bbox[0], by1 = det.bbox[1], bx2 = det.bbox[2], by2 = det.bbox[3];
                         var detLabel = det.label || '';
                         var detConf = typeof det.confidence === 'number' ? Math.round(det.confidence * 100) : '';
-                        // Compute box position accounting for object-cover crop
-                        var bxL, bxT, bxW, bxH;
-                        if (ovTf) {
-                          bxL = ((bx1 * ovTf.sx + ovTf.ox) * 100) + '%';
-                          bxT = ((by1 * ovTf.sy + ovTf.oy) * 100) + '%';
-                          bxW = ((bx2 - bx1) * ovTf.sx * 100) + '%';
-                          bxH = ((by2 - by1) * ovTf.sy * 100) + '%';
-                        } else {
-                          bxL = (bx1 * 100) + '%';
-                          bxT = (by1 * 100) + '%';
-                          bxW = ((bx2 - bx1) * 100) + '%';
-                          bxH = ((by2 - by1) * 100) + '%';
+                        var clr = { stroke: 'rgba(59,130,246,0.8)', fill: 'rgba(59,130,246,0.08)' };
+                        var children = [];
+
+                        if (det.polygon && det.polygon.length >= 3) {
+                          // Polygon mode (OCR scenarios): precise contour
+                          var pts = det.polygon.map(function(p) {
+                            var tx = ovTf ? ((p[0] * ovTf.sx + ovTf.ox) * 100) : (p[0] * 100);
+                            var ty = ovTf ? ((p[1] * ovTf.sy + ovTf.oy) * 100) : (p[1] * 100);
+                            return tx.toFixed(2) + ',' + ty.toFixed(2);
+                          }).join(' ');
+                          children.push(jsx('polygon', {
+                            key: 'poly', points: pts,
+                            fill: clr.fill, stroke: clr.stroke,
+                            strokeWidth: '0.4'
+                          }));
+                        } else if (det.bbox && det.bbox.length >= 4) {
+                          // Rect fallback (object detection scenarios)
+                          var bx1 = det.bbox[0], by1 = det.bbox[1], bx2 = det.bbox[2], by2 = det.bbox[3];
+                          var rx1 = ovTf ? (bx1 * ovTf.sx + ovTf.ox) * 100 : bx1 * 100;
+                          var ry1 = ovTf ? (by1 * ovTf.sy + ovTf.oy) * 100 : by1 * 100;
+                          var rx2 = ovTf ? (bx2 * ovTf.sx + ovTf.ox) * 100 : bx2 * 100;
+                          var ry2 = ovTf ? (by2 * ovTf.sy + ovTf.oy) * 100 : by2 * 100;
+                          children.push(jsx('rect', {
+                            key: 'rect',
+                            x: rx1.toFixed(2), y: ry1.toFixed(2),
+                            width: (rx2 - rx1).toFixed(2), height: (ry2 - ry1).toFixed(2),
+                            fill: clr.fill, stroke: clr.stroke,
+                            strokeWidth: '0.4', rx: '0.3'
+                          }));
                         }
-                        var clr = { border: 'rgba(59,130,246,0.8)', bg: 'rgba(59,130,246,0.85)', shadow: 'rgba(59,130,246,0.3)' };
-                        return jsxs('div', {
-                          key: 'dbox-' + i,
-                          className: 'absolute',
-                          style: {
-                            left: bxL, top: bxT,
-                            width: bxW, height: bxH,
-                            border: '1.5px solid ' + clr.border, borderRadius: '2px',
-                            boxShadow: '0 0 4px ' + clr.shadow
-                          },
-                          children: (detLabel || detConf)
-                            ? jsxs('span', {
-                                style: {
-                                  position: 'absolute', top: '-14px', left: '-1px',
-                                  background: clr.bg, color: '#fff',
-                                  fontSize: '8px', fontWeight: '600', padding: '1px 4px',
-                                  borderRadius: '2px', whiteSpace: 'nowrap', fontFamily: 'monospace'
-                                },
-                                children: [detLabel, detConf ? ' ' + detConf + '%' : '']
-                              })
-                            : null
-                        });
+
+                        // Label
+                        if ((detLabel || detConf) && children.length > 0) {
+                          var labelPt = (det.polygon && det.polygon.length >= 1) ? det.polygon[0] : [det.bbox[0], det.bbox[1]];
+                          var lx = ovTf ? ((labelPt[0] * ovTf.sx + ovTf.ox) * 100) : (labelPt[0] * 100);
+                          var ly = (ovTf ? ((labelPt[1] * ovTf.sy + ovTf.oy) * 100) : (labelPt[1] * 100)) - 1.5;
+                          children.push(jsx('text', {
+                            key: 'lbl', x: lx.toFixed(2), y: ly.toFixed(2),
+                            fill: 'rgba(59,130,246,0.95)', fontSize: '2.5',
+                            fontFamily: 'monospace', fontWeight: '700',
+                            children: detLabel + (detConf ? ' ' + detConf + '%' : '')
+                          }));
+                        }
+
+                        return children.length > 0 ? jsxs('g', { key: 'dbox-' + i, children: children }) : null;
                       })
                     })
                   : null,
