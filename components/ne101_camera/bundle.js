@@ -652,7 +652,7 @@ var NE101CameraPanel = (function () {
     // Only create/update/delete when rendering on the live dashboard.
     var _isPreview = typeof props.onConfigChange !== 'function';
     var _storedTid = config._transformId || '';
-    var _configHash = 'js3:' + processingExtId + ':' + processingTemplate + ':' +
+    var _configHash = processingExtId + ':' + processingTemplate + ':' +
       (processingCategories || '') + ':' + (processingPhrase || '') + ':' + (processingClassFilter || '') + ':' +
       (processingRoiEnabled ? '1' : '0') + ':' + (processingRoiAction || '') + ':' + processingRoiOverlap + ':' +
       processingRoiX + ':' + processingRoiY + ':' + processingRoiW + ':' + processingRoiH + ':' +
