@@ -1196,8 +1196,10 @@ var NE101CameraPanel = (function () {
                         if (det.polygon && det.polygon.length >= 3) {
                           // Polygon mode (OCR scenarios): precise contour
                           var pts = det.polygon.map(function(p) {
-                            var tx = ovTf ? ((p[0] * ovTf.sx + ovTf.ox) * 100) : (p[0] * 100);
-                            var ty = ovTf ? ((p[1] * ovTf.sy + ovTf.oy) * 100) : (p[1] * 100);
+                            var px = Array.isArray(p) ? p[0] : p.x;
+                            var py = Array.isArray(p) ? p[1] : p.y;
+                            var tx = ovTf ? ((px * ovTf.sx + ovTf.ox) * 100) : (px * 100);
+                            var ty = ovTf ? ((py * ovTf.sy + ovTf.oy) * 100) : (py * 100);
                             return tx.toFixed(2) + ',' + ty.toFixed(2);
                           }).join(' ');
                           children.push(jsx('polygon', {
@@ -1224,8 +1226,10 @@ var NE101CameraPanel = (function () {
                         // Label
                         if ((detLabel || detConf) && children.length > 0) {
                           var labelPt = (det.polygon && det.polygon.length >= 1) ? det.polygon[0] : [det.bbox[0], det.bbox[1]];
-                          var lx = ovTf ? ((labelPt[0] * ovTf.sx + ovTf.ox) * 100) : (labelPt[0] * 100);
-                          var ly = (ovTf ? ((labelPt[1] * ovTf.sy + ovTf.oy) * 100) : (labelPt[1] * 100)) - 1.5;
+                          var lpx = Array.isArray(labelPt) ? labelPt[0] : labelPt.x;
+                          var lpy = Array.isArray(labelPt) ? labelPt[1] : labelPt.y;
+                          var lx = ovTf ? ((lpx * ovTf.sx + ovTf.ox) * 100) : (lpx * 100);
+                          var ly = (ovTf ? ((lpy * ovTf.sy + ovTf.oy) * 100) : (lpy * 100)) - 1.5;
                           children.push(jsx('text', {
                             key: 'lbl', x: lx.toFixed(2), y: ly.toFixed(2),
                             fill: 'rgba(59,130,246,0.95)', fontSize: '2.5',
