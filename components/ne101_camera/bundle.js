@@ -611,6 +611,8 @@ var NE101CameraPanel = (function () {
 
     // Early-extract imageSrc — device may send URL or base64
     var rawImageSrc = getFirst(_vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
+    // Guard: only strings can be image sources — numbers/objects from metrics crash .indexOf()/.match()
+    if (typeof rawImageSrc !== 'string') rawImageSrc = null;
     var isBase64Image = rawImageSrc && (rawImageSrc.indexOf('data:image') === 0 || !rawImageSrc.match(/^https?:\/\//));
     // For URL images: append ts-based cache buster; for base64: use as-is (ts change triggers re-render via new imageSrc ref)
     var imgTs = getFirst(_vals, ['ts', 'values.ts', 'timestamp', 'values.timestamp']);
