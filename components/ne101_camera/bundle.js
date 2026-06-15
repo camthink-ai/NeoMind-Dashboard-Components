@@ -1197,7 +1197,7 @@ var NE101CameraPanel = (function () {
                       children: detections.map(function (det, i) {
                         var detLabel = det.label || '';
                         var detConf = typeof det.confidence === 'number' ? Math.round(det.confidence * 100) : '';
-                        var clr = { stroke: 'rgba(59,130,246,0.8)', fill: 'rgba(59,130,246,0.08)' };
+                        var clr = { stroke: 'rgba(239,68,68,0.85)', fill: 'rgba(239,68,68,0.08)' };
                         var children = [];
 
                         if (det.polygon && det.polygon.length >= 3) {
@@ -1239,7 +1239,7 @@ var NE101CameraPanel = (function () {
                           var ly = (ovTf ? ((lpy * ovTf.sy + ovTf.oy) * 100) : (lpy * 100)) - 1.5;
                           children.push(jsx('text', {
                             key: 'lbl', x: lx.toFixed(2), y: ly.toFixed(2),
-                            fill: 'rgba(59,130,246,0.95)', fontSize: '2.5',
+                            fill: 'rgba(239,68,68,0.95)', fontSize: '2.5',
                             fontFamily: 'monospace', fontWeight: '700',
                             children: detLabel + (detConf ? ' ' + detConf + '%' : '')
                           }));
