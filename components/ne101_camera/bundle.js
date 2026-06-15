@@ -278,6 +278,8 @@ var NE101CameraPanel = (function () {
     L.push('  ' + imageArg + ': __imageData');
     if (hasCats) L.push(',  categories: \'' + pipe.categories.replace(/'/g, "\\'") + '\'');
     if (hasPhrase) L.push(',  phrase: \'' + pipe.phrase.replace(/'/g, "\\'") + '\'');
+    // Pass NMS threshold to locate-anything-v2 — extension postprocess_args reads it from args
+    if (extensionId === 'locate-anything-v2') L.push(',  nms_iou_threshold: 0.5');
     L.push('});');
     L.push('');
 
@@ -650,7 +652,7 @@ var NE101CameraPanel = (function () {
     // Only create/update/delete when rendering on the live dashboard.
     var _isPreview = typeof props.onConfigChange !== 'function';
     var _storedTid = config._transformId || '';
-    var _configHash = processingExtId + ':' + processingTemplate + ':' +
+    var _configHash = 'js3:' + processingExtId + ':' + processingTemplate + ':' +
       (processingCategories || '') + ':' + (processingPhrase || '') + ':' + (processingClassFilter || '') + ':' +
       (processingRoiEnabled ? '1' : '0') + ':' + (processingRoiAction || '') + ':' + processingRoiOverlap + ':' +
       processingRoiX + ':' + processingRoiY + ':' + processingRoiW + ':' + processingRoiH + ':' +
