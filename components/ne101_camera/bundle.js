@@ -562,7 +562,12 @@ var NE101CameraPanel = (function () {
       var cancelled = false;
 
       neomind.fetchDeviceValues(device.id).then(function (v) {
-        if (!cancelled && v) setImageData(v);
+        if (!cancelled && v) {
+          setImageData(v);
+          if (v.virtual && typeof v.virtual === 'object') {
+            setVirtualData(v);
+          }
+        }
       }).catch(function () {}).finally(function () {
         if (!cancelled) fetchingRef.current = false;
       });
