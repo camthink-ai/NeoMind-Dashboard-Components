@@ -52,6 +52,25 @@ var NE101CameraPanel = (function () {
     return null;
   }
 
+  // Per-class color via golden-angle HSV rotation — maximally distinct hues for any class count.
+  // Same label always yields the same color; 100+ classes still get good separation.
+  function classColor(label) {
+    var h = 0;
+    for (var i = 0; i < label.length; i++) { h = ((h << 5) - h + label.charCodeAt(i)) | 0; }
+    var hue = (Math.abs(h) * 137.508) % 360;  // golden angle
+    var s = 0.78, v = 0.95;
+    var c = v * s, hp = hue / 60, x = c * (1 - Math.abs(hp % 2 - 1)), r = 0, g = 0, b = 0;
+    if (hp < 1) { r = c; g = x; }
+    else if (hp < 2) { r = x; g = c; }
+    else if (hp < 3) { g = c; b = x; }
+    else if (hp < 4) { g = x; b = c; }
+    else if (hp < 5) { r = x; b = c; }
+    else { r = c; b = x; }
+    var m = v - c, R = Math.round((r + m) * 255), G = Math.round((g + m) * 255), B = Math.round((b + m) * 255);
+    var rgb = R + ',' + G + ',' + B;
+    return { stroke: 'rgba(' + rgb + ',0.85)', fill: 'rgba(' + rgb + ',0.08)', text: 'rgba(' + rgb + ',0.95)' };
+  }
+
   // Inline style constants — no dependency on Tailwind color classes
   var white = { color: '#fff' };
   var white80 = { color: 'rgba(255,255,255,0.85)' };
@@ -1197,7 +1216,7 @@ var NE101CameraPanel = (function () {
                       children: detections.map(function (det, i) {
                         var detLabel = det.label || '';
                         var detConf = typeof det.confidence === 'number' ? Math.round(det.confidence * 100) : '';
-                        var clr = { stroke: 'rgba(239,68,68,0.85)', fill: 'rgba(239,68,68,0.08)' };
+                        var clr = classColor(detLabel || ('det' + i));
                         var children = [];
 
                         if (det.polygon && det.polygon.length >= 3) {
@@ -1239,7 +1258,7 @@ var NE101CameraPanel = (function () {
                           var ly = (ovTf ? ((lpy * ovTf.sy + ovTf.oy) * 100) : (lpy * 100)) - 1.5;
                           children.push(jsx('text', {
                             key: 'lbl', x: lx.toFixed(2), y: ly.toFixed(2),
-                            fill: 'rgba(239,68,68,0.95)', fontSize: '2.5',
+                            fill: clr.text, fontSize: '2.5',
                             fontFamily: 'monospace', fontWeight: '700',
                             children: detLabel + (detConf ? ' ' + detConf + '%' : '')
                           }));
