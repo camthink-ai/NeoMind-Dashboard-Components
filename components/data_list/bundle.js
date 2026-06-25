@@ -234,16 +234,6 @@ var NeoMind_DataList = (function () {
     return hasTime && hasValue;
   }
 
-  // ── Glass container style ──
-  var glassContainer = {
-    background: 'linear-gradient(135deg, oklch(1 0 0 / 6%) 0%, oklch(1 0 0 / 2%) 100%)',
-    border: '1px solid var(--border)',
-    borderRadius: '12px',
-    backdropFilter: 'blur(16px)',
-    WebkitBackdropFilter: 'blur(16px)',
-    boxShadow: '0 1px 3px oklch(0 0 0 / 12%), inset 0 1px 0 oklch(1 0 0 / 6%)'
-  };
-
   // ── Main Component ──
 
   function DataList(props) {
@@ -450,8 +440,7 @@ var NeoMind_DataList = (function () {
     if (loading) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex items-center justify-center h-full w-full',
-        style: glassContainer,
+        className: 'flex items-center justify-center h-full w-full bg-card border border-glass-border rounded-xl',
         children: jsx('div', { className: 'flex gap-1.5', children:
           [0, 1, 2].map(function (i) {
             return jsx('div', { style: { width: 5, height: 5, borderRadius: '50%', background: 'var(--muted-foreground)', opacity: 0.3, animation: 'dl-pulse 1s infinite ' + (i * 0.2) + 's' } }, i);
@@ -463,8 +452,7 @@ var NeoMind_DataList = (function () {
     if (!fetchData) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground',
-        style: glassContainer,
+        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground bg-card border border-glass-border rounded-xl',
         children: jsx('span', { className: 'text-xs', children: 'No data source configured' })
       });
     }
@@ -472,8 +460,7 @@ var NeoMind_DataList = (function () {
     if (error) {
       return jsxs('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground gap-2',
-        style: glassContainer,
+        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground gap-2 bg-card border border-glass-border rounded-xl',
         children: [
           jsx('span', { key: 'm', className: 'text-xs', children: 'Failed to load data' }),
           jsx('button', { key: 'r', className: 'text-xs px-3 py-1.5 rounded-lg transition-all duration-200', style: { background: 'oklch(1 0 0 / 8%)', border: '1px solid var(--border)', backdropFilter: 'blur(4px)' }, onClick: doFetch, children: 'Retry' })
@@ -488,8 +475,7 @@ var NeoMind_DataList = (function () {
       else if (emptyLabel === 'incompatible') msg = 'Data format incompatible';
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground gap-1',
-        style: glassContainer,
+        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground gap-1 bg-card border border-glass-border rounded-xl',
         children: jsx('span', { className: 'text-xs', children: msg })
       });
     }
@@ -514,8 +500,7 @@ var NeoMind_DataList = (function () {
         }
         return jsxs('div', {
           ref: containerRef,
-          className: 'flex flex-col items-center justify-center h-full w-full p-4',
-          style: glassContainer,
+          className: 'flex flex-col items-center justify-center h-full w-full p-4 bg-card border border-glass-border rounded-xl',
           children: [
             labels[0] ? jsx('span', { className: 'text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-3', children: labels[0] }) : null,
             jsx('span', { className: 'text-3xl font-bold tabular-nums', style: { color: valColor, lineHeight: 1.2 }, children: valStr }),
@@ -551,8 +536,7 @@ var NeoMind_DataList = (function () {
       });
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full p-4',
-        style: glassContainer,
+        className: 'flex flex-col items-center justify-center h-full w-full p-4 bg-card border border-glass-border rounded-xl',
         children: jsxs('div', { className: 'flex flex-col gap-3 w-full max-w-[260px]', children: [
           jsxs('div', { className: 'flex items-center gap-3', children: [
             jsx('div', {
@@ -611,8 +595,7 @@ var NeoMind_DataList = (function () {
 
       return jsxs('div', {
         ref: containerRef,
-        className: 'flex flex-col h-full w-full overflow-hidden',
-        style: glassContainer,
+        className: 'flex flex-col h-full w-full overflow-hidden bg-card border border-glass-border rounded-xl',
         children: [
           listHeader,
           tsHeaderRow,
@@ -691,8 +674,7 @@ var NeoMind_DataList = (function () {
     // ── Generic multi-column card rows ──
     return jsxs('div', {
       ref: containerRef,
-      className: 'flex flex-col h-full w-full overflow-hidden',
-      style: glassContainer,
+      className: 'flex flex-col h-full w-full overflow-hidden bg-card border border-glass-border rounded-xl',
       children: [
         listHeader,
         jsx('div', {

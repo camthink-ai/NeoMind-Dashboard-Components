@@ -3,27 +3,11 @@ var NeoMind_TextDisplay = (function () {
   var jsx = window.jsxRuntime.jsx;
   var jsxs = window.jsxRuntime.jsxs;
 
-  // ── Glass container style ──
-  var glassContainer = {
-    background: 'linear-gradient(135deg, oklch(1 0 0 / 6%) 0%, oklch(0.75 0.06 270 / 5%) 40%, oklch(1 0 0 / 3%) 60%, oklch(0.75 0.06 200 / 4%) 100%)',
-    backgroundSize: '300% 300%',
-    animation: 'td-shimmer 12s ease infinite',
-    border: '1px solid var(--border)',
-    borderRadius: '12px',
-    backdropFilter: 'blur(16px)',
-    WebkitBackdropFilter: 'blur(16px)',
-    boxShadow: '0 1px 3px oklch(0 0 0 / 12%), inset 0 1px 0 oklch(1 0 0 / 6%)'
-  };
-
   // ── Style injection (idempotent) ──
   if (!document.getElementById('td-styles')) {
     var tdStyle = document.createElement('style');
     tdStyle.id = 'td-styles';
     tdStyle.textContent = [
-      '@keyframes td-shimmer {',
-      '  0%, 100% { background-position: 0% 50%; }',
-      '  50% { background-position: 100% 50%; }',
-      '}',
       '@keyframes td-pulse {',
       '  0%, 100% { opacity: 0.3; transform: scale(1); }',
       '  50% { opacity: 1; transform: scale(1.3); }',
@@ -234,8 +218,7 @@ var NeoMind_TextDisplay = (function () {
     if (loading) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex items-center justify-center h-full w-full',
-        style: glassContainer,
+        className: 'flex items-center justify-center h-full w-full bg-card border border-glass-border rounded-xl',
         children: jsx('div', { className: 'flex gap-1.5', children:
           [0, 1, 2].map(function (i) {
             return jsx('div', { style: { width: 5, height: 5, borderRadius: '50%', background: 'var(--muted-foreground)', opacity: 0.3, animation: 'td-pulse 1s infinite ' + (i * 0.2) + 's' } }, i);
@@ -248,8 +231,7 @@ var NeoMind_TextDisplay = (function () {
     if (!fetchData) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground',
-        style: glassContainer,
+        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground bg-card border border-glass-border rounded-xl',
         children: jsx('span', { className: 'text-xs', children: 'Bind a data source' })
       });
     }
@@ -258,8 +240,7 @@ var NeoMind_TextDisplay = (function () {
     if (error) {
       return jsxs('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground gap-2',
-        style: glassContainer,
+        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground gap-2 bg-card border border-glass-border rounded-xl',
         children: [
           jsx('span', { key: 'm', className: 'text-xs', children: 'Failed to load data' }),
           jsx('button', { key: 'r', className: 'text-xs px-3 py-1.5 rounded-lg transition-all duration-200', style: { background: 'oklch(1 0 0 / 8%)', border: '1px solid var(--border)', backdropFilter: 'blur(4px)' }, onClick: doFetch, children: 'Retry' })
@@ -273,8 +254,7 @@ var NeoMind_TextDisplay = (function () {
     if (!formattedLines.length) {
       return jsx('div', {
         ref: containerRef,
-        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground',
-        style: glassContainer,
+        className: 'flex flex-col items-center justify-center h-full w-full text-muted-foreground bg-card border border-glass-border rounded-xl',
         children: jsx('span', { className: 'text-xs', children: 'No data' })
       });
     }
@@ -336,8 +316,7 @@ var NeoMind_TextDisplay = (function () {
     // ── Final render ──
     return jsxs('div', {
       ref: containerRef,
-      className: 'flex flex-col h-full w-full overflow-hidden',
-      style: glassContainer,
+      className: 'flex flex-col h-full w-full overflow-hidden bg-card border border-glass-border rounded-xl',
       children: [
         jsx('div', {
           key: 'header',
