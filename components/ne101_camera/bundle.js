@@ -627,8 +627,11 @@ var NE101CameraPanel = (function () {
       }).catch(function () {});
     }, [device ? device.id : null, processingEnabled, processingExtId]);
 
-    // Merge: WS values as base (real-time small metrics), REST image data overlay, virtual metrics
-    var _vals = Object.assign({}, wsValues, imageData || {}, virtualDataState[0] || {});
+    // Merge: REST as base (fallback), WS values overlay (real-time, freshest — WS delivers
+    // the full image payload on this platform, no size filtering), virtual metrics on top.
+    // Order matters: WS MUST win over REST, otherwise a stale REST response (lagging one frame
+    // due to the fetchingRef race) would overwrite the fresh image WS just delivered.
+    var _vals = Object.assign({}, imageData || {}, wsValues, virtualDataState[0] || {});
 
     // Early-extract imageSrc — device may send URL or base64
     var rawImageSrc = getFirst(_vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
