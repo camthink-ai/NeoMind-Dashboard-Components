@@ -563,6 +563,9 @@ var Model3DViewer = (function () {
     // Long-press drag info ref
     var dragInfoRef = React.useRef({ active: false, pinId: null, timer: null, startX: 0, startY: 0 });
 
+    // ResizeObserver ref (used by both modelUrl and drag-drop load paths)
+    var observerRef = React.useRef(null);
+
     // Refs for per-frame updates (mirrors of state, used in rAF loop)
     var popupRefs = React.useRef({});
     var pinMeshesRef = React.useRef({});
@@ -595,6 +598,11 @@ var Model3DViewer = (function () {
         if (ext.endsWith('.glb') || ext.endsWith('.gltf')) {
           setLoadState('loading');
           loadThreeJS().then(function () {
+            // Disconnect existing ResizeObserver (e.g. from a previous drop)
+            if (observerRef.current) {
+              observerRef.current.disconnect();
+              observerRef.current = null;
+            }
             // Dispose existing scene
             disposeScene(sceneHandleRef.current);
             sceneHandleRef.current = null;
@@ -635,6 +643,21 @@ var Model3DViewer = (function () {
               }
             }
             animate();
+
+            // ResizeObserver — keep canvas in sync with grid-cell size
+            // (mirrors the modelUrl load path; without this, resizing the
+            //  dashboard block never calls renderer.setSize)
+            observerRef.current = new ResizeObserver(function (entries) {
+              if (!sceneHandleRef.current) return;
+              var w = entries[0].contentRect.width;
+              var h = entries[0].contentRect.height;
+              if (!w || !h) return;
+              sceneHandleRef.current.camera.aspect = w / h;
+              sceneHandleRef.current.camera.updateProjectionMatrix();
+              sceneHandleRef.current.renderer.setSize(w, h);
+              setContainerSize({ w: w, h: h });
+            });
+            observerRef.current.observe(container);
           }).catch(function (err) {
             setErrorMsg(err.message || 'Failed to load model');
             setLoadState('error');
@@ -647,6 +670,10 @@ var Model3DViewer = (function () {
       return function () {
         container.removeEventListener('dragover', handleDragOver);
         container.removeEventListener('drop', handleDrop);
+        if (observerRef.current) {
+          observerRef.current.disconnect();
+          observerRef.current = null;
+        }
       };
     }, []);
 
@@ -1020,8 +1047,8 @@ var Model3DViewer = (function () {
       onPointerUp: handlePointerUp,
       children: [
         jsx('style', { dangerouslySetInnerHTML: { __html: '@keyframes spin { to { transform: rotate(360deg) } }' } }),
-        // Empty state — no model URL configured
-        !modelUrl && jsx('div', {
+        // Empty state — no model loaded yet via either path (URL or drag-drop)
+        loadStateValue !== 'loaded' && !modelUrl && jsx('div', {
           className: 'absolute inset-0 flex flex-col items-center justify-center',
           children: jsxs('div', {
             className: 'text-center space-y-4 px-6',
@@ -1039,7 +1066,7 @@ var Model3DViewer = (function () {
           })
         }),
         // Edit mode indicator
-        editMode && modelUrl ? jsx('div', {
+        editMode && loadStateValue === 'loaded' ? jsx('div', {
           className: 'absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-md text-xs',
           style: {
             zIndex: 40,
@@ -1050,7 +1077,7 @@ var Model3DViewer = (function () {
           children: 'Click on the model to place a ' + activePinType + ' pin'
         }) : null,
         // Toolbar (compact buttons)
-        modelUrl && loadStateValue === 'loaded' ? jsx(Toolbar, {
+        loadStateValue === 'loaded' ? jsx(Toolbar, {
           editMode: editMode,
           onToggleEdit: toggleEdit,
           activePinType: activePinType,
