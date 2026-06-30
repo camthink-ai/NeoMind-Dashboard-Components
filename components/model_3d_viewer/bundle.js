@@ -431,9 +431,9 @@ var Model3DViewer = (function () {
   // has room for dropdowns; no longer tracked/projected by the render loop.
   //
   // Dropdowns:
-  //  - Device ID: free text + a <datalist> of recently-used IDs (the platform
-  //    exposes no device-list API to community components, so we can't enumerate
-  //    all devices — history is the best assist available).
+  //  - Device ID: <select> populated from window.neomind.listDevices() (real
+  //    platform devices); falls back to a text input + datalist of recently-used
+  //    IDs when the host doesn't expose listDevices.
   //  - Metric key: auto-populated <select> from fetchDeviceValues(deviceId);
   //    falls back to a text input when the device has no values yet.
   //  - Command key: text only (no command-list API exists).
@@ -509,6 +509,20 @@ var Model3DViewer = (function () {
     var keysLoading = keysLoadingState[0];
     var setKeysLoading = keysLoadingState[1];
 
+    // Platform device list for the Device ID picker. Populated from
+    // window.neomind.listDevices() when available; falls back to the
+    // knownDevices history (datalist) if the host doesn't expose it.
+    var deviceListState = React.useState([]);
+    var deviceList = deviceListState[0];
+    var setDeviceList = deviceListState[1];
+    React.useEffect(function () {
+      var neomind = window.neomind;
+      if (!neomind || typeof neomind.listDevices !== 'function') return;
+      neomind.listDevices().then(function (list) {
+        setDeviceList(Array.isArray(list) ? list : []);
+      }).catch(function () { setDeviceList([]); });
+    }, []);
+
     React.useEffect(function () {
       if (pin.type !== 'metric') return;
       var id = (deviceId || '').trim();
@@ -543,18 +557,37 @@ var Model3DViewer = (function () {
       onSave(updated);
     };
 
-    // Shared Device ID field with datalist autocomplete from history.
+    // Shared Device ID field. When the host exposes window.neomind.listDevices,
+    // render a <select> of real devices; otherwise fall back to a text input
+    // with a datalist of recently-used IDs.
     var deviceField = function (hint) {
-      return FieldRow('Device ID',
-        jsx('input', {
-          style: inputStyle,
-          list: 'neomind-3d-devices',
-          placeholder: 'device-id',
-          value: deviceId,
-          onChange: function (e) { setDeviceId(e.target.value); }
-        }),
-        hint
-      );
+      var control = deviceList.length > 0
+        ? (function () {
+            var opts = deviceList.slice();
+            // Always include the current value even if it's no longer in the list.
+            if (deviceId && !opts.some(function (d) { return d.id === deviceId; })) {
+              opts.unshift({ id: deviceId, name: deviceId, device_type: '' });
+            }
+            return jsxs('select', {
+              style: selectStyle,
+              value: deviceId,
+              onChange: function (e) { setDeviceId(e.target.value); },
+              children: [
+                jsx('option', { value: '', children: '— Select a device —' }),
+                opts.map(function (d) {
+                  return jsx('option', { value: d.id, children: d.name === d.id ? d.id : (d.name + ' (' + d.id + ')') }, d.id);
+                })
+              ]
+            });
+          })()
+        : jsx('input', {
+            style: inputStyle,
+            list: 'neomind-3d-devices',
+            placeholder: 'device-id',
+            value: deviceId,
+            onChange: function (e) { setDeviceId(e.target.value); }
+          });
+      return FieldRow('Device ID', control, hint);
     };
 
     var fields = null;
@@ -676,7 +709,7 @@ var Model3DViewer = (function () {
               children: 'Cancel'
             }),
             jsx('button', {
-              style: { padding: '6px 14px', fontSize: 12, fontWeight: 500, borderRadius: 6, border: 'none', cursor: 'pointer', color: 'var(--color-primary-foreground, #fff)', backgroundColor: 'var(--color-accent-purple)' },
+              style: { padding: '6px 14px', fontSize: 12, fontWeight: 500, borderRadius: 6, border: 'none', cursor: 'pointer', color: '#fff', backgroundColor: 'var(--accent-purple, #7c3aed)' },
               onClick: handleSave,
               children: 'Save'
             })
