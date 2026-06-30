@@ -286,6 +286,10 @@ var Model3DViewer = (function () {
   };
 
   // --- Toolbar Component ---
+  // Positioning is inline (not Tailwind absolute/bottom/left/translate/z
+  // utilities) because the dashboard's curated Tailwind build doesn't emit
+  // those classes — relying on `bottom-1.5` etc. caused the whole bar to
+  // collapse to its in-flow position at the top of the component.
   var Toolbar = function (props) {
     var editMode = props.editMode;
     var onToggleEdit = props.onToggleEdit;
@@ -300,7 +304,9 @@ var Model3DViewer = (function () {
     var typeLabels = { metric: 'Metric', device: 'Device', annotation: 'Note', command: 'Cmd' };
     var typeColorClass = { metric: 'text-success', device: 'text-info', annotation: 'text-warning', command: 'text-accent-purple' };
 
-    var toolbarBase = 'flex items-center gap-0.5 absolute bottom-1.5 left-1/2 -translate-x-1/2 z-40 px-1 py-0.5 rounded-lg bg-popover border border-border shadow-md';
+    // Inline positioning — bottom-center floating bar.
+    var posStyle = { position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 40, display: 'flex', alignItems: 'center', gap: 2, padding: '2px 4px', borderRadius: 8 };
+    var surfaceClass = 'bg-popover border border-border shadow-md';
 
     var btnClass = function (active, colorClass) {
       return 'flex items-center justify-center w-6 h-6 rounded-md border-none cursor-pointer transition-colors ' +
@@ -311,7 +317,8 @@ var Model3DViewer = (function () {
 
     if (!editMode) {
       return jsxs('div', {
-        className: toolbarBase,
+        style: posStyle,
+        className: surfaceClass,
         children: [
           jsx('button', { className: btnClass(false), onClick: onToggleEdit, title: 'Edit pins', children: Icon('edit', '', 14) }),
           jsx('button', { className: btnClass(false), onClick: onResetCamera, title: 'Reset view', children: Icon('reset', '', 14) }),
@@ -321,7 +328,8 @@ var Model3DViewer = (function () {
     }
 
     return jsxs('div', {
-      className: toolbarBase + ' border-accent-purple',
+      style: Object.assign({}, posStyle, { borderColor: 'var(--color-accent-purple)' }),
+      className: surfaceClass,
       children: [
         pinTypes.map(function (t) {
           var isActive = activePinType === t;
@@ -332,7 +340,7 @@ var Model3DViewer = (function () {
             children: Icon(t, '', 14)
           }, t);
         }),
-        jsx('div', { className: 'w-px h-4 mx-0.5 bg-border' }),
+        jsx('div', { style: { width: 1, height: 16, margin: '0 2px', backgroundColor: 'var(--color-border)' } }),
         jsx('button', {
           className: 'flex items-center h-6 px-2 rounded-md border-none cursor-pointer text-[11px] font-medium bg-transparent text-muted-foreground hover:bg-muted-30 hover:text-foreground transition-colors',
           onClick: onToggleEdit,
@@ -343,41 +351,47 @@ var Model3DViewer = (function () {
   };
 
   // --- DetailCard Component (compact 4:3 card) ---
+  // Inline positioning throughout; header now holds dot+label on the left and
+  // close+delete on the right (previously the absolute close button overlapped
+  // the header row, which read as "messy"). Delete was missing entirely.
   var DetailCard = function (props) {
     var pin = props.pin;
     var value = props.value;
     var onAction = props.onAction;
     var onClose = props.onClose;
+    var onDelete = props.onDelete;
     var detailRef = props.detailRef;
     var colorVar = pinColorVar(pin.type);
 
-    var cardInner = 'relative w-40 aspect-[4/3] flex flex-col justify-between p-2.5 rounded-lg bg-popover border border-border shadow-lg overflow-hidden';
+    var cardStyle = { position: 'relative', width: 176, aspectRatio: '4 / 3', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 10, overflow: 'hidden' };
+
+    var iconBtnStyle = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-muted-foreground)' };
+    var iconBtnClass = 'hover:bg-muted-30 hover:text-foreground transition-colors';
 
     var content = null;
     if (pin.type === 'metric') {
-      content = jsxs('div', { children: [
+      content = jsxs('div', { style: { display: 'flex', flexDirection: 'column' }, children: [
         jsx('span', { className: 'text-2xl font-extralight text-foreground leading-none', children: value != null ? String(value) : '--' }),
-        jsx('span', { className: 'text-[11px] text-muted-foreground ml-1', children: pin.label })
+        jsx('span', { className: 'text-[10px] text-muted-foreground mt-1', children: pin.label })
       ]});
     } else if (pin.type === 'device') {
       var online = value && value.status === 'online';
-      content = jsxs('div', { className: 'flex items-center gap-1.5', children: [
-        jsx('div', { style: { width: 6, height: 6, borderRadius: '50%', backgroundColor: online ? 'var(--color-success)' : 'var(--color-muted-foreground)' } }),
+      content = jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 6 }, children: [
+        jsx('div', { style: { width: 8, height: 8, borderRadius: '50%', backgroundColor: online ? 'var(--color-success)' : 'var(--color-muted-foreground)' } }),
         jsx('span', { className: 'text-[13px] text-foreground', children: online ? 'Online' : 'Offline' })
       ]});
     } else if (pin.type === 'annotation') {
       content = jsx('div', {
         className: 'text-xs text-foreground leading-relaxed',
+        style: { maxHeight: 48, overflow: 'hidden' },
         children: pin.annotationText || 'No annotation'
       });
     } else if (pin.type === 'command') {
-      content = jsx('div', { children:
-        jsx('button', {
-          className: 'flex items-center justify-center w-7 h-7 rounded-full border cursor-pointer transition-colors hover:bg-muted-30',
-          style: { borderColor: colorVar, color: colorVar },
-          onClick: function (e) { e.stopPropagation(); onAction && onAction(pin); },
-          children: Icon('play', '', 14)
-        })
+      content = jsx('button', {
+        className: 'flex items-center justify-center w-8 h-8 rounded-full border cursor-pointer transition-colors hover:bg-muted-30',
+        style: { borderColor: colorVar, color: colorVar },
+        onClick: function (e) { e.stopPropagation(); onAction && onAction(pin); },
+        children: Icon('play', '', 16)
       });
     }
 
@@ -385,19 +399,33 @@ var Model3DViewer = (function () {
       ref: function (el) { if (detailRef) detailRef.current[pin.id + '_detail'] = el; },
       style: { position: 'absolute', pointerEvents: 'auto', zIndex: 20, display: 'none' },
       children: jsxs('div', {
-        className: cardInner,
+        style: cardStyle,
+        className: 'bg-popover border border-border shadow-lg',
         children: [
           jsx('div', { style: { position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, ' + colorVar + ', transparent)' } }),
-          jsxs('div', { className: 'flex justify-between items-center relative z-[1]', children: [
-            jsx('span', { className: 'text-[10px] text-muted-foreground tracking-wide', children: pin.label }),
-            jsx('div', { style: { color: colorVar }, children: Icon(pin.type, '', 12) })
+          // Header: dot + label  |  delete + close
+          jsxs('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1, gap: 8 }, children: [
+            jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }, children: [
+              jsx('div', { style: { width: 7, height: 7, borderRadius: '50%', backgroundColor: colorVar, flexShrink: 0 } }),
+              jsx('span', { style: { fontSize: 11, fontWeight: 600, color: 'var(--color-foreground)', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: pin.label || pin.type })
+            ]}),
+            jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }, children: [
+              onDelete ? jsx('button', {
+                style: iconBtnStyle, className: iconBtnClass + ' hover:text-error',
+                title: 'Delete pin',
+                onClick: function (e) { e.stopPropagation(); onDelete(pin.id); },
+                children: Icon('trash', '', 13)
+              }) : null,
+              jsx('button', {
+                style: iconBtnStyle, className: iconBtnClass,
+                title: 'Close',
+                onClick: function (e) { e.stopPropagation(); onClose(); },
+                children: Icon('close', '', 13)
+              })
+            ]})
           ]}),
-          jsx('div', { className: 'relative z-[1]', children: content }),
-          jsx('button', {
-            className: 'absolute top-1 right-1 flex items-center justify-center w-4 h-4 rounded text-muted-foreground cursor-pointer border-none bg-transparent hover:bg-muted-30 hover:text-foreground z-[2]',
-            onClick: function (e) { e.stopPropagation(); onClose(); },
-            children: Icon('close', '', 12)
-          })
+          // Body
+          jsx('div', { style: { position: 'relative', zIndex: 1, flex: 1, display: 'flex', alignItems: 'center' }, children: content })
         ]
       })
     });
@@ -405,11 +433,20 @@ var Model3DViewer = (function () {
 
   // --- PinConfigPopover Component (compact inline-style form) ---
   var inputStyle = { width: '100%', height: 26, padding: '0 6px', borderRadius: 4, border: '1px solid var(--color-border)', backgroundColor: 'var(--color-muted)', color: 'var(--color-foreground)', fontSize: 11, outline: 'none', boxSizing: 'border-box' };
+  var fieldLabelStyle = { fontSize: 10, fontWeight: 500, color: 'var(--color-muted-foreground)', marginBottom: 2 };
+
+  var FieldRow = function (labelText, control) {
+    return jsxs('label', { style: { display: 'flex', flexDirection: 'column' }, children: [
+      jsx('span', { style: fieldLabelStyle, children: labelText }),
+      control
+    ]});
+  };
 
   var PinConfigPopover = function (props) {
     var pin = props.pin;
     var onSave = props.onSave;
     var onCancel = props.onCancel;
+    var onDelete = props.onDelete;
     var popoverRef = props.popoverRef;
 
     var labelState = React.useState(pin.label || '');
@@ -456,18 +493,18 @@ var Model3DViewer = (function () {
 
     var fields = null;
     if (pin.type === 'metric') {
-      fields = jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 }, children: [
-        jsx('input', { style: inputStyle, placeholder: 'Device ID', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } }),
-        jsx('input', { style: inputStyle, placeholder: 'Metric key', value: metricKey, onChange: function (e) { setMetricKey(e.target.value); } })
+      fields = jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 }, children: [
+        FieldRow('Device ID', jsx('input', { key: 'did', style: inputStyle, placeholder: 'device-id', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } })),
+        FieldRow('Metric key', jsx('input', { key: 'mk', style: inputStyle, placeholder: 'e.g. values.temperature', value: metricKey, onChange: function (e) { setMetricKey(e.target.value); } }))
       ]});
     } else if (pin.type === 'device') {
-      fields = jsx('input', { style: inputStyle, placeholder: 'Device ID', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } });
+      fields = FieldRow('Device ID', jsx('input', { style: inputStyle, placeholder: 'device-id', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } }));
     } else if (pin.type === 'annotation') {
-      fields = jsx('textarea', { style: Object.assign({}, inputStyle, { height: 40, padding: '4px 6px', resize: 'none' }), placeholder: 'Annotation text...', value: text, onChange: function (e) { setText(e.target.value); } });
+      fields = FieldRow('Note', jsx('textarea', { style: Object.assign({}, inputStyle, { height: 48, padding: '4px 6px', resize: 'none', fontFamily: 'inherit' }), placeholder: 'Annotation text...', value: text, onChange: function (e) { setText(e.target.value); } }));
     } else if (pin.type === 'command') {
-      fields = jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 }, children: [
-        jsx('input', { style: inputStyle, placeholder: 'Device ID', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } }),
-        jsx('input', { style: inputStyle, placeholder: 'Command key', value: cmdKey, onChange: function (e) { setCmdKey(e.target.value); } })
+      fields = jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 }, children: [
+        FieldRow('Device ID', jsx('input', { key: 'did', style: inputStyle, placeholder: 'device-id', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } })),
+        FieldRow('Command key', jsx('input', { key: 'ck', style: inputStyle, placeholder: 'e.g. trigger_capture', value: cmdKey, onChange: function (e) { setCmdKey(e.target.value); } }))
       ]});
     }
 
@@ -475,20 +512,32 @@ var Model3DViewer = (function () {
       ref: function (el) { if (popoverRef) popoverRef.current[pin.id + '_config'] = el; },
       style: { position: 'absolute', pointerEvents: 'auto', zIndex: 30, display: 'none' },
       children: jsxs('div', {
-        className: 'flex flex-col gap-1 w-44 p-2 rounded-lg bg-popover border border-border shadow-lg',
+        style: { width: 200, padding: 10, borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 8 },
+        className: 'bg-popover border border-border shadow-lg',
         children: [
-          jsx('span', { className: 'text-[10px] font-semibold text-muted-foreground capitalize', children: pin.type + ' pin' }),
-          jsx('input', { style: inputStyle, placeholder: 'Label', value: label, onChange: function (e) { setLabel(e.target.value); } }),
+          // Title row + delete
+          jsxs('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, children: [
+            jsxs('span', { style: { fontSize: 11, fontWeight: 600, color: 'var(--color-foreground)', textTransform: 'capitalize' }, children: [pin.type, ' pin'] }),
+            onDelete ? jsx('button', {
+              style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-muted-foreground)' },
+              className: 'hover:bg-muted-30 hover:text-error transition-colors',
+              title: 'Delete pin',
+              onClick: function () { onDelete(pin.id); },
+              children: Icon('trash', '', 13)
+            }) : null
+          ]}),
+          FieldRow('Label', jsx('input', { style: inputStyle, placeholder: 'Pin label', value: label, onChange: function (e) { setLabel(e.target.value); } })),
           fields,
-          jsxs('div', { className: 'flex gap-1 justify-end mt-0.5', children: [
+          jsxs('div', { style: { display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 2 }, children: [
             jsx('button', {
-              className: 'px-2 py-0.5 text-[10px] rounded border border-border bg-transparent text-muted-foreground cursor-pointer hover:bg-muted-30 hover:text-foreground transition-colors',
+              style: { padding: '4px 10px', fontSize: 11, borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-muted-foreground)', cursor: 'pointer' },
+              className: 'hover:bg-muted-30 hover:text-foreground transition-colors',
               onClick: onCancel,
               children: 'Cancel'
             }),
             jsx('button', {
-              className: 'px-2 py-0.5 text-[10px] rounded border-none cursor-pointer transition-colors',
-              style: { color: 'var(--color-accent-purple-foreground, #fff)', backgroundColor: 'var(--color-accent-purple)' },
+              style: { padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 6, border: 'none', cursor: 'pointer', color: 'var(--color-primary-foreground, #fff)', backgroundColor: 'var(--color-accent-purple)' },
+              className: 'transition-opacity',
               onClick: handleSave,
               children: 'Save'
             })
@@ -638,8 +687,15 @@ var Model3DViewer = (function () {
           }
           var detailEl = popupRefs.current[pin.id + '_detail'];
           if (pin.id === selectedPinIdRef.current && detailEl) {
-            var dx = Math.min(sx + 12, containerW - 170);
-            var dy = Math.max(4, sy - 60);
+            // Center the card on the pin horizontally; flip below when there
+            // isn't room above (previously Math.max(4, sy-60) clamped the card
+            // to the very top edge — "紧贴上方" — for pins near the top).
+            var cardW = detailEl.offsetWidth || 176;
+            var cardH = detailEl.offsetHeight || 132;
+            var dx = Math.max(4, Math.min(sx - cardW / 2, containerW - cardW - 4));
+            var dy = (sy - cardH - 10 >= 8)
+              ? sy - cardH - 10
+              : Math.min(sy + 14, containerH - cardH - 8);
             detailEl.style.left = dx + 'px';
             detailEl.style.top = dy + 'px';
             detailEl.style.display = screen.behind ? 'none' : '';
@@ -649,8 +705,12 @@ var Model3DViewer = (function () {
           if (pin.id === configuringPinIdRef.current) {
             var configEl = popupRefs.current[pin.id + '_config'];
             if (configEl) {
-              var cx = Math.min(sx + 12, containerW - 190);
-              var cy = Math.max(4, sy - 30);
+              var popW = configEl.offsetWidth || 200;
+              var popH = configEl.offsetHeight || 200;
+              var cx = Math.max(4, Math.min(sx - popW / 2, containerW - popW - 4));
+              var cy = (sy - popH - 10 >= 8)
+                ? sy - popH - 10
+                : Math.min(sy + 14, containerH - popH - 8);
               configEl.style.left = cx + 'px';
               configEl.style.top = cy + 'px';
               configEl.style.display = screen.behind ? 'none' : '';
@@ -828,6 +888,26 @@ var Model3DViewer = (function () {
         return prev.map(function (p) { return p.id === updatedPin.id ? updatedPin : p; });
       });
       setConfiguringPinId(null);
+    };
+
+    // Delete a pin by id: dispose its 3D mesh, drop it from state, close any
+    // open detail/config panel, and persist the reduced pin set. Previously
+    // there was no delete path at all — saved pins could not be removed.
+    var deletePin = function (pinId) {
+      if (!pinId) return;
+      var mesh = pinMeshesRef.current[pinId];
+      if (mesh && sceneHandleRef.current) {
+        sceneHandleRef.current.scene.remove(mesh);
+        mesh.geometry.dispose();
+        mesh.material.dispose();
+      }
+      delete pinMeshesRef.current[pinId];
+      var next = pinsRef.current.filter(function (p) { return p.id !== pinId; });
+      pinsRef.current = next;
+      setPins(next);
+      if (selectedPinId === pinId) setSelectedPinId(null);
+      if (configuringPinId === pinId) setConfiguringPinId(null);
+      if (props.onConfigChange) props.onConfigChange('pins', next);
     };
 
     var handlePinConfigCancel = function () {
@@ -1092,18 +1172,18 @@ var Model3DViewer = (function () {
 
     return jsxs('div', {
       ref: containerRef,
-      className: 'relative w-full h-full overflow-hidden rounded-xl bg-muted',
+      style: { position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 12 },
+      className: 'bg-muted',
       children: [
         jsx('style', { dangerouslySetInnerHTML: { __html: '@keyframes spin { to { transform: rotate(360deg) } }' } }),
         // Empty state — no model loaded yet via either path (URL or drag-drop)
         loadStateValue !== 'loaded' && !modelUrl && jsx('div', {
-          className: 'absolute inset-0 flex flex-col items-center justify-center',
+          style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
           children: jsxs('div', {
-            className: 'text-center space-y-4 px-6',
+            style: { textAlign: 'center', padding: '0 24px' },
             children: [
               jsx('div', {
-                className: 'w-16 h-16 mx-auto rounded-2xl flex items-center justify-center text-info border border-dashed border-info',
-                style: { backgroundColor: 'color-mix(in oklch, var(--color-info) 8%, transparent)' },
+                style: { width: 64, height: 64, margin: '0 auto 16px', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-info)', border: '1px dashed var(--color-info)', backgroundColor: 'color-mix(in oklch, var(--color-info) 8%, transparent)' },
                 children: Icon('upload', '', 28)
               }),
               jsxs('div', { children: [
@@ -1115,8 +1195,7 @@ var Model3DViewer = (function () {
         }),
         // Edit mode indicator
         editMode && loadStateValue === 'loaded' ? jsx('div', {
-          className: 'absolute top-2 left-1/2 -translate-x-1/2 z-40 px-3 py-1 rounded-md text-xs border border-success',
-          style: { backgroundColor: 'color-mix(in oklch, var(--color-success) 14%, transparent)', color: 'var(--color-success)' },
+          style: { position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 40, padding: '4px 12px', borderRadius: 6, fontSize: 12, border: '1px solid var(--color-success)', backgroundColor: 'color-mix(in oklch, var(--color-success) 14%, transparent)', color: 'var(--color-success)', whiteSpace: 'nowrap' },
           children: 'Click on the model to place a ' + activePinType + ' pin'
         }) : null,
         // Toolbar (compact buttons)
@@ -1132,9 +1211,8 @@ var Model3DViewer = (function () {
         }) : null,
         // Loading overlay
         loadStateValue === 'loading' && jsx('div', {
-          className: 'absolute inset-0 flex flex-col items-center justify-center z-50',
-          style: { backgroundColor: 'color-mix(in oklch, var(--color-muted) 88%, transparent)' },
-          children: jsxs('div', { className: 'text-center', children: [
+          style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'color-mix(in oklch, var(--color-muted) 88%, transparent)' },
+          children: jsxs('div', { style: { textAlign: 'center' }, children: [
             jsx('div', {
               style: { width: 40, height: 40, borderWidth: 3, borderStyle: 'solid', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto', borderColor: 'var(--color-border)', borderTopColor: 'var(--color-info)' }
             }),
@@ -1144,12 +1222,11 @@ var Model3DViewer = (function () {
         // Error overlay — backdrop is click-through so it doesn't block the
         // dashboard's top-right edit/delete chrome; only the Retry card captures.
         loadStateValue === 'error' && jsx('div', {
-          className: 'absolute inset-0 flex flex-col items-center justify-center z-50',
-          style: { backgroundColor: 'color-mix(in oklch, var(--color-muted) 92%, transparent)', pointerEvents: 'none' },
-          children: jsxs('div', { className: 'text-center space-y-2', style: { pointerEvents: 'auto' }, children: [
+          style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'color-mix(in oklch, var(--color-muted) 92%, transparent)', pointerEvents: 'none' },
+          children: jsxs('div', { style: { textAlign: 'center', pointerEvents: 'auto' }, children: [
             jsx('p', { className: 'text-sm text-error', children: errorMsgValue || 'Failed to load model' }),
             jsx('button', {
-              className: 'px-3 py-1 text-xs rounded-md bg-info text-info-foreground border-none cursor-pointer hover:opacity-90 transition-opacity',
+              style: { marginTop: 8, padding: '4px 12px', fontSize: 12, borderRadius: 6, border: 'none', cursor: 'pointer', color: 'var(--color-primary-foreground, #fff)', backgroundColor: 'var(--color-info)' },
               onClick: function () {
                 setLoadState('idle');
                 prevModelUrlRef.current = '';
@@ -1160,7 +1237,7 @@ var Model3DViewer = (function () {
         }),
         // Pin overlay
         jsx('div', {
-          className: 'absolute inset-0 pointer-events-none overflow-hidden',
+          style: { position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' },
           children: pins.map(function (pin) {
             return jsx(PinPopup, {
               key: pin.id,
@@ -1173,19 +1250,23 @@ var Model3DViewer = (function () {
           }).concat(
             selectedPinId && pins.find(function (p) { return p.id === selectedPinId; })
               ? [jsx(DetailCard, {
+                  key: 'detail_' + selectedPinId,
                   pin: pins.find(function (p) { return p.id === selectedPinId; }),
                   value: pinValues[selectedPinId],
                   onAction: executeCommand,
                   onClose: function () { setSelectedPinId(null); },
+                  onDelete: function (id) { deletePin(id); },
                   detailRef: popupRefs
                 })]
               : []
           ).concat(
             configuringPinId && pins.find(function (p) { return p.id === configuringPinId; })
               ? [jsx(PinConfigPopover, {
+                  key: 'config_' + configuringPinId,
                   pin: pins.find(function (p) { return p.id === configuringPinId; }),
                   onSave: handlePinConfigSave,
                   onCancel: handlePinConfigCancel,
+                  onDelete: function (id) { deletePin(id); },
                   popoverRef: popupRefs
                 })]
               : []
