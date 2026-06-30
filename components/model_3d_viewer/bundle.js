@@ -362,7 +362,7 @@ var Model3DViewer = (function () {
     var detailRef = props.detailRef;
     var colorVar = pinColorVar(pin.type);
 
-    var cardStyle = { position: 'relative', width: 184, aspectRatio: '4 / 3', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 10, overflow: 'hidden' };
+    var cardStyle = { position: 'relative', width: 200, display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', borderRadius: 10, overflow: 'hidden' };
 
     var iconBtnStyle = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)' };
     var iconBtnClass = 'hover:bg-muted-30 hover:text-foreground transition-colors';
@@ -428,7 +428,7 @@ var Model3DViewer = (function () {
             ]})
           ]}),
           // Body
-          jsx('div', { style: { position: 'relative', zIndex: 1, flex: 1, display: 'flex', alignItems: 'center' }, children: content })
+          jsx('div', { style: { position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', minHeight: 24, padding: '2px 0 1px' }, children: content })
         ]
       })
     });
