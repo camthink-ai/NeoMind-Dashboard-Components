@@ -431,33 +431,61 @@ var Model3DViewer = (function () {
     });
   };
 
-  // --- PinConfigPopover Component (compact inline-style form) ---
-  var inputStyle = { width: '100%', height: 26, padding: '0 6px', borderRadius: 4, border: '1px solid var(--color-border)', backgroundColor: 'var(--color-muted)', color: 'var(--color-foreground)', fontSize: 11, outline: 'none', boxSizing: 'border-box' };
-  var fieldLabelStyle = { fontSize: 10, fontWeight: 500, color: 'var(--color-muted-foreground)', marginBottom: 2 };
+  // --- PinConfigSidebar Component (right-docked edit panel) ---
+  // Replaces the old floating popover. Docked to the right edge so the form
+  // has room for dropdowns; no longer tracked/projected by the render loop.
+  //
+  // Dropdowns:
+  //  - Device ID: free text + a <datalist> of recently-used IDs (the platform
+  //    exposes no device-list API to community components, so we can't enumerate
+  //    all devices — history is the best assist available).
+  //  - Metric key: auto-populated <select> from fetchDeviceValues(deviceId);
+  //    falls back to a text input when the device has no values yet.
+  //  - Command key: text only (no command-list API exists).
+  var inputStyle = { width: '100%', height: 28, padding: '0 8px', borderRadius: 6, border: '1px solid var(--color-border)', backgroundColor: 'var(--color-muted)', color: 'var(--color-foreground)', fontSize: 12, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' };
+  var selectStyle = Object.assign({}, inputStyle, { appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', paddingRight: 24, backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="%23888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>\')', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' });
+  var fieldLabelStyle = { fontSize: 11, fontWeight: 500, color: 'var(--color-muted-foreground)', marginBottom: 4 };
 
-  var FieldRow = function (labelText, control) {
+  var FieldRow = function (labelText, control, hint) {
     return jsxs('label', { style: { display: 'flex', flexDirection: 'column' }, children: [
       jsx('span', { style: fieldLabelStyle, children: labelText }),
-      control
+      control,
+      hint ? jsx('span', { style: { fontSize: 10, color: 'var(--color-muted-foreground)', marginTop: 3 }, children: hint }) : null
     ]});
   };
 
-  var PinConfigPopover = function (props) {
+  // Flatten a nested values object back into dotted metric keys
+  // (fetchDeviceValues returns a nested structure; pin refs store dotted keys).
+  var flattenKeys = function (prefix, obj, out) {
+    if (!obj || typeof obj !== 'object') return;
+    Object.keys(obj).forEach(function (k) {
+      var v = obj[k];
+      var full = prefix ? prefix + '.' + k : k;
+      if (v && typeof v === 'object' && !Array.isArray(v)) flattenKeys(full, v, out);
+      else out.push(full);
+    });
+  };
+
+  var PinConfigSidebar = function (props) {
     var pin = props.pin;
     var onSave = props.onSave;
     var onCancel = props.onCancel;
     var onDelete = props.onDelete;
-    var popoverRef = props.popoverRef;
+    var width = props.width || 280;
+    var knownDevices = props.knownDevices || [];
+    var onDeviceUsed = props.onDeviceUsed;
+    var colorVar = pinColorVar(pin.type);
 
     var labelState = React.useState(pin.label || '');
     var label = labelState[0];
     var setLabel = labelState[1];
 
-    var deviceIdState = React.useState(
+    var initialDevice =
       (pin.type === 'metric' && pin.metricRef) ? (pin.metricRef.deviceId || '') :
       (pin.type === 'device' && pin.deviceRef) ? (pin.deviceRef.deviceId || '') :
-      (pin.type === 'command' && pin.commandRef) ? (pin.commandRef.deviceId || '') : ''
-    );
+      (pin.type === 'command' && pin.commandRef) ? (pin.commandRef.deviceId || '') : '';
+
+    var deviceIdState = React.useState(initialDevice);
     var deviceId = deviceIdState[0];
     var setDeviceId = deviceIdState[1];
 
@@ -477,73 +505,187 @@ var Model3DViewer = (function () {
     var cmdKey = cmdKeyState[0];
     var setCmdKey = cmdKeyState[1];
 
+    // Metric keys available on the selected device — populated from
+    // fetchDeviceValues() so the user picks from real keys, not guesses.
+    var metricKeysState = React.useState([]);
+    var metricKeys = metricKeysState[0];
+    var setMetricKeys = metricKeysState[1];
+    var keysLoadingState = React.useState(false);
+    var keysLoading = keysLoadingState[0];
+    var setKeysLoading = keysLoadingState[1];
+
+    React.useEffect(function () {
+      if (pin.type !== 'metric') return;
+      var id = (deviceId || '').trim();
+      var neomind = window.neomind;
+      if (!id || !neomind || typeof neomind.fetchDeviceValues !== 'function') {
+        setMetricKeys([]);
+        return;
+      }
+      setKeysLoading(true);
+      neomind.fetchDeviceValues(id).then(function (v) {
+        var keys = [];
+        flattenKeys('', v, keys);
+        setMetricKeys(keys);
+      }).catch(function () { setMetricKeys([]); })
+        .then(function () { setKeysLoading(false); });
+    }, [deviceId, pin.type]);
+
     var handleSave = function () {
       var updated = Object.assign({}, pin, { label: label });
       if (pin.type === 'metric') {
         updated.metricRef = { deviceType: '', metricKey: metricKey, deviceId: deviceId };
+        if (deviceId && onDeviceUsed) onDeviceUsed(deviceId);
       } else if (pin.type === 'device') {
         updated.deviceRef = { deviceType: '', deviceId: deviceId };
+        if (deviceId && onDeviceUsed) onDeviceUsed(deviceId);
       } else if (pin.type === 'annotation') {
         updated.annotationText = text;
       } else if (pin.type === 'command') {
         updated.commandRef = { deviceType: '', commandKey: cmdKey, deviceId: deviceId };
+        if (deviceId && onDeviceUsed) onDeviceUsed(deviceId);
       }
       onSave(updated);
     };
 
+    // Shared Device ID field with datalist autocomplete from history.
+    var deviceField = function (hint) {
+      return FieldRow('Device ID',
+        jsx('input', {
+          style: inputStyle,
+          list: 'neomind-3d-devices',
+          placeholder: 'device-id',
+          value: deviceId,
+          onChange: function (e) { setDeviceId(e.target.value); }
+        }),
+        hint
+      );
+    };
+
     var fields = null;
     if (pin.type === 'metric') {
-      fields = jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 }, children: [
-        FieldRow('Device ID', jsx('input', { key: 'did', style: inputStyle, placeholder: 'device-id', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } })),
-        FieldRow('Metric key', jsx('input', { key: 'mk', style: inputStyle, placeholder: 'e.g. values.temperature', value: metricKey, onChange: function (e) { setMetricKey(e.target.value); } }))
+      // If we have keys for this device, use a <select>; otherwise a text input
+      // so the user can still type a key for a device that isn't reporting yet.
+      var metricControl = metricKeys.length > 0
+        ? (function () {
+            var opts = metricKeys.slice();
+            if (metricKey && opts.indexOf(metricKey) === -1) opts.unshift(metricKey);
+            return jsxs('select', {
+              style: selectStyle,
+              value: metricKey,
+              onChange: function (e) { setMetricKey(e.target.value); },
+              children: [
+                jsx('option', { value: '', children: '— Select a metric —' }),
+                opts.map(function (k) { return jsx('option', { value: k, children: k }, k); })
+              ]
+            });
+          })()
+        : jsx('input', {
+            style: inputStyle,
+            placeholder: keysLoading ? 'Loading metrics…' : 'e.g. values.temperature',
+            value: metricKey,
+            onChange: function (e) { setMetricKey(e.target.value); }
+          });
+      fields = jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 }, children: [
+        deviceField('Type or pick a recently-used device. Metrics load automatically once the device reports.'),
+        FieldRow('Metric key', metricControl)
       ]});
     } else if (pin.type === 'device') {
-      fields = FieldRow('Device ID', jsx('input', { style: inputStyle, placeholder: 'device-id', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } }));
+      fields = deviceField('Type or pick a recently-used device.');
     } else if (pin.type === 'annotation') {
-      fields = FieldRow('Note', jsx('textarea', { style: Object.assign({}, inputStyle, { height: 48, padding: '4px 6px', resize: 'none', fontFamily: 'inherit' }), placeholder: 'Annotation text...', value: text, onChange: function (e) { setText(e.target.value); } }));
+      fields = FieldRow('Note',
+        jsx('textarea', {
+          style: Object.assign({}, inputStyle, { height: 72, padding: '6px 8px', resize: 'none' }),
+          placeholder: 'Annotation text…',
+          value: text,
+          onChange: function (e) { setText(e.target.value); }
+        })
+      );
     } else if (pin.type === 'command') {
-      fields = jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 }, children: [
-        FieldRow('Device ID', jsx('input', { key: 'did', style: inputStyle, placeholder: 'device-id', value: deviceId, onChange: function (e) { setDeviceId(e.target.value); } })),
-        FieldRow('Command key', jsx('input', { key: 'ck', style: inputStyle, placeholder: 'e.g. trigger_capture', value: cmdKey, onChange: function (e) { setCmdKey(e.target.value); } }))
+      fields = jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 }, children: [
+        deviceField('Type or pick a recently-used device.'),
+        FieldRow('Command key',
+          jsx('input', {
+            style: inputStyle,
+            placeholder: 'e.g. trigger_capture',
+            value: cmdKey,
+            onChange: function (e) { setCmdKey(e.target.value); }
+          }),
+          'Command keys aren\'t enumerable on the platform; enter the exact key.'
+        )
       ]});
     }
 
-    return jsx('div', {
-      ref: function (el) { if (popoverRef) popoverRef.current[pin.id + '_config'] = el; },
-      style: { position: 'absolute', pointerEvents: 'auto', zIndex: 30, display: 'none' },
-      children: jsxs('div', {
-        style: { width: 200, padding: 10, borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 8 },
-        className: 'bg-popover border border-border shadow-lg',
-        children: [
-          // Title row + delete
-          jsxs('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, children: [
-            jsxs('span', { style: { fontSize: 11, fontWeight: 600, color: 'var(--color-foreground)', textTransform: 'capitalize' }, children: [pin.type, ' pin'] }),
+    return jsxs('div', {
+      style: {
+        position: 'absolute', top: 0, right: 0, bottom: 0, width: width,
+        zIndex: 35, pointerEvents: 'auto',
+        display: 'flex', flexDirection: 'column',
+        borderLeft: '1px solid var(--color-border)',
+        boxShadow: '-8px 0 24px rgba(0,0,0,0.18)'
+      },
+      className: 'bg-popover',
+      children: [
+        // datalist for device-id autocompletion
+        jsx('datalist', { id: 'neomind-3d-devices', children: knownDevices.map(function (d) { return jsx('option', { value: d }, d); }) }),
+        // Header
+        jsxs('div', {
+          style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 },
+          children: [
+            jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 8 }, children: [
+              jsx('div', { style: { width: 10, height: 10, borderRadius: '50%', backgroundColor: colorVar } }),
+              jsx('span', { className: 'text-sm font-semibold text-foreground', style: { textTransform: 'capitalize' }, children: pin.type + ' pin' })
+            ]}),
+            jsx('button', {
+              style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-muted-foreground)' },
+              className: 'hover:bg-muted-30 hover:text-foreground transition-colors',
+              title: 'Close',
+              onClick: onCancel,
+              children: Icon('close', '', 16)
+            })
+          ]
+        }),
+        // Body
+        jsx('div', {
+          style: { flex: 1, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 10 },
+          children: jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 }, children: [
+            FieldRow('Label',
+              jsx('input', {
+                style: inputStyle,
+                placeholder: 'Pin label',
+                value: label,
+                onChange: function (e) { setLabel(e.target.value); }
+              })
+            ),
+            fields
+          ]})
+        }),
+        // Footer
+        jsxs('div', {
+          style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderTop: '1px solid var(--color-border)', flexShrink: 0 },
+          children: [
             onDelete ? jsx('button', {
-              style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-muted-foreground)' },
+              style: { display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', fontSize: 12, borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-muted-foreground)', cursor: 'pointer' },
               className: 'hover:bg-muted-30 hover:text-error transition-colors',
               title: 'Delete pin',
               onClick: function () { onDelete(pin.id); },
-              children: Icon('trash', '', 13)
-            }) : null
-          ]}),
-          FieldRow('Label', jsx('input', { style: inputStyle, placeholder: 'Pin label', value: label, onChange: function (e) { setLabel(e.target.value); } })),
-          fields,
-          jsxs('div', { style: { display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 2 }, children: [
+              children: jsxs('span', { style: { display: 'flex', alignItems: 'center', gap: 5 }, children: [Icon('trash', '', 14), 'Delete'] })
+            }) : null,
+            jsx('div', { style: { flex: 1 } }),
             jsx('button', {
-              style: { padding: '4px 10px', fontSize: 11, borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-muted-foreground)', cursor: 'pointer' },
+              style: { padding: '6px 14px', fontSize: 12, borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-muted-foreground)', cursor: 'pointer' },
               className: 'hover:bg-muted-30 hover:text-foreground transition-colors',
               onClick: onCancel,
               children: 'Cancel'
             }),
             jsx('button', {
-              style: { padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 6, border: 'none', cursor: 'pointer', color: 'var(--color-primary-foreground, #fff)', backgroundColor: 'var(--color-accent-purple)' },
-              className: 'transition-opacity',
+              style: { padding: '6px 14px', fontSize: 12, fontWeight: 500, borderRadius: 6, border: 'none', cursor: 'pointer', color: 'var(--color-primary-foreground, #fff)', backgroundColor: 'var(--color-accent-purple)' },
               onClick: handleSave,
               children: 'Save'
             })
-          ]})
-        ]
-      })
+          ]
+        })
+      ]
     });
   };
 
@@ -628,14 +770,29 @@ var Model3DViewer = (function () {
     var configuringPinId = configPinState[0];
     var setConfiguringPinId = configPinState[1];
 
-    // Fullscreen state — the container is the fullscreen target so the whole
-    // 3D canvas + overlays expand. We track the live state via the
-    // `fullscreenchange` event rather than toggling optimistically, so the
-    // icon stays in sync even if the browser rejects the request (e.g. user
-    // denied permission) or the user exits via Esc.
+    // Fullscreen state. We prefer the native Fullscreen API, but community
+    // components run inside a sandboxed <iframe> that usually lacks
+    // `allowfullscreen`, so requestFullscreen() rejects. When that happens we
+    // fall back to a CSS pseudo-fullscreen (position:fixed; inset:0). `fsPseudo`
+    // drives the fixed style; `isFullscreen` drives the toolbar icon.
     var fsState = React.useState(false);
     var isFullscreen = fsState[0];
     var setIsFullscreen = fsState[1];
+    var fsPseudoState = React.useState(false);
+    var fsPseudo = fsPseudoState[0];
+    var setFsPseudo = fsPseudoState[1];
+
+    // Recently-used device IDs for the config sidebar's Device ID autocomplete.
+    // The platform exposes no device-list API to components, so we can't
+    // enumerate every device — this history is the best assist we can offer.
+    var knownDevicesState = React.useState(function () {
+      try {
+        var raw = localStorage.getItem('neomind_3dviewer_devices');
+        return raw ? JSON.parse(raw) : [];
+      } catch (e) { return []; }
+    });
+    var knownDevices = knownDevicesState[0];
+    var setKnownDevices = knownDevicesState[1];
 
     var pinValuesState = React.useState({});
     var pinValues = pinValuesState[0];
@@ -652,12 +809,10 @@ var Model3DViewer = (function () {
     var pinMeshesRef = React.useRef({});
     var pinsRef = React.useRef(pins);
     var selectedPinIdRef = React.useRef(selectedPinId);
-    var configuringPinIdRef = React.useRef(configuringPinId);
 
     // Refs synchronization
     React.useEffect(function () { pinsRef.current = pins; }, [pins]);
     React.useEffect(function () { selectedPinIdRef.current = selectedPinId; }, [selectedPinId]);
-    React.useEffect(function () { configuringPinIdRef.current = configuringPinId; }, [configuringPinId]);
 
     // --- Shared scene lifecycle helpers (used by both modelUrl and drag-drop paths) ---
     // Single source of truth for the render loop so the two paths can't drift
@@ -702,20 +857,7 @@ var Model3DViewer = (function () {
           } else if (detailEl) {
             detailEl.style.display = 'none';
           }
-          if (pin.id === configuringPinIdRef.current) {
-            var configEl = popupRefs.current[pin.id + '_config'];
-            if (configEl) {
-              var popW = configEl.offsetWidth || 200;
-              var popH = configEl.offsetHeight || 200;
-              var cx = Math.max(4, Math.min(sx - popW / 2, containerW - popW - 4));
-              var cy = (sy - popH - 10 >= 8)
-                ? sy - popH - 10
-                : Math.min(sy + 14, containerH - popH - 8);
-              configEl.style.left = cx + 'px';
-              configEl.style.top = cy + 'px';
-              configEl.style.display = screen.behind ? 'none' : '';
-            }
-          }
+          // (Config panel is now a docked sidebar — no per-frame positioning.)
         }
       }
       animate();
@@ -854,26 +996,60 @@ var Model3DViewer = (function () {
       sceneHandle.controls.update();
     };
 
-    // Fullscreen toggle — targets the component root container. The
-    // container already fills its grid cell, so going fullscreen expands the
-    // whole viewer (canvas + overlays) instead of being a no-op.
+    // Fullscreen toggle — targets the component root container. Prefers the
+    // native Fullscreen API; if that's blocked (community components run in a
+    // sandboxed <iframe> that usually has no `allowfullscreen`, so the promise
+    // rejects) falls back to CSS pseudo-fullscreen via the `fsPseudo` state.
     var toggleFullscreen = function () {
       var el = containerRef.current;
       if (!el) return;
-      if (!document.fullscreenElement) {
-        var req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
-        if (req) req.call(el);
-      } else {
+
+      // Exit path: native FS active → exit native; else pseudo active → clear it.
+      if (document.fullscreenElement) {
         var exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
-        if (exit) exit.call(document);
+        if (exit) { try { exit.call(document); } catch (e) {} }
+        return;
       }
+      if (fsPseudo) {
+        setFsPseudo(false);
+        setIsFullscreen(false);
+        return;
+      }
+
+      // Enter path: try native first.
+      var req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+      if (req) {
+        try {
+          var result = req.call(el);
+          if (result && typeof result.then === 'function') {
+            result.then(function () {
+              /* native FS engaged; fullscreenchange sets the state */
+            }).catch(function () {
+              // Blocked by the sandbox → CSS fallback.
+              setFsPseudo(true);
+              setIsFullscreen(true);
+            });
+            return;
+          }
+          // Synchronous legacy API — assume success; fullscreenchange handles state.
+          return;
+        } catch (e) { /* fall through to pseudo */ }
+      }
+      // No usable Fullscreen API → CSS pseudo-fullscreen.
+      setFsPseudo(true);
+      setIsFullscreen(true);
     };
 
-    // Keep isFullscreen in sync with the browser's actual fullscreen state.
-    // The ResizeObserver then handles re-fitting the canvas to the new size.
+    // Sync state with the browser's native fullscreen (covers Esc exit).
+    // The ResizeObserver re-fits the canvas for both native and pseudo modes.
     React.useEffect(function () {
       var handler = function () {
-        setIsFullscreen(!!document.fullscreenElement);
+        if (document.fullscreenElement) {
+          setFsPseudo(false);
+          setIsFullscreen(true);
+        } else {
+          setIsFullscreen(false);
+        }
       };
       document.addEventListener('fullscreenchange', handler);
       document.addEventListener('webkitfullscreenchange', handler);
@@ -882,6 +1058,18 @@ var Model3DViewer = (function () {
         document.removeEventListener('webkitfullscreenchange', handler);
       };
     }, []);
+
+    // Record a device ID used in the config sidebar so it autocompletes next time.
+    var recordDeviceUsed = function (id) {
+      var trimmed = (id || '').trim();
+      if (!trimmed) return;
+      setKnownDevices(function (prev) {
+        if (prev.indexOf(trimmed) !== -1) return prev;
+        var next = prev.concat([trimmed]).slice(-50);
+        try { localStorage.setItem('neomind_3dviewer_devices', JSON.stringify(next)); } catch (e) {}
+        return next;
+      });
+    };
 
     var handlePinConfigSave = function (updatedPin) {
       setPins(function (prev) {
@@ -1170,10 +1358,14 @@ var Model3DViewer = (function () {
       handle.controls.autoRotateSpeed = 2.0;
     }, [autoRotate, editMode, loadStateValue]);
 
+    var rootStyle = fsPseudo
+      ? { position: 'fixed', inset: 0, width: '100vw', height: '100vh', overflow: 'hidden', zIndex: 9999, borderRadius: 0, backgroundColor: 'var(--color-muted)' }
+      : { position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 12 };
+
     return jsxs('div', {
       ref: containerRef,
-      style: { position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 12 },
-      className: 'bg-muted',
+      style: rootStyle,
+      className: fsPseudo ? '' : 'bg-muted',
       children: [
         jsx('style', { dangerouslySetInnerHTML: { __html: '@keyframes spin { to { transform: rotate(360deg) } }' } }),
         // Empty state — no model loaded yet via either path (URL or drag-drop)
@@ -1259,19 +1451,21 @@ var Model3DViewer = (function () {
                   detailRef: popupRefs
                 })]
               : []
-          ).concat(
-            configuringPinId && pins.find(function (p) { return p.id === configuringPinId; })
-              ? [jsx(PinConfigPopover, {
-                  key: 'config_' + configuringPinId,
-                  pin: pins.find(function (p) { return p.id === configuringPinId; }),
-                  onSave: handlePinConfigSave,
-                  onCancel: handlePinConfigCancel,
-                  onDelete: function (id) { deletePin(id); },
-                  popoverRef: popupRefs
-                })]
-              : []
           )
-        })
+        }),
+        // Config sidebar — docked to the right edge while a pin is being edited.
+        configuringPinId && pins.find(function (p) { return p.id === configuringPinId; })
+          ? jsx(PinConfigSidebar, {
+              key: 'config_' + configuringPinId,
+              pin: pins.find(function (p) { return p.id === configuringPinId; }),
+              width: Math.max(200, Math.min(300, (containerSize.w || 300) - 8)),
+              onSave: handlePinConfigSave,
+              onCancel: handlePinConfigCancel,
+              onDelete: function (id) { deletePin(id); },
+              knownDevices: knownDevices,
+              onDeviceUsed: recordDeviceUsed
+            })
+          : null
       ]
     });
   }
