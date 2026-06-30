@@ -540,6 +540,33 @@ var Model3DViewer = (function () {
         .then(function () { setKeysLoading(false); });
     }, [deviceId, pin.type]);
 
+    // Device-type schema (metrics + commands) for the selected device.
+    // Sourced from window.neomind.getDeviceType() so the metric/command
+    // pickers show the stable schema, not just live-reported keys.
+    var typeMetricsState = React.useState([]);
+    var typeMetrics = typeMetricsState[0];
+    var setTypeMetrics = typeMetricsState[1];
+    var typeCommandsState = React.useState([]);
+    var typeCommands = typeCommandsState[0];
+    var setTypeCommands = typeCommandsState[1];
+    React.useEffect(function () {
+      var id = (deviceId || '').trim();
+      var neomind = window.neomind;
+      if (!id || !neomind || typeof neomind.getDeviceType !== 'function') {
+        setTypeMetrics([]);
+        setTypeCommands([]);
+        return;
+      }
+      // Resolve device_type from the picked device (or fall back to the id itself).
+      var dev = deviceList.find(function (d) { return d.id === id; });
+      var typeName = (dev && dev.device_type) || '';
+      if (!typeName) { setTypeMetrics([]); setTypeCommands([]); return; }
+      neomind.getDeviceType(typeName).then(function (t) {
+        setTypeMetrics(t ? t.metrics : []);
+        setTypeCommands(t ? t.commands : []);
+      }).catch(function () { setTypeMetrics([]); setTypeCommands([]); });
+    }, [deviceId, deviceList]);
+
     var handleSave = function () {
       var updated = Object.assign({}, pin, { label: label });
       if (pin.type === 'metric') {
@@ -592,22 +619,28 @@ var Model3DViewer = (function () {
 
     var fields = null;
     if (pin.type === 'metric') {
-      // If we have keys for this device, use a <select>; otherwise a text input
-      // so the user can still type a key for a device that isn't reporting yet.
-      var metricControl = metricKeys.length > 0
-        ? (function () {
-            var opts = metricKeys.slice();
-            if (metricKey && opts.indexOf(metricKey) === -1) opts.unshift(metricKey);
-            return jsxs('select', {
-              style: selectStyle,
-              value: metricKey,
-              onChange: function (e) { setMetricKey(e.target.value); },
-              children: [
-                jsx('option', { value: '', children: '— Select a metric —' }),
-                opts.map(function (k) { return jsx('option', { value: k, children: k }, k); })
-              ]
-            });
-          })()
+      // Build metric options from the device-type schema (preferred, carries
+      // display_name) plus any live-reported keys not in the schema.
+      var optList = typeMetrics.map(function (m) {
+        return { value: m.name, label: m.display_name ? (m.display_name + ' (' + m.name + ')') : m.name };
+      });
+      var schemaNames = optList.map(function (o) { return o.value; });
+      for (var i = 0; i < metricKeys.length; i++) {
+        if (schemaNames.indexOf(metricKeys[i]) === -1) optList.push({ value: metricKeys[i], label: metricKeys[i] });
+      }
+      if (metricKey && !optList.some(function (o) { return o.value === metricKey; })) {
+        optList.unshift({ value: metricKey, label: metricKey });
+      }
+      var metricControl = optList.length > 0
+        ? jsxs('select', {
+            style: selectStyle,
+            value: metricKey,
+            onChange: function (e) { setMetricKey(e.target.value); },
+            children: [
+              jsx('option', { value: '', children: '— Select a metric —' }),
+              optList.map(function (o) { return jsx('option', { value: o.value, children: o.label }, o.value); })
+            ]
+          })
         : jsx('input', {
             style: inputStyle,
             placeholder: keysLoading ? 'Loading metrics…' : 'e.g. values.temperature',
@@ -615,11 +648,11 @@ var Model3DViewer = (function () {
             onChange: function (e) { setMetricKey(e.target.value); }
           });
       fields = jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 }, children: [
-        deviceField('Type or pick a recently-used device. Metrics load automatically once the device reports.'),
+        deviceField('Pick a device. Metrics load from the device-type schema.'),
         FieldRow('Metric key', metricControl)
       ]});
     } else if (pin.type === 'device') {
-      fields = deviceField('Type or pick a recently-used device.');
+      fields = deviceField('Pick a device.');
     } else if (pin.type === 'annotation') {
       fields = FieldRow('Note',
         jsx('textarea', {
@@ -630,17 +663,31 @@ var Model3DViewer = (function () {
         })
       );
     } else if (pin.type === 'command') {
-      fields = jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 }, children: [
-        deviceField('Type or pick a recently-used device.'),
-        FieldRow('Command key',
-          jsx('input', {
+      var cmdOptList = typeCommands.map(function (c) {
+        return { value: c.name, label: c.display_name ? (c.display_name + ' (' + c.name + ')') : c.name };
+      });
+      if (cmdKey && !cmdOptList.some(function (o) { return o.value === cmdKey; })) {
+        cmdOptList.unshift({ value: cmdKey, label: cmdKey });
+      }
+      var cmdControl = cmdOptList.length > 0
+        ? jsxs('select', {
+            style: selectStyle,
+            value: cmdKey,
+            onChange: function (e) { setCmdKey(e.target.value); },
+            children: [
+              jsx('option', { value: '', children: '— Select a command —' }),
+              cmdOptList.map(function (o) { return jsx('option', { value: o.value, children: o.label }, o.value); })
+            ]
+          })
+        : jsx('input', {
             style: inputStyle,
             placeholder: 'e.g. trigger_capture',
             value: cmdKey,
             onChange: function (e) { setCmdKey(e.target.value); }
-          }),
-          'Command keys aren\'t enumerable on the platform; enter the exact key.'
-        )
+          });
+      fields = jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 }, children: [
+        deviceField('Pick a device.'),
+        FieldRow('Command key', cmdControl, 'Falls back to free text if the device type defines no commands.')
       ]});
     }
 
