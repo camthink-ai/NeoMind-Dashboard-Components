@@ -578,6 +578,86 @@ var Model3DViewer = (function () {
     React.useEffect(function () { selectedPinIdRef.current = selectedPinId; }, [selectedPinId]);
     React.useEffect(function () { configuringPinIdRef.current = configuringPinId; }, [configuringPinId]);
 
+    // --- Shared scene lifecycle helpers (used by both modelUrl and drag-drop paths) ---
+    // Single source of truth for the render loop so the two paths can't drift
+    // (the drop path previously ran a simpler loop that skipped detail-card /
+    // config-popover positioning and clamping).
+    var startRenderLoop = function () {
+      function animate() {
+        if (!sceneHandleRef.current) return;
+        sceneHandleRef.current.frameId = requestAnimationFrame(animate);
+        sceneHandleRef.current.controls.update();
+        sceneHandleRef.current.renderer.render(sceneHandleRef.current.scene, sceneHandleRef.current.camera);
+        var containerW = sceneHandleRef.current.container.offsetWidth;
+        var containerH = sceneHandleRef.current.container.offsetHeight;
+        var currentPins = pinsRef.current;
+        for (var i = 0; i < currentPins.length; i++) {
+          var pin = currentPins[i];
+          var pinMesh = pinMeshesRef.current[pin.id];
+          if (!pinMesh) continue;
+          var screen = projectToScreen(pinMesh.position, sceneHandleRef.current.camera, containerW, containerH);
+          var sx = Math.max(8, Math.min(screen.x, containerW - 8));
+          var sy = Math.max(8, Math.min(screen.y, containerH - 8));
+          var popupEl = popupRefs.current[pin.id];
+          if (popupEl) {
+            popupEl.style.left = sx + 'px';
+            popupEl.style.top = sy + 'px';
+            popupEl.style.display = screen.behind ? 'none' : '';
+          }
+          var detailEl = popupRefs.current[pin.id + '_detail'];
+          if (pin.id === selectedPinIdRef.current && detailEl) {
+            var dx = Math.min(sx + 12, containerW - 170);
+            var dy = Math.max(4, sy - 60);
+            detailEl.style.left = dx + 'px';
+            detailEl.style.top = dy + 'px';
+            detailEl.style.display = screen.behind ? 'none' : '';
+          } else if (detailEl) {
+            detailEl.style.display = 'none';
+          }
+          if (pin.id === configuringPinIdRef.current) {
+            var configEl = popupRefs.current[pin.id + '_config'];
+            if (configEl) {
+              var cx = Math.min(sx + 12, containerW - 190);
+              var cy = Math.max(4, sy - 30);
+              configEl.style.left = cx + 'px';
+              configEl.style.top = cy + 'px';
+              configEl.style.display = screen.behind ? 'none' : '';
+            }
+          }
+        }
+      }
+      animate();
+    };
+
+    var attachResizeObserver = function (container) {
+      if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+      observerRef.current = new ResizeObserver(function (entries) {
+        if (!sceneHandleRef.current) return;
+        var w = entries[0].contentRect.width;
+        var h = entries[0].contentRect.height;
+        if (!w || !h) return;
+        sceneHandleRef.current.camera.aspect = w / h;
+        sceneHandleRef.current.camera.updateProjectionMatrix();
+        sceneHandleRef.current.renderer.setSize(w, h);
+        setContainerSize({ w: w, h: h });
+      });
+      observerRef.current.observe(container);
+    };
+
+    // Dispose any existing observer + scene, create a fresh scene, start the
+    // render loop, and attach the ResizeObserver. Returns the new scene handle.
+    var buildFreshScene = function (container, bgColor) {
+      if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+      disposeScene(sceneHandleRef.current);
+      sceneHandleRef.current = null;
+      modelRef.current = null;
+      var sceneHandle = createScene(container, bgColor);
+      sceneHandleRef.current = sceneHandle;
+      startRenderLoop();
+      attachResizeObserver(container);
+      return sceneHandle;
+    };
+
     // Drag-drop file upload
     React.useEffect(function () {
       var container = containerRef.current;
@@ -598,19 +678,8 @@ var Model3DViewer = (function () {
         if (ext.endsWith('.glb') || ext.endsWith('.gltf')) {
           setLoadState('loading');
           loadThreeJS().then(function () {
-            // Disconnect existing ResizeObserver (e.g. from a previous drop)
-            if (observerRef.current) {
-              observerRef.current.disconnect();
-              observerRef.current = null;
-            }
-            // Dispose existing scene
-            disposeScene(sceneHandleRef.current);
-            sceneHandleRef.current = null;
-            modelRef.current = null;
-
             // A new model is being loaded — pin coordinates are model-specific
-            // and cannot be reused, so clear any stale pin meshes/state from a
-            // previous model (mirrors the modelUrl load path).
+            // and cannot be reused, so clear any stale pin meshes/state.
             Object.keys(pinMeshesRef.current).forEach(function (id) {
               var mesh = pinMeshesRef.current[id];
               if (mesh) { mesh.geometry.dispose(); mesh.material.dispose(); }
@@ -618,56 +687,12 @@ var Model3DViewer = (function () {
             pinMeshesRef.current = {};
             setPins([]);
 
-            var sceneHandle = createScene(container, config.backgroundColor || '#111827');
-            sceneHandleRef.current = sceneHandle;
-
+            var sceneHandle = buildFreshScene(container, config.backgroundColor || '#111827');
             return loadModel(sceneHandle, file);
           }).then(function (model) {
+            if (!model) return;
             modelRef.current = model;
             setLoadState('loaded');
-            // Start render loop
-            function animate() {
-              if (!sceneHandleRef.current) return;
-              sceneHandleRef.current.frameId = requestAnimationFrame(animate);
-              sceneHandleRef.current.controls.update();
-              if (config.autoRotate) {
-                sceneHandleRef.current.controls.autoRotate = true;
-              }
-              sceneHandleRef.current.renderer.render(sceneHandleRef.current.scene, sceneHandleRef.current.camera);
-
-              // Per-frame pin DOM position updates
-              var containerW = sceneHandleRef.current.container.offsetWidth;
-              var containerH = sceneHandleRef.current.container.offsetHeight;
-              var currentPins = pinsRef.current;
-              for (var i = 0; i < currentPins.length; i++) {
-                var pin = currentPins[i];
-                var pinMesh = pinMeshesRef.current[pin.id];
-                if (!pinMesh) continue;
-                var screen = projectToScreen(pinMesh.position, sceneHandleRef.current.camera, containerW, containerH);
-                var popupEl = popupRefs.current[pin.id];
-                if (popupEl) {
-                  popupEl.style.left = screen.x + 'px';
-                  popupEl.style.top = screen.y + 'px';
-                  popupEl.style.display = screen.behind ? 'none' : '';
-                }
-              }
-            }
-            animate();
-
-            // ResizeObserver — keep canvas in sync with grid-cell size
-            // (mirrors the modelUrl load path; without this, resizing the
-            //  dashboard block never calls renderer.setSize)
-            observerRef.current = new ResizeObserver(function (entries) {
-              if (!sceneHandleRef.current) return;
-              var w = entries[0].contentRect.width;
-              var h = entries[0].contentRect.height;
-              if (!w || !h) return;
-              sceneHandleRef.current.camera.aspect = w / h;
-              sceneHandleRef.current.camera.updateProjectionMatrix();
-              sceneHandleRef.current.renderer.setSize(w, h);
-              setContainerSize({ w: w, h: h });
-            });
-            observerRef.current.observe(container);
           }).catch(function (err) {
             setErrorMsg(err.message || 'Failed to load model');
             setLoadState('error');
@@ -859,8 +884,11 @@ var Model3DViewer = (function () {
     var activePinTypeRef = React.useRef(activePinType);
     React.useEffect(function () { activePinTypeRef.current = activePinType; }, [activePinType]);
 
-    // Click handler for pin placement
+    // Click handler for pin placement — re-attaches whenever a model finishes
+    // loading (either path). Guard on loadStateValue === 'loaded' so we don't
+    // attach to a stale canvas during the 'loading' transition.
     React.useEffect(function () {
+      if (loadStateValue !== 'loaded') return;
       var sceneHandle = sceneHandleRef.current;
       var model = modelRef.current;
       if (!sceneHandle || !model) return;
@@ -904,7 +932,7 @@ var Model3DViewer = (function () {
       return function cleanup() {
         sceneHandle.renderer.domElement.removeEventListener('click', handleClick);
       };
-    }, [modelRef.current]);
+    }, [loadStateValue]);
 
     // Model URL change handler (replaces old Three.js init)
     var prevModelUrlRef = React.useRef('');
@@ -947,16 +975,7 @@ var Model3DViewer = (function () {
         var container = containerRef.current;
         if (!container) return;
 
-        // Dispose old scene if exists
-        disposeScene(sceneHandleRef.current);
-
-        var sceneHandle = createScene(container, config.backgroundColor || '#111827');
-        sceneHandleRef.current = sceneHandle;
-
-        if (autoRotate) {
-          sceneHandle.controls.autoRotate = true;
-          sceneHandle.controls.autoRotateSpeed = 2.0;
-        }
+        var sceneHandle = buildFreshScene(container, config.backgroundColor || '#111827');
 
         return loadModel(sceneHandle, url).then(function (model) {
           modelRef.current = model;
@@ -973,71 +992,6 @@ var Model3DViewer = (function () {
             pinMeshesRef.current[pin.id] = pin3d;
           });
           setPins(existingPins);
-
-          // Start render loop
-          function animate() {
-            if (!sceneHandleRef.current) return;
-            sceneHandleRef.current.frameId = requestAnimationFrame(animate);
-            sceneHandleRef.current.controls.update();
-            sceneHandleRef.current.renderer.render(sceneHandleRef.current.scene, sceneHandleRef.current.camera);
-            // Pin DOM updates
-            var containerW = sceneHandleRef.current.container.offsetWidth;
-            var containerH = sceneHandleRef.current.container.offsetHeight;
-            var currentPins = pinsRef.current;
-            for (var i = 0; i < currentPins.length; i++) {
-              var pin = currentPins[i];
-              var pinMesh = pinMeshesRef.current[pin.id];
-              if (!pinMesh) continue;
-              var screen = projectToScreen(pinMesh.position, sceneHandleRef.current.camera, containerW, containerH);
-              // Clamp to container bounds
-              var sx = Math.max(8, Math.min(screen.x, containerW - 8));
-              var sy = Math.max(8, Math.min(screen.y, containerH - 8));
-              var popupEl = popupRefs.current[pin.id];
-              if (popupEl) {
-                popupEl.style.left = sx + 'px';
-                popupEl.style.top = sy + 'px';
-                popupEl.style.display = screen.behind ? 'none' : '';
-              }
-              // Detail card — positioned right of pin, clamped
-              var detailEl = popupRefs.current[pin.id + '_detail'];
-              if (pin.id === selectedPinIdRef.current && detailEl) {
-                var dx = Math.min(sx + 12, containerW - 170);
-                var dy = Math.max(4, sy - 60);
-                detailEl.style.left = dx + 'px';
-                detailEl.style.top = dy + 'px';
-                detailEl.style.display = screen.behind ? 'none' : '';
-              } else if (detailEl) {
-                detailEl.style.display = 'none';
-              }
-              // Config popover — positioned right of pin, clamped
-              if (pin.id === configuringPinIdRef.current) {
-                var configEl = popupRefs.current[pin.id + '_config'];
-                if (configEl) {
-                  var cx = Math.min(sx + 12, containerW - 190);
-                  var cy = Math.max(4, sy - 30);
-                  configEl.style.left = cx + 'px';
-                  configEl.style.top = cy + 'px';
-                  configEl.style.display = screen.behind ? 'none' : '';
-                }
-              }
-            }
-          }
-          animate();
-
-          // ResizeObserver — store in observerRef so cleanup can disconnect it
-          if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
-          observerRef.current = new ResizeObserver(function (entries) {
-            if (!sceneHandleRef.current) return;
-            var w = entries[0].contentRect.width;
-            var h = entries[0].contentRect.height;
-            if (!w || !h) return;
-            sceneHandleRef.current.camera.aspect = w / h;
-            sceneHandleRef.current.camera.updateProjectionMatrix();
-            sceneHandleRef.current.renderer.setSize(w, h);
-            // Update responsive sizing state
-            setContainerSize({ w: w, h: h });
-          });
-          observerRef.current.observe(container);
         });
       }).catch(function (err) {
         setErrorMsg(err.message || 'Failed to load model');
@@ -1065,13 +1019,15 @@ var Model3DViewer = (function () {
       handle.scene.background = new THREE.Color(color);
     }, [bgColor]);
 
-    // React to autoRotate / editMode changes
+    // React to autoRotate / editMode changes — also re-run when a new scene
+    // finishes loading (buildFreshScene no longer bootstraps autoRotate, so
+    // this effect must apply it to the fresh scene for both load paths).
     React.useEffect(function () {
       var handle = sceneHandleRef.current;
       if (!handle) return;
       handle.controls.autoRotate = autoRotate && !editMode;
       handle.controls.autoRotateSpeed = 2.0;
-    }, [autoRotate, editMode]);
+    }, [autoRotate, editMode, loadStateValue]);
 
     return jsxs('div', {
       ref: containerRef,
