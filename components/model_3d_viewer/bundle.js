@@ -4,18 +4,37 @@ var Model3DViewer = (function () {
   var jsxs = window.jsxRuntime.jsxs;
 
   // --- SVG Icons (inline, no emoji) ---
-  var Icons = {
-    metric: '<svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="14" fill="currentColor"/><path d="M10 22V14L14 18L18 10L22 16V22" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    device: '<svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="14" fill="currentColor"/><rect x="10" y="12" width="12" height="8" rx="1.5" stroke="#fff" stroke-width="1.8"/><line x1="16" y1="20" x2="16" y2="23" stroke="#fff" stroke-width="1.8"/><line x1="12" y1="23" x2="20" y2="23" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>',
-    annotation: '<svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="14" fill="currentColor"/><path d="M12 10h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-3l-3 2.5V22h-2a1 1 0 0 1-1-1V11a1 1 0 0 1 1-1z" stroke="#fff" stroke-width="1.8"/><line x1="14" y1="14" x2="18" y2="14" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><line x1="14" y1="17" x2="17" y2="17" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>',
-    command: '<svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="14" fill="currentColor"/><path d="M13 11l5 5-5 5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-    reset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>',
-    fullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
-    play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
-    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
-    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
-    upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'
+  // One consistent lucide-style set: 24x24 viewBox, stroke=currentColor,
+  // strokeWidth 2, round caps/joins. Colored via `text-*` token classes.
+  var iconInner = {
+    metric: '<path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/>',
+    device: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+    annotation: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    command: '<polyline points="9 18 15 12 9 6"/>',
+    edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+    reset: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    fullscreen: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
+    'fullscreen-exit': '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>',
+    play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>'
+  };
+
+  var Icon = function (name, className, size) {
+    var s = size || 14;
+    return jsx('svg', {
+      viewBox: '0 0 24 24',
+      width: s,
+      height: s,
+      fill: 'none',
+      stroke: 'currentColor',
+      strokeWidth: 2,
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      className: className || '',
+      dangerouslySetInnerHTML: { __html: iconInner[name] || '' }
+    });
   };
 
   // Color tokens for pin types (semantic design tokens, Three.js hex fallbacks for 3D meshes)
@@ -237,7 +256,8 @@ var Model3DViewer = (function () {
     var isSmall = props.isSmall || false;
     var onPointerDown = props.onPointerDown;
 
-    var dotStyle = { width: 8, height: 8, borderRadius: '50%', backgroundColor: pinColorVar(pin.type) };
+    var colorVar = pinColorVar(pin.type);
+    var dotStyle = { width: 8, height: 8, borderRadius: '50%', backgroundColor: colorVar, boxShadow: '0 0 0 2px var(--color-background, #fff)' };
     var wrapStyle = { position: 'absolute', pointerEvents: 'auto', cursor: 'pointer', transform: 'translate(-50%, -50%)', zIndex: 10, display: 'none' };
 
     if (isSmall) {
@@ -256,10 +276,10 @@ var Model3DViewer = (function () {
       onClick: function (e) { e.stopPropagation(); onClick(pin.id); },
       onPointerDown: onPointerDown ? function (e) { onPointerDown(pin.id, e); } : undefined,
       children: jsxs('div', {
-        style: { display: 'flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 6, backgroundColor: 'oklch(0.18 0.02 270 / 90%)', backdropFilter: 'blur(6px)', border: '1px solid oklch(0.4 0.02 270 / 30%)', whiteSpace: 'nowrap' },
+        className: 'flex items-center gap-1.5 px-2 py-1 rounded-md bg-popover border border-border shadow-md whitespace-nowrap',
         children: [
           jsx('div', { style: dotStyle }),
-          jsx('span', { style: { fontSize: 11, color: 'oklch(0.85 0.02 270)' }, children: pin.label || pin.type })
+          jsx('span', { className: 'text-[11px] leading-none text-foreground', children: pin.label || pin.type })
         ]
       })
     });
@@ -273,66 +293,49 @@ var Model3DViewer = (function () {
     var onSelectPinType = props.onSelectPinType;
     var onResetCamera = props.onResetCamera;
     var isSmall = props.isSmall || false;
+    var onToggleFullscreen = props.onToggleFullscreen;
+    var isFullscreen = props.isFullscreen;
 
     var pinTypes = ['metric', 'device', 'annotation', 'command'];
     var typeLabels = { metric: 'Metric', device: 'Device', annotation: 'Note', command: 'Cmd' };
+    var typeColorClass = { metric: 'text-success', device: 'text-info', annotation: 'text-warning', command: 'text-accent-purple' };
 
-    var btnBase = { width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: 'none', cursor: 'pointer', color: 'oklch(0.6 0.02 270)', background: 'transparent' };
-    var iconWrap = function (svg) { return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">' + svg.replace(/<svg[^>]*>/, '').replace(/<\/svg>/, '') + '</svg>'; };
+    var toolbarBase = 'flex items-center gap-0.5 absolute bottom-1.5 left-1/2 -translate-x-1/2 z-40 px-1 py-0.5 rounded-lg bg-popover border border-border shadow-md';
+
+    var btnClass = function (active, colorClass) {
+      return 'flex items-center justify-center w-6 h-6 rounded-md border-none cursor-pointer transition-colors ' +
+        (active
+          ? 'bg-muted-30 ' + (colorClass || 'text-foreground')
+          : 'bg-transparent text-muted-foreground hover:bg-muted-30 hover:text-foreground');
+    };
 
     if (!editMode) {
       return jsxs('div', {
-        style: { position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 1, borderRadius: 6, padding: '2px 3px', zIndex: 40, backgroundColor: 'oklch(0.15 0.02 270 / 60%)', backdropFilter: 'blur(6px)' },
+        className: toolbarBase,
         children: [
-          jsx('button', {
-            style: Object.assign({}, btnBase),
-            onClick: onToggleEdit,
-            title: 'Edit pins',
-            onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
-            onMouseLeave: function (e) { e.currentTarget.style.background = 'transparent'; },
-            dangerouslySetInnerHTML: { __html: iconWrap(Icons.edit) }
-          }),
-          jsx('button', {
-            style: Object.assign({}, btnBase),
-            onClick: onResetCamera,
-            title: 'Reset view',
-            onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
-            onMouseLeave: function (e) { e.currentTarget.style.background = 'transparent'; },
-            dangerouslySetInnerHTML: { __html: iconWrap(Icons.reset) }
-          }),
-          jsx('button', {
-            style: Object.assign({}, btnBase),
-            title: 'Fullscreen',
-            onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
-            onMouseLeave: function (e) { e.currentTarget.style.background = 'transparent'; },
-            dangerouslySetInnerHTML: { __html: iconWrap(Icons.fullscreen) }
-          })
+          jsx('button', { className: btnClass(false), onClick: onToggleEdit, title: 'Edit pins', children: Icon('edit', '', 14) }),
+          jsx('button', { className: btnClass(false), onClick: onResetCamera, title: 'Reset view', children: Icon('reset', '', 14) }),
+          jsx('button', { className: btnClass(false), onClick: onToggleFullscreen, title: isFullscreen ? 'Exit fullscreen' : 'Fullscreen', children: Icon(isFullscreen ? 'fullscreen-exit' : 'fullscreen', '', 14) })
         ]
       });
     }
 
     return jsxs('div', {
-      style: { position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 1, borderRadius: 6, padding: '2px 3px', zIndex: 40, backgroundColor: 'oklch(0.15 0.02 270 / 60%)', backdropFilter: 'blur(6px)', border: '1px solid oklch(0.55 0.2 310 / 30%)' },
+      className: toolbarBase + ' border-accent-purple',
       children: [
         pinTypes.map(function (t) {
           var isActive = activePinType === t;
-          var activeBg = isActive ? 'oklch(0.3 0.02 270)' : 'transparent';
-          var hue = t === 'metric' ? 200 : t === 'device' ? 155 : t === 'annotation' ? 85 : 310;
           return jsx('button', {
-            style: Object.assign({}, btnBase, isActive ? { background: activeBg, color: 'oklch(0.85 0.08 ' + hue + ')' } : {}),
+            className: btnClass(isActive, typeColorClass[t]),
             onClick: function () { onSelectPinType(t); },
             title: typeLabels[t],
-            onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
-            onMouseLeave: function (e) { e.currentTarget.style.background = activeBg; },
-            dangerouslySetInnerHTML: { __html: iconWrap(Icons[t]) }
+            children: Icon(t, '', 14)
           }, t);
         }),
-        jsx('div', { style: { width: 1, height: 16, alignSelf: 'center', margin: '0 1px', backgroundColor: 'oklch(0.4 0.02 270)' } }),
+        jsx('div', { className: 'w-px h-4 mx-0.5 bg-border' }),
         jsx('button', {
-          style: Object.assign({}, btnBase, { width: 'auto', padding: '0 6px', fontSize: 10 }),
+          className: 'flex items-center h-6 px-2 rounded-md border-none cursor-pointer text-[11px] font-medium bg-transparent text-muted-foreground hover:bg-muted-30 hover:text-foreground transition-colors',
           onClick: onToggleEdit,
-          onMouseEnter: function (e) { e.currentTarget.style.background = 'oklch(0.3 0.02 270)'; },
-          onMouseLeave: function (e) { e.currentTarget.style.background = 'transparent'; },
           children: 'Done'
         })
       ]
@@ -346,33 +349,34 @@ var Model3DViewer = (function () {
     var onAction = props.onAction;
     var onClose = props.onClose;
     var detailRef = props.detailRef;
-    var colorKey = pin.type === 'annotation' ? 'warning' : pin.type === 'command' ? 'accent-purple' : pin.type;
+    var colorVar = pinColorVar(pin.type);
 
-    var cardInner = { backgroundColor: 'oklch(0.18 0.02 270 / 92%)', backdropFilter: 'blur(8px)', borderRadius: 10, border: '1px solid oklch(0.4 0.02 270 / 30%)', overflow: 'hidden', position: 'relative', width: 160, aspectRatio: '4/3', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '10px 12px' };
+    var cardInner = 'relative w-40 aspect-[4/3] flex flex-col justify-between p-2.5 rounded-lg bg-popover border border-border shadow-lg overflow-hidden';
 
     var content = null;
     if (pin.type === 'metric') {
       content = jsxs('div', { children: [
-        jsx('span', { style: { fontSize: 28, fontWeight: 200, color: 'oklch(0.95 0.02 270)', lineHeight: 1 }, children: value != null ? String(value) : '--' }),
-        jsx('span', { style: { fontSize: 11, color: 'oklch(0.6 0.02 270)', marginLeft: 4 }, children: pin.label })
+        jsx('span', { className: 'text-2xl font-extralight text-foreground leading-none', children: value != null ? String(value) : '--' }),
+        jsx('span', { className: 'text-[11px] text-muted-foreground ml-1', children: pin.label })
       ]});
     } else if (pin.type === 'device') {
       var online = value && value.status === 'online';
-      content = jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 6 }, children: [
-        jsx('div', { style: { width: 6, height: 6, borderRadius: '50%', backgroundColor: online ? 'var(--color-success)' : 'oklch(0.5 0.02 270)' } }),
-        jsx('span', { style: { fontSize: 13, color: 'oklch(0.7 0.02 270)' }, children: online ? 'Online' : 'Offline' })
+      content = jsxs('div', { className: 'flex items-center gap-1.5', children: [
+        jsx('div', { style: { width: 6, height: 6, borderRadius: '50%', backgroundColor: online ? 'var(--color-success)' : 'var(--color-muted-foreground)' } }),
+        jsx('span', { className: 'text-[13px] text-foreground', children: online ? 'Online' : 'Offline' })
       ]});
     } else if (pin.type === 'annotation') {
       content = jsx('div', {
-        style: { fontSize: 12, color: 'oklch(0.7 0.02 270)', lineHeight: 1.5 },
+        className: 'text-xs text-foreground leading-relaxed',
         children: pin.annotationText || 'No annotation'
       });
     } else if (pin.type === 'command') {
       content = jsx('div', { children:
         jsx('button', {
-          style: { width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid oklch(0.7 0.15 310 / 25%)', backgroundColor: 'oklch(0.7 0.15 310 / 12%)', cursor: 'pointer', color: 'oklch(0.75 0.12 310)' },
+          className: 'flex items-center justify-center w-7 h-7 rounded-full border cursor-pointer transition-colors hover:bg-muted-30',
+          style: { borderColor: colorVar, color: colorVar },
           onClick: function (e) { e.stopPropagation(); onAction && onAction(pin); },
-          dangerouslySetInnerHTML: { __html: Icons.play }
+          children: Icon('play', '', 14)
         })
       });
     }
@@ -381,18 +385,18 @@ var Model3DViewer = (function () {
       ref: function (el) { if (detailRef) detailRef.current[pin.id + '_detail'] = el; },
       style: { position: 'absolute', pointerEvents: 'auto', zIndex: 20, display: 'none' },
       children: jsxs('div', {
-        style: cardInner,
+        className: cardInner,
         children: [
-          jsx('div', { style: { position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, var(--color-' + colorKey + '), transparent)' } }),
-          jsxs('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }, children: [
-            jsx('span', { style: { fontSize: 10, color: 'oklch(0.55 0.02 270)', letterSpacing: '0.05em' }, children: pin.label }),
-            jsx('div', { style: { width: 12, height: 12, opacity: 0.5, color: pinColorVar(pin.type) }, dangerouslySetInnerHTML: { __html: Icons[pin.type] } })
+          jsx('div', { style: { position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, ' + colorVar + ', transparent)' } }),
+          jsxs('div', { className: 'flex justify-between items-center relative z-[1]', children: [
+            jsx('span', { className: 'text-[10px] text-muted-foreground tracking-wide', children: pin.label }),
+            jsx('div', { style: { color: colorVar }, children: Icon(pin.type, '', 12) })
           ]}),
-          jsx('div', { style: { position: 'relative', zIndex: 1 }, children: content }),
+          jsx('div', { className: 'relative z-[1]', children: content }),
           jsx('button', {
-            style: { position: 'absolute', top: 4, right: 4, width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'oklch(0.5 0.02 270)', cursor: 'pointer', border: 'none', background: 'none', borderRadius: 4, zIndex: 2 },
+            className: 'absolute top-1 right-1 flex items-center justify-center w-4 h-4 rounded text-muted-foreground cursor-pointer border-none bg-transparent hover:bg-muted-30 hover:text-foreground z-[2]',
             onClick: function (e) { e.stopPropagation(); onClose(); },
-            dangerouslySetInnerHTML: { __html: Icons.close }
+            children: Icon('close', '', 12)
           })
         ]
       })
@@ -400,7 +404,7 @@ var Model3DViewer = (function () {
   };
 
   // --- PinConfigPopover Component (compact inline-style form) ---
-  var inputStyle = { width: '100%', height: 26, padding: '0 6px', borderRadius: 4, border: '1px solid oklch(0.35 0.02 270)', backgroundColor: 'oklch(0.12 0.02 270)', color: 'oklch(0.85 0.02 270)', fontSize: 11, outline: 'none', boxSizing: 'border-box' };
+  var inputStyle = { width: '100%', height: 26, padding: '0 6px', borderRadius: 4, border: '1px solid var(--color-border)', backgroundColor: 'var(--color-muted)', color: 'var(--color-foreground)', fontSize: 11, outline: 'none', boxSizing: 'border-box' };
 
   var PinConfigPopover = function (props) {
     var pin = props.pin;
@@ -471,19 +475,20 @@ var Model3DViewer = (function () {
       ref: function (el) { if (popoverRef) popoverRef.current[pin.id + '_config'] = el; },
       style: { position: 'absolute', pointerEvents: 'auto', zIndex: 30, display: 'none' },
       children: jsxs('div', {
-        style: { backgroundColor: 'oklch(0.18 0.02 270 / 95%)', backdropFilter: 'blur(8px)', border: '1px solid oklch(0.4 0.02 270 / 30%)', borderRadius: 8, padding: 8, display: 'flex', flexDirection: 'column', gap: 4, width: 180 },
+        className: 'flex flex-col gap-1 w-44 p-2 rounded-lg bg-popover border border-border shadow-lg',
         children: [
-          jsx('span', { style: { fontSize: 10, fontWeight: 600, color: 'oklch(0.7 0.02 270)', textTransform: 'capitalize' }, children: pin.type + ' pin' }),
+          jsx('span', { className: 'text-[10px] font-semibold text-muted-foreground capitalize', children: pin.type + ' pin' }),
           jsx('input', { style: inputStyle, placeholder: 'Label', value: label, onChange: function (e) { setLabel(e.target.value); } }),
           fields,
-          jsxs('div', { style: { display: 'flex', gap: 4, justifyContent: 'flex-end', marginTop: 2 }, children: [
+          jsxs('div', { className: 'flex gap-1 justify-end mt-0.5', children: [
             jsx('button', {
-              style: { padding: '2px 8px', fontSize: 10, borderRadius: 4, border: 'none', cursor: 'pointer', color: 'oklch(0.6 0.02 270)', background: 'oklch(0.25 0.02 270)' },
+              className: 'px-2 py-0.5 text-[10px] rounded border border-border bg-transparent text-muted-foreground cursor-pointer hover:bg-muted-30 hover:text-foreground transition-colors',
               onClick: onCancel,
               children: 'Cancel'
             }),
             jsx('button', {
-              style: { padding: '2px 8px', fontSize: 10, borderRadius: 4, border: 'none', cursor: 'pointer', color: 'oklch(0.95 0.08 310)', backgroundColor: 'var(--color-accent-purple)' },
+              className: 'px-2 py-0.5 text-[10px] rounded border-none cursor-pointer transition-colors',
+              style: { color: 'var(--color-accent-purple-foreground, #fff)', backgroundColor: 'var(--color-accent-purple)' },
               onClick: handleSave,
               children: 'Save'
             })
@@ -573,6 +578,15 @@ var Model3DViewer = (function () {
     var configPinState = React.useState(null);
     var configuringPinId = configPinState[0];
     var setConfiguringPinId = configPinState[1];
+
+    // Fullscreen state — the container is the fullscreen target so the whole
+    // 3D canvas + overlays expand. We track the live state via the
+    // `fullscreenchange` event rather than toggling optimistically, so the
+    // icon stays in sync even if the browser rejects the request (e.g. user
+    // denied permission) or the user exits via Esc.
+    var fsState = React.useState(false);
+    var isFullscreen = fsState[0];
+    var setIsFullscreen = fsState[1];
 
     var pinValuesState = React.useState({});
     var pinValues = pinValuesState[0];
@@ -779,6 +793,35 @@ var Model3DViewer = (function () {
       sceneHandle.controls.target.copy(center);
       sceneHandle.controls.update();
     };
+
+    // Fullscreen toggle — targets the component root container. The
+    // container already fills its grid cell, so going fullscreen expands the
+    // whole viewer (canvas + overlays) instead of being a no-op.
+    var toggleFullscreen = function () {
+      var el = containerRef.current;
+      if (!el) return;
+      if (!document.fullscreenElement) {
+        var req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+        if (req) req.call(el);
+      } else {
+        var exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+        if (exit) exit.call(document);
+      }
+    };
+
+    // Keep isFullscreen in sync with the browser's actual fullscreen state.
+    // The ResizeObserver then handles re-fitting the canvas to the new size.
+    React.useEffect(function () {
+      var handler = function () {
+        setIsFullscreen(!!document.fullscreenElement);
+      };
+      document.addEventListener('fullscreenchange', handler);
+      document.addEventListener('webkitfullscreenchange', handler);
+      return function () {
+        document.removeEventListener('fullscreenchange', handler);
+        document.removeEventListener('webkitfullscreenchange', handler);
+      };
+    }, []);
 
     var handlePinConfigSave = function (updatedPin) {
       setPins(function (prev) {
@@ -1049,7 +1092,7 @@ var Model3DViewer = (function () {
 
     return jsxs('div', {
       ref: containerRef,
-      className: 'relative w-full h-full overflow-hidden rounded-xl',
+      className: 'relative w-full h-full overflow-hidden rounded-xl bg-muted',
       children: [
         jsx('style', { dangerouslySetInnerHTML: { __html: '@keyframes spin { to { transform: rotate(360deg) } }' } }),
         // Empty state — no model loaded yet via either path (URL or drag-drop)
@@ -1059,9 +1102,9 @@ var Model3DViewer = (function () {
             className: 'text-center space-y-4 px-6',
             children: [
               jsx('div', {
-                className: 'w-16 h-16 mx-auto rounded-2xl flex items-center justify-center',
-                style: { backgroundColor: 'oklch(0.55 0.15 250 / 10%)', border: '1px dashed oklch(0.55 0.15 250 / 30%)' },
-                dangerouslySetInnerHTML: { __html: Icons.upload }
+                className: 'w-16 h-16 mx-auto rounded-2xl flex items-center justify-center text-info border border-dashed border-info',
+                style: { backgroundColor: 'color-mix(in oklch, var(--color-info) 8%, transparent)' },
+                children: Icon('upload', '', 28)
               }),
               jsxs('div', { children: [
                 jsx('p', { className: 'text-sm font-medium text-foreground', children: 'No 3D Model' }),
@@ -1072,13 +1115,8 @@ var Model3DViewer = (function () {
         }),
         // Edit mode indicator
         editMode && loadStateValue === 'loaded' ? jsx('div', {
-          className: 'absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-md text-xs',
-          style: {
-            zIndex: 40,
-            backgroundColor: 'oklch(0.72 0.19 155 / 12%)',
-            border: '1px solid oklch(0.72 0.19 155 / 40%)',
-            color: 'var(--color-success)'
-          },
+          className: 'absolute top-2 left-1/2 -translate-x-1/2 z-40 px-3 py-1 rounded-md text-xs border border-success',
+          style: { backgroundColor: 'color-mix(in oklch, var(--color-success) 14%, transparent)', color: 'var(--color-success)' },
           children: 'Click on the model to place a ' + activePinType + ' pin'
         }) : null,
         // Toolbar (compact buttons)
@@ -1088,28 +1126,30 @@ var Model3DViewer = (function () {
           activePinType: activePinType,
           onSelectPinType: setActivePinType,
           onResetCamera: resetCamera,
-          isSmall: isSmall
+          isSmall: isSmall,
+          onToggleFullscreen: toggleFullscreen,
+          isFullscreen: isFullscreen
         }) : null,
         // Loading overlay
         loadStateValue === 'loading' && jsx('div', {
-          style: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: 'oklch(0.15 0.02 270 / 80%)', zIndex: 50 },
-          children: jsxs('div', { style: { textAlign: 'center' }, children: [
+          className: 'absolute inset-0 flex flex-col items-center justify-center z-50',
+          style: { backgroundColor: 'color-mix(in oklch, var(--color-muted) 88%, transparent)' },
+          children: jsxs('div', { className: 'text-center', children: [
             jsx('div', {
-              style: { width: 40, height: 40, borderWidth: 3, borderStyle: 'solid', borderRadius: '50%', borderTopColor: 'var(--color-info)', borderRightColor: 'var(--color-info)', borderColor: 'oklch(0.3 0.02 270)', animation: 'spin 0.8s linear infinite', margin: '0 auto' }
+              style: { width: 40, height: 40, borderWidth: 3, borderStyle: 'solid', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto', borderColor: 'var(--color-border)', borderTopColor: 'var(--color-info)' }
             }),
-            jsx('p', { style: { marginTop: 12, fontSize: 14, color: 'oklch(0.7 0.02 270)' }, children: 'Loading 3D Model...' })
+            jsx('p', { className: 'mt-3 text-sm text-muted-foreground', children: 'Loading 3D Model...' })
           ]})
         }),
         // Error overlay — backdrop is click-through so it doesn't block the
         // dashboard's top-right edit/delete chrome; only the Retry card captures.
         loadStateValue === 'error' && jsx('div', {
-          className: 'absolute inset-0 flex flex-col items-center justify-center',
-          style: { backgroundColor: 'oklch(0.15 0.02 270 / 90%)', zIndex: 50, pointerEvents: 'none' },
+          className: 'absolute inset-0 flex flex-col items-center justify-center z-50',
+          style: { backgroundColor: 'color-mix(in oklch, var(--color-muted) 92%, transparent)', pointerEvents: 'none' },
           children: jsxs('div', { className: 'text-center space-y-2', style: { pointerEvents: 'auto' }, children: [
             jsx('p', { className: 'text-sm text-error', children: errorMsgValue || 'Failed to load model' }),
             jsx('button', {
-              className: 'px-3 py-1 text-xs rounded-md',
-              style: { backgroundColor: 'var(--color-info)', color: 'var(--color-primary-foreground)' },
+              className: 'px-3 py-1 text-xs rounded-md bg-info text-info-foreground border-none cursor-pointer hover:opacity-90 transition-opacity',
               onClick: function () {
                 setLoadState('idle');
                 prevModelUrlRef.current = '';
