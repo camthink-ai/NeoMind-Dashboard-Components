@@ -30,16 +30,29 @@ var Model3DViewer = (function () {
   var THREE_VERSION = '0.147.0';
   var THREE_CDN = 'https://cdn.jsdelivr.net/npm/three@' + THREE_VERSION;
 
+  // Memoize one in-flight <script> per URL so concurrent callers (e.g. two
+  // 3D Viewer blocks mounting at once, or a remount) share the same load and
+  // never resolve against a stale / failed / mid-load tag. Previously the
+  // dedupe check resolved instantly on any existing tag, which let examples
+  // execute before three.min.js had defined THREE (dynamic <script> tags are
+  // async and run on download order, not insertion order) — leaving
+  // THREE.OrbitControls undefined and crashing `new THREE.OrbitControls(...)`.
+  // On error we clear the cached promise so a later call can retry.
+  var scriptPromises = {};
   var loadScript = function (url) {
-    return new Promise(function (resolve, reject) {
-      var existing = document.querySelector('script[src="' + url + '"]');
-      if (existing) { resolve(); return; }
+    if (scriptPromises[url]) return scriptPromises[url];
+    scriptPromises[url] = new Promise(function (resolve, reject) {
       var script = document.createElement('script');
       script.src = url;
-      script.onload = resolve;
-      script.onerror = function () { reject(new Error('Failed to load: ' + url)); };
+      script.onload = function () { resolve(); };
+      script.onerror = function () {
+        if (script.parentNode) script.parentNode.removeChild(script);
+        scriptPromises[url] = null;
+        reject(new Error('Failed to load: ' + url));
+      };
       document.head.appendChild(script);
     });
+    return scriptPromises[url];
   };
 
   var loadThreeJS = function () {
@@ -48,6 +61,11 @@ var Model3DViewer = (function () {
         loadScript(THREE_CDN + '/examples/js/controls/OrbitControls.js'),
         loadScript(THREE_CDN + '/examples/js/loaders/GLTFLoader.js')
       ]);
+    }).then(function () {
+      var THREE = window.THREE;
+      if (!THREE || !THREE.OrbitControls || !THREE.GLTFLoader) {
+        throw new Error('Three.js failed to initialize (controls/loader missing)');
+      }
     });
   };
 
