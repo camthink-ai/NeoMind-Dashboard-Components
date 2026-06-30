@@ -241,9 +241,13 @@ var Model3DViewer = (function () {
     };
   };
 
-  // color helper for pin types
+  // color helper for pin types — mirrors the Toolbar typeColorClass mapping
   var pinColorVar = function (type) {
-    return type === 'annotation' ? 'var(--color-warning)' : type === 'command' ? 'var(--color-accent-purple)' : 'var(--color-' + type + ')';
+    if (type === 'metric') return 'var(--color-success)';
+    if (type === 'device') return 'var(--color-info)';
+    if (type === 'annotation') return 'var(--color-warning)';
+    if (type === 'command') return 'var(--accent-purple)';
+    return 'var(--muted-foreground)';
   };
 
   // --- PinPopup Component (compact dot + tiny label) ---
@@ -255,7 +259,7 @@ var Model3DViewer = (function () {
     var onPointerDown = props.onPointerDown;
 
     var colorVar = pinColorVar(pin.type);
-    var dotStyle = { width: 8, height: 8, borderRadius: '50%', backgroundColor: colorVar, boxShadow: '0 0 0 2px var(--color-background, #fff)' };
+    var dotStyle = { width: 8, height: 8, borderRadius: '50%', backgroundColor: colorVar, boxShadow: '0 0 0 2px var(--background, #fff)' };
     var wrapStyle = { position: 'absolute', pointerEvents: 'auto', cursor: 'pointer', transform: 'translate(-50%, -50%)', zIndex: 10, display: 'none' };
 
     if (isSmall) {
@@ -323,7 +327,7 @@ var Model3DViewer = (function () {
     }
 
     return jsxs('div', {
-      style: Object.assign({}, posStyle, { borderColor: 'var(--color-accent-purple)' }),
+      style: Object.assign({}, posStyle, { borderColor: 'var(--accent-purple)' }),
       className: surfaceClass,
       children: [
         pinTypes.map(function (t) {
@@ -335,7 +339,7 @@ var Model3DViewer = (function () {
             children: Icon(t, '', 14)
           }, t);
         }),
-        jsx('div', { style: { width: 1, height: 16, margin: '0 2px', backgroundColor: 'var(--color-border)' } }),
+        jsx('div', { style: { width: 1, height: 16, margin: '0 2px', backgroundColor: 'var(--border)' } }),
         jsx('button', {
           className: 'flex items-center h-6 px-2 rounded-md border-none cursor-pointer text-[11px] font-medium bg-transparent text-muted-foreground hover:bg-muted-30 hover:text-foreground transition-colors',
           onClick: onToggleEdit,
@@ -358,35 +362,39 @@ var Model3DViewer = (function () {
     var detailRef = props.detailRef;
     var colorVar = pinColorVar(pin.type);
 
-    var cardStyle = { position: 'relative', width: 176, aspectRatio: '4 / 3', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 10, overflow: 'hidden' };
+    var cardStyle = { position: 'relative', width: 184, aspectRatio: '4 / 3', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 10, overflow: 'hidden' };
 
-    var iconBtnStyle = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-muted-foreground)' };
+    var iconBtnStyle = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)' };
     var iconBtnClass = 'hover:bg-muted-30 hover:text-foreground transition-colors';
 
     var content = null;
     if (pin.type === 'metric') {
-      content = jsxs('div', { style: { display: 'flex', flexDirection: 'column' }, children: [
-        jsx('span', { className: 'text-2xl font-extralight text-foreground leading-none', children: value != null ? String(value) : '--' }),
-        jsx('span', { className: 'text-[10px] text-muted-foreground mt-1', children: pin.label })
-      ]});
+      // Label already lives in the header; show only the value as the hero,
+      // truncated so long numbers don't overflow the card.
+      content = jsx('span', {
+        className: 'text-2xl font-light text-foreground leading-none tabular-nums',
+        style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' },
+        children: value != null ? String(value) : '--'
+      });
     } else if (pin.type === 'device') {
       var online = value && value.status === 'online';
       content = jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 6 }, children: [
-        jsx('div', { style: { width: 8, height: 8, borderRadius: '50%', backgroundColor: online ? 'var(--color-success)' : 'var(--color-muted-foreground)' } }),
+        jsx('div', { style: { width: 7, height: 7, borderRadius: '50%', backgroundColor: online ? 'var(--color-success)' : 'var(--muted-foreground)' } }),
         jsx('span', { className: 'text-[13px] text-foreground', children: online ? 'Online' : 'Offline' })
       ]});
     } else if (pin.type === 'annotation') {
       content = jsx('div', {
         className: 'text-xs text-foreground leading-relaxed',
-        style: { maxHeight: 48, overflow: 'hidden' },
+        style: { maxHeight: 56, overflow: 'hidden' },
         children: pin.annotationText || 'No annotation'
       });
     } else if (pin.type === 'command') {
       content = jsx('button', {
-        className: 'flex items-center justify-center w-8 h-8 rounded-full border cursor-pointer transition-colors hover:bg-muted-30',
+        className: 'flex items-center justify-center w-6 h-6 rounded-full border cursor-pointer transition-colors hover:bg-muted-30',
         style: { borderColor: colorVar, color: colorVar },
+        title: 'Run command',
         onClick: function (e) { e.stopPropagation(); onAction && onAction(pin); },
-        children: Icon('play', '', 16)
+        children: Icon('play', '', 12)
       });
     }
 
@@ -402,7 +410,7 @@ var Model3DViewer = (function () {
           jsxs('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1, gap: 8 }, children: [
             jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }, children: [
               jsx('div', { style: { width: 7, height: 7, borderRadius: '50%', backgroundColor: colorVar, flexShrink: 0 } }),
-              jsx('span', { style: { fontSize: 11, fontWeight: 600, color: 'var(--color-foreground)', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: pin.label || pin.type })
+              jsx('span', { style: { fontSize: 11, fontWeight: 600, color: 'var(--foreground)', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: pin.label || pin.type })
             ]}),
             jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }, children: [
               onDelete ? jsx('button', {
@@ -437,15 +445,15 @@ var Model3DViewer = (function () {
   //  - Metric key: auto-populated <select> from fetchDeviceValues(deviceId);
   //    falls back to a text input when the device has no values yet.
   //  - Command key: text only (no command-list API exists).
-  var inputStyle = { width: '100%', height: 28, padding: '0 8px', borderRadius: 6, border: '1px solid var(--color-border)', backgroundColor: 'var(--color-muted)', color: 'var(--color-foreground)', fontSize: 12, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' };
+  var inputStyle = { width: '100%', height: 28, padding: '0 8px', borderRadius: 6, border: '1px solid var(--border)', backgroundColor: 'var(--muted)', color: 'var(--foreground)', fontSize: 12, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' };
   var selectStyle = Object.assign({}, inputStyle, { appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', paddingRight: 24, backgroundImage: 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="%23888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>\')', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' });
-  var fieldLabelStyle = { fontSize: 11, fontWeight: 500, color: 'var(--color-muted-foreground)', marginBottom: 4 };
+  var fieldLabelStyle = { fontSize: 11, fontWeight: 500, color: 'var(--muted-foreground)', marginBottom: 4 };
 
   var FieldRow = function (labelText, control, hint) {
     return jsxs('label', { style: { display: 'flex', flexDirection: 'column' }, children: [
       jsx('span', { style: fieldLabelStyle, children: labelText }),
       control,
-      hint ? jsx('span', { style: { fontSize: 10, color: 'var(--color-muted-foreground)', marginTop: 3 }, children: hint }) : null
+      hint ? jsx('span', { style: { fontSize: 10, color: 'var(--muted-foreground)', marginTop: 3 }, children: hint }) : null
     ]});
   };
 
@@ -696,7 +704,7 @@ var Model3DViewer = (function () {
         position: 'absolute', top: 0, right: 0, bottom: 0, width: width,
         zIndex: 46, pointerEvents: 'auto',
         display: 'flex', flexDirection: 'column',
-        borderLeft: '1px solid var(--color-border)',
+        borderLeft: '1px solid var(--border)',
         boxShadow: '-8px 0 24px rgba(0,0,0,0.18)'
       },
       className: 'bg-popover',
@@ -705,7 +713,7 @@ var Model3DViewer = (function () {
         jsx('datalist', { id: 'neomind-3d-devices', children: knownDevices.map(function (d) { return jsx('option', { value: d }, d); }) }),
         // Header
         jsxs('div', {
-          style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 },
+          style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 },
           children: [
             jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 8 }, children: [
               jsx('div', { style: { width: 10, height: 10, borderRadius: '50%', backgroundColor: colorVar } }),
@@ -713,14 +721,14 @@ var Model3DViewer = (function () {
             ]}),
             jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 2 }, children: [
               onDelete ? jsx('button', {
-                style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-muted-foreground)' },
+                style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)' },
                 className: 'hover:bg-muted-30 hover:text-error transition-colors',
                 title: 'Delete pin',
                 onClick: function () { onDelete(pin.id); },
                 children: Icon('trash', '', 16)
               }) : null,
               jsx('button', {
-                style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-muted-foreground)' },
+                style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)' },
                 className: 'hover:bg-muted-30 hover:text-foreground transition-colors',
                 title: 'Close',
                 onClick: onCancel,
@@ -746,11 +754,11 @@ var Model3DViewer = (function () {
         }),
         // Footer
         jsxs('div', {
-          style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderTop: '1px solid var(--color-border)', flexShrink: 0 },
+          style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderTop: '1px solid var(--border)', flexShrink: 0 },
           children: [
             jsx('div', { style: { flex: 1 } }),
             jsx('button', {
-              style: { padding: '6px 14px', fontSize: 12, borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-muted-foreground)', cursor: 'pointer' },
+              style: { padding: '6px 14px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted-foreground)', cursor: 'pointer' },
               className: 'hover:bg-muted-30 hover:text-foreground transition-colors',
               onClick: onCancel,
               children: 'Cancel'
@@ -1408,10 +1416,10 @@ var Model3DViewer = (function () {
         }) : null,
         // Loading overlay
         loadStateValue === 'loading' && jsx('div', {
-          style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'color-mix(in oklch, var(--color-muted) 88%, transparent)' },
+          style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'color-mix(in oklch, var(--muted) 88%, transparent)' },
           children: jsxs('div', { style: { textAlign: 'center' }, children: [
             jsx('div', {
-              style: { width: 40, height: 40, borderWidth: 3, borderStyle: 'solid', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto', borderColor: 'var(--color-border)', borderTopColor: 'var(--color-info)' }
+              style: { width: 40, height: 40, borderWidth: 3, borderStyle: 'solid', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto', borderColor: 'var(--border)', borderTopColor: 'var(--color-info)' }
             }),
             jsx('p', { className: 'mt-3 text-sm text-muted-foreground', children: 'Loading 3D Model...' })
           ]})
@@ -1419,11 +1427,11 @@ var Model3DViewer = (function () {
         // Error overlay — backdrop is click-through so it doesn't block the
         // dashboard's top-right edit/delete chrome; only the Retry card captures.
         loadStateValue === 'error' && jsx('div', {
-          style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'color-mix(in oklch, var(--color-muted) 92%, transparent)', pointerEvents: 'none' },
+          style: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 50, backgroundColor: 'color-mix(in oklch, var(--muted) 92%, transparent)', pointerEvents: 'none' },
           children: jsxs('div', { style: { textAlign: 'center', pointerEvents: 'auto' }, children: [
             jsx('p', { className: 'text-sm text-error', children: errorMsgValue || 'Failed to load model' }),
             jsx('button', {
-              style: { marginTop: 8, padding: '4px 12px', fontSize: 12, borderRadius: 6, border: 'none', cursor: 'pointer', color: 'var(--color-primary-foreground, #fff)', backgroundColor: 'var(--color-info)' },
+              style: { marginTop: 8, padding: '4px 12px', fontSize: 12, borderRadius: 6, border: 'none', cursor: 'pointer', color: 'var(--primary-foreground, #fff)', backgroundColor: 'var(--color-info)' },
               onClick: function () {
                 setLoadState('idle');
                 prevModelUrlRef.current = '';
