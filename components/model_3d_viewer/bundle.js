@@ -13,8 +13,6 @@ var Model3DViewer = (function () {
     command: '<polyline points="9 18 15 12 9 6"/>',
     edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
     reset: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
-    fullscreen: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
-    'fullscreen-exit': '<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>',
     play: '<polygon points="6 3 20 12 6 21 6 3"/>',
     trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
     close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
@@ -297,8 +295,6 @@ var Model3DViewer = (function () {
     var onSelectPinType = props.onSelectPinType;
     var onResetCamera = props.onResetCamera;
     var isSmall = props.isSmall || false;
-    var onToggleFullscreen = props.onToggleFullscreen;
-    var isFullscreen = props.isFullscreen;
 
     var pinTypes = ['metric', 'device', 'annotation', 'command'];
     var typeLabels = { metric: 'Metric', device: 'Device', annotation: 'Note', command: 'Cmd' };
@@ -321,8 +317,7 @@ var Model3DViewer = (function () {
         className: surfaceClass,
         children: [
           jsx('button', { className: btnClass(false), onClick: onToggleEdit, title: 'Edit pins', children: Icon('edit', '', 14) }),
-          jsx('button', { className: btnClass(false), onClick: onResetCamera, title: 'Reset view', children: Icon('reset', '', 14) }),
-          jsx('button', { className: btnClass(false), onClick: onToggleFullscreen, title: isFullscreen ? 'Exit fullscreen' : 'Fullscreen', children: Icon(isFullscreen ? 'fullscreen-exit' : 'fullscreen', '', 14) })
+          jsx('button', { className: btnClass(false), onClick: onResetCamera, title: 'Reset view', children: Icon('reset', '', 14) })
         ]
       });
     }
@@ -636,13 +631,22 @@ var Model3DViewer = (function () {
               jsx('div', { style: { width: 10, height: 10, borderRadius: '50%', backgroundColor: colorVar } }),
               jsx('span', { className: 'text-sm font-semibold text-foreground', style: { textTransform: 'capitalize' }, children: pin.type + ' pin' })
             ]}),
-            jsx('button', {
-              style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-muted-foreground)' },
-              className: 'hover:bg-muted-30 hover:text-foreground transition-colors',
-              title: 'Close',
-              onClick: onCancel,
-              children: Icon('close', '', 16)
-            })
+            jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 2 }, children: [
+              onDelete ? jsx('button', {
+                style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-muted-foreground)' },
+                className: 'hover:bg-muted-30 hover:text-error transition-colors',
+                title: 'Delete pin',
+                onClick: function () { onDelete(pin.id); },
+                children: Icon('trash', '', 16)
+              }) : null,
+              jsx('button', {
+                style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-muted-foreground)' },
+                className: 'hover:bg-muted-30 hover:text-foreground transition-colors',
+                title: 'Close',
+                onClick: onCancel,
+                children: Icon('close', '', 16)
+              })
+            ]})
           ]
         }),
         // Body
@@ -664,13 +668,6 @@ var Model3DViewer = (function () {
         jsxs('div', {
           style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderTop: '1px solid var(--color-border)', flexShrink: 0 },
           children: [
-            onDelete ? jsx('button', {
-              style: { display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', fontSize: 12, borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-muted-foreground)', cursor: 'pointer' },
-              className: 'hover:bg-muted-30 hover:text-error transition-colors',
-              title: 'Delete pin',
-              onClick: function () { onDelete(pin.id); },
-              children: jsxs('span', { style: { display: 'flex', alignItems: 'center', gap: 5 }, children: [Icon('trash', '', 14), 'Delete'] })
-            }) : null,
             jsx('div', { style: { flex: 1 } }),
             jsx('button', {
               style: { padding: '6px 14px', fontSize: 12, borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-muted-foreground)', cursor: 'pointer' },
@@ -769,18 +766,6 @@ var Model3DViewer = (function () {
     var configPinState = React.useState(null);
     var configuringPinId = configPinState[0];
     var setConfiguringPinId = configPinState[1];
-
-    // Fullscreen state. We prefer the native Fullscreen API, but community
-    // components run inside a sandboxed <iframe> that usually lacks
-    // `allowfullscreen`, so requestFullscreen() rejects. When that happens we
-    // fall back to a CSS pseudo-fullscreen (position:fixed; inset:0). `fsPseudo`
-    // drives the fixed style; `isFullscreen` drives the toolbar icon.
-    var fsState = React.useState(false);
-    var isFullscreen = fsState[0];
-    var setIsFullscreen = fsState[1];
-    var fsPseudoState = React.useState(false);
-    var fsPseudo = fsPseudoState[0];
-    var setFsPseudo = fsPseudoState[1];
 
     // Recently-used device IDs for the config sidebar's Device ID autocomplete.
     // The platform exposes no device-list API to components, so we can't
@@ -995,69 +980,6 @@ var Model3DViewer = (function () {
       sceneHandle.controls.target.copy(center);
       sceneHandle.controls.update();
     };
-
-    // Fullscreen toggle — targets the component root container. Prefers the
-    // native Fullscreen API; if that's blocked (community components run in a
-    // sandboxed <iframe> that usually has no `allowfullscreen`, so the promise
-    // rejects) falls back to CSS pseudo-fullscreen via the `fsPseudo` state.
-    var toggleFullscreen = function () {
-      var el = containerRef.current;
-      if (!el) return;
-
-      // Exit path: native FS active → exit native; else pseudo active → clear it.
-      if (document.fullscreenElement) {
-        var exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
-        if (exit) { try { exit.call(document); } catch (e) {} }
-        return;
-      }
-      if (fsPseudo) {
-        setFsPseudo(false);
-        setIsFullscreen(false);
-        return;
-      }
-
-      // Enter path: try native first.
-      var req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
-      if (req) {
-        try {
-          var result = req.call(el);
-          if (result && typeof result.then === 'function') {
-            result.then(function () {
-              /* native FS engaged; fullscreenchange sets the state */
-            }).catch(function () {
-              // Blocked by the sandbox → CSS fallback.
-              setFsPseudo(true);
-              setIsFullscreen(true);
-            });
-            return;
-          }
-          // Synchronous legacy API — assume success; fullscreenchange handles state.
-          return;
-        } catch (e) { /* fall through to pseudo */ }
-      }
-      // No usable Fullscreen API → CSS pseudo-fullscreen.
-      setFsPseudo(true);
-      setIsFullscreen(true);
-    };
-
-    // Sync state with the browser's native fullscreen (covers Esc exit).
-    // The ResizeObserver re-fits the canvas for both native and pseudo modes.
-    React.useEffect(function () {
-      var handler = function () {
-        if (document.fullscreenElement) {
-          setFsPseudo(false);
-          setIsFullscreen(true);
-        } else {
-          setIsFullscreen(false);
-        }
-      };
-      document.addEventListener('fullscreenchange', handler);
-      document.addEventListener('webkitfullscreenchange', handler);
-      return function () {
-        document.removeEventListener('fullscreenchange', handler);
-        document.removeEventListener('webkitfullscreenchange', handler);
-      };
-    }, []);
 
     // Record a device ID used in the config sidebar so it autocompletes next time.
     var recordDeviceUsed = function (id) {
@@ -1365,14 +1287,12 @@ var Model3DViewer = (function () {
       handle.controls.autoRotateSpeed = 2.0;
     }, [autoRotate, editMode, loadStateValue]);
 
-    var rootStyle = fsPseudo
-      ? { position: 'fixed', inset: 0, width: '100vw', height: '100vh', overflow: 'hidden', zIndex: 9999, borderRadius: 0, backgroundColor: 'var(--color-muted)' }
-      : { position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 12 };
+    var rootStyle = { position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 12 };
 
     return jsxs('div', {
       ref: containerRef,
       style: rootStyle,
-      className: fsPseudo ? '' : 'bg-muted',
+      className: 'bg-muted',
       children: [
         jsx('style', { dangerouslySetInnerHTML: { __html: '@keyframes spin { to { transform: rotate(360deg) } }' } }),
         // Empty state — no model loaded yet via either path (URL or drag-drop)
@@ -1404,9 +1324,7 @@ var Model3DViewer = (function () {
           activePinType: activePinType,
           onSelectPinType: setActivePinType,
           onResetCamera: resetCamera,
-          isSmall: isSmall,
-          onToggleFullscreen: toggleFullscreen,
-          isFullscreen: isFullscreen
+          isSmall: isSmall
         }) : null,
         // Loading overlay
         loadStateValue === 'loading' && jsx('div', {
