@@ -608,6 +608,16 @@ var Model3DViewer = (function () {
             sceneHandleRef.current = null;
             modelRef.current = null;
 
+            // A new model is being loaded — pin coordinates are model-specific
+            // and cannot be reused, so clear any stale pin meshes/state from a
+            // previous model (mirrors the modelUrl load path).
+            Object.keys(pinMeshesRef.current).forEach(function (id) {
+              var mesh = pinMeshesRef.current[id];
+              if (mesh) { mesh.geometry.dispose(); mesh.material.dispose(); }
+            });
+            pinMeshesRef.current = {};
+            setPins([]);
+
             var sceneHandle = createScene(container, config.backgroundColor || '#111827');
             sceneHandleRef.current = sceneHandle;
 
@@ -824,6 +834,25 @@ var Model3DViewer = (function () {
       dragInfoRef.current = { active: false, pinId: null, timer: null, startX: 0, startY: 0 };
     };
 
+    // Keep latest pointer handlers in a ref so the window listeners (set up
+    // once) always call the current closure. Listening on window (not the
+    // container) guarantees pointerup/pointermove are caught even when the
+    // pointer leaves the component during a long-press pin drag — otherwise
+    // controls.enabled would stay false and the scene would freeze.
+    var dragHandlersRef = React.useRef({ move: null, up: null });
+    dragHandlersRef.current.move = handlePointerMove;
+    dragHandlersRef.current.up = handlePointerUp;
+    React.useEffect(function () {
+      var onMove = function (e) { if (dragHandlersRef.current.move) dragHandlersRef.current.move(e); };
+      var onUp = function (e) { if (dragHandlersRef.current.up) dragHandlersRef.current.up(e); };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      return function () {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+      };
+    }, []);
+
     // Refs for edit mode and active pin type (used in click handler)
     var editModeRef = React.useRef(editMode);
     React.useEffect(function () { editModeRef.current = editMode; }, [editMode]);
@@ -995,20 +1024,20 @@ var Model3DViewer = (function () {
           }
           animate();
 
-          // ResizeObserver
-          var observer = new ResizeObserver(function (entries) {
+          // ResizeObserver — store in observerRef so cleanup can disconnect it
+          if (observerRef.current) { observerRef.current.disconnect(); observerRef.current = null; }
+          observerRef.current = new ResizeObserver(function (entries) {
             if (!sceneHandleRef.current) return;
             var w = entries[0].contentRect.width;
             var h = entries[0].contentRect.height;
+            if (!w || !h) return;
             sceneHandleRef.current.camera.aspect = w / h;
             sceneHandleRef.current.camera.updateProjectionMatrix();
             sceneHandleRef.current.renderer.setSize(w, h);
             // Update responsive sizing state
             setContainerSize({ w: w, h: h });
           });
-          observer.observe(container);
-
-          return { observer: observer, model: model };
+          observerRef.current.observe(container);
         });
       }).catch(function (err) {
         setErrorMsg(err.message || 'Failed to load model');
@@ -1016,6 +1045,10 @@ var Model3DViewer = (function () {
       });
 
       return function cleanup() {
+        if (observerRef.current) {
+          observerRef.current.disconnect();
+          observerRef.current = null;
+        }
         if (sceneHandleRef.current) {
           disposeScene(sceneHandleRef.current);
           sceneHandleRef.current = null;
@@ -1043,8 +1076,6 @@ var Model3DViewer = (function () {
     return jsxs('div', {
       ref: containerRef,
       className: 'relative w-full h-full overflow-hidden rounded-xl',
-      onPointerMove: handlePointerMove,
-      onPointerUp: handlePointerUp,
       children: [
         jsx('style', { dangerouslySetInnerHTML: { __html: '@keyframes spin { to { transform: rotate(360deg) } }' } }),
         // Empty state — no model loaded yet via either path (URL or drag-drop)

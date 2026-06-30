@@ -45,7 +45,7 @@
       },
       "icon": "Box",
       "category": "visualization",
-      "version": "1.13.1",
+      "version": "1.13.2",
       "author": "NeoMind Team",
       "size_constraints": { "min_w": 2, "min_h": 2, "default_w": 3, "default_h": 3, "max_w": 6, "max_h": 6 },
       "has_data_source": false,
