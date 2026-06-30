@@ -349,10 +349,12 @@ var Model3DViewer = (function () {
     });
   };
 
-  // --- DetailCard Component (compact 4:3 card) ---
-  // Inline positioning throughout; header now holds dot+label on the left and
-  // close+delete on the right (previously the absolute close button overlapped
-  // the header row, which read as "messy"). Delete was missing entirely.
+  // --- DetailCard Component ---
+  // Matches the main project's map/layer popup style: icon-chip header with
+  // uppercase type label + pin name, then key/value rows in the body. Device
+  // pins now show Device ID + status (not just status); metric pins show
+  // Device + Metric key + current value; command pins show Device + Command
+  // + a full-width Run button.
   var DetailCard = function (props) {
     var pin = props.pin;
     var value = props.value;
@@ -362,41 +364,69 @@ var Model3DViewer = (function () {
     var detailRef = props.detailRef;
     var colorVar = pinColorVar(pin.type);
 
-    var cardStyle = { position: 'relative', width: 200, display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', borderRadius: 10, overflow: 'hidden' };
+    var cardStyle = {
+      position: 'relative',
+      minWidth: 220, maxWidth: 280,
+      display: 'flex', flexDirection: 'column',
+      padding: 12, borderRadius: 10,
+      overflow: 'hidden'
+    };
 
     var iconBtnStyle = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, borderRadius: 4, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)' };
     var iconBtnClass = 'hover:bg-muted-30 hover:text-foreground transition-colors';
 
-    var content = null;
+    // Small key/value row helper.
+    var Row = function (label, valueNode) {
+      return jsxs('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, lineHeight: 1.4 }, children: [
+        jsx('span', { className: 'text-xs text-muted-foreground', style: { flexShrink: 0 }, children: label }),
+        jsx('span', { style: { minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }, children: valueNode })
+      ]});
+    };
+
+    var deviceId = '', metricKey = '', commandKey = '', deviceType = '';
+    if (pin.type === 'metric' && pin.metricRef) {
+      deviceType = pin.metricRef.deviceType || '';
+      deviceId = pin.metricRef.deviceId || '';
+      metricKey = pin.metricRef.metricKey || '';
+    } else if (pin.type === 'device' && pin.deviceRef) {
+      deviceType = pin.deviceRef.deviceType || '';
+      deviceId = pin.deviceRef.deviceId || '';
+    } else if (pin.type === 'command' && pin.commandRef) {
+      deviceType = pin.commandRef.deviceType || '';
+      deviceId = pin.commandRef.deviceId || '';
+      commandKey = pin.commandRef.commandKey || '';
+    }
+
+    // Build the body rows per pin type.
+    var rows = [];
     if (pin.type === 'metric') {
-      // Label already lives in the header; show only the value as the hero,
-      // truncated so long numbers don't overflow the card.
-      content = jsx('span', {
-        className: 'text-2xl font-light text-foreground leading-none tabular-nums',
-        style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' },
-        children: value != null ? String(value) : '--'
-      });
+      var displayValue = value != null ? String(value) : '--';
+      rows.push(Row('Device', jsx('span', { className: 'font-mono text-[11px] text-foreground', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 }, title: deviceId, children: deviceId || '--' })));
+      rows.push(Row('Metric', jsx('span', { className: 'font-mono text-[11px] text-foreground', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 }, title: metricKey, children: metricKey || '--' })));
+      rows.push(Row('Current', jsx('span', { className: 'text-sm font-semibold tabular-nums', style: { color: 'var(--accent-purple)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }, title: displayValue, children: displayValue })));
     } else if (pin.type === 'device') {
       var online = value && value.status === 'online';
-      content = jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 6 }, children: [
-        jsx('div', { style: { width: 7, height: 7, borderRadius: '50%', backgroundColor: online ? 'var(--color-success)' : 'var(--muted-foreground)' } }),
-        jsx('span', { className: 'text-[13px] text-foreground', children: online ? 'Online' : 'Offline' })
-      ]});
+      rows.push(Row('Device ID', jsx('span', { className: 'font-mono text-[11px] text-foreground', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 }, title: deviceId, children: deviceId || '--' })));
+      if (deviceType) rows.push(Row('Type', jsx('span', { className: 'text-[11px] text-foreground', children: deviceType })));
+      rows.push(Row('Status', jsxs('span', { className: 'inline-flex items-center gap-1.5 text-[11px] font-medium', style: { color: online ? 'var(--color-success)' : 'var(--muted-foreground)' }, children: [
+        jsx('span', { style: { width: 7, height: 7, borderRadius: '50%', backgroundColor: online ? 'var(--color-success)' : 'var(--muted-foreground)' } }),
+        online ? 'Online' : 'Offline'
+      ]})));
     } else if (pin.type === 'annotation') {
-      content = jsx('div', {
-        className: 'text-xs text-foreground leading-relaxed',
-        style: { maxHeight: 56, overflow: 'hidden' },
-        children: pin.annotationText || 'No annotation'
-      });
+      rows.push(jsx('div', { className: 'text-xs text-foreground leading-relaxed', style: { maxHeight: 80, overflow: 'hidden', whiteSpace: 'pre-wrap' }, children: pin.annotationText || 'No annotation' }));
     } else if (pin.type === 'command') {
-      content = jsx('button', {
-        className: 'flex items-center justify-center w-6 h-6 rounded-full border cursor-pointer transition-colors hover:bg-muted-30',
-        style: { borderColor: colorVar, color: colorVar },
-        title: 'Run command',
+      rows.push(Row('Device', jsx('span', { className: 'font-mono text-[11px] text-foreground', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 }, title: deviceId, children: deviceId || '--' })));
+      rows.push(Row('Command', jsx('span', { className: 'font-mono text-[11px] text-foreground', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 }, title: commandKey, children: commandKey || '--' })));
+      rows.push(jsx('button', {
+        className: 'flex items-center justify-center gap-1.5 w-full h-7 mt-1 rounded-md border-none cursor-pointer text-[11px] font-medium transition-colors',
+        style: { backgroundColor: colorVar, color: '#fff' },
         onClick: function (e) { e.stopPropagation(); onAction && onAction(pin); },
-        children: Icon('play', '', 12)
-      });
+        children: jsxs('span', { className: 'inline-flex items-center gap-1.5', children: [Icon('play', '', 11), 'Run'] })
+      }));
     }
+
+    // Header icon (per type) — uses the same icon set defined at top of file.
+    var typeIcon = pin.type; // 'metric' | 'device' | 'annotation' | 'command' all exist in iconInner
 
     return jsx('div', {
       ref: function (el) { if (detailRef) detailRef.current[pin.id + '_detail'] = el; },
@@ -405,14 +435,10 @@ var Model3DViewer = (function () {
         style: cardStyle,
         className: 'bg-popover border border-border shadow-lg',
         children: [
-          jsx('div', { style: { position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, ' + colorVar + ', transparent)' } }),
-          // Header: dot + label  |  delete + close
-          jsxs('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1, gap: 8 }, children: [
-            jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }, children: [
-              jsx('div', { style: { width: 7, height: 7, borderRadius: '50%', backgroundColor: colorVar, flexShrink: 0 } }),
-              jsx('span', { style: { fontSize: 11, fontWeight: 600, color: 'var(--foreground)', textTransform: 'capitalize', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: pin.label || pin.type })
-            ]}),
-            jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }, children: [
+          // Header: icon chip + type label + name | delete + close
+          jsxs('div', { style: { display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 8, marginBottom: 8, borderBottom: '1px solid var(--border)', position: 'relative' }, children: [
+            // Close + delete sit top-right so they don't fight the icon chip.
+            jsxs('div', { style: { position: 'absolute', top: -2, right: 0, display: 'flex', alignItems: 'center', gap: 2 }, children: [
               onDelete ? jsx('button', {
                 style: iconBtnStyle, className: iconBtnClass + ' hover:text-error',
                 title: 'Delete pin',
@@ -425,10 +451,16 @@ var Model3DViewer = (function () {
                 onClick: function (e) { e.stopPropagation(); onClose(); },
                 children: Icon('close', '', 13)
               })
+            ]}),
+            // Colored icon chip
+            jsx('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 6, flexShrink: 0, backgroundColor: colorVar, color: '#fff' }, children: Icon(typeIcon, '', 14) }),
+            jsxs('div', { style: { display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, paddingRight: 36 }, children: [
+              jsx('span', { style: { fontSize: 10, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: 0.4 }, children: pin.type }),
+              jsx('span', { style: { fontSize: 13, fontWeight: 600, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: pin.label || (pin.type.charAt(0).toUpperCase() + pin.type.slice(1)) })
             ]})
           ]}),
-          // Body
-          jsx('div', { style: { position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', minHeight: 24, padding: '2px 0 1px' }, children: content })
+          // Body: key/value rows
+          jsx('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 }, children: rows })
         ]
       })
     });
