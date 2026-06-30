@@ -1072,10 +1072,11 @@ var Model3DViewer = (function () {
     };
 
     var handlePinConfigSave = function (updatedPin) {
-      setPins(function (prev) {
-        return prev.map(function (p) { return p.id === updatedPin.id ? updatedPin : p; });
-      });
+      var next = pinsRef.current.map(function (p) { return p.id === updatedPin.id ? updatedPin : p; });
+      pinsRef.current = next;
+      setPins(next);
       setConfiguringPinId(null);
+      if (props.onConfigChange) props.onConfigChange(Object.assign({}, config, { pins: next }));
     };
 
     // Delete a pin by id: dispose its 3D mesh, drop it from state, close any
@@ -1095,7 +1096,10 @@ var Model3DViewer = (function () {
       setPins(next);
       if (selectedPinId === pinId) setSelectedPinId(null);
       if (configuringPinId === pinId) setConfiguringPinId(null);
-      if (props.onConfigChange) props.onConfigChange('pins', next);
+      // Dashboard's onConfigChange expects a FULL config object (it replaces
+      // component.config wholesale). Passing ('pins', next) would clobber
+      // modelUrl/backgroundColor/autoRotate and make the model unload.
+      if (props.onConfigChange) props.onConfigChange(Object.assign({}, config, { pins: next }));
     };
 
     var handlePinConfigCancel = function () {
@@ -1182,7 +1186,7 @@ var Model3DViewer = (function () {
       if (di.active) {
         if (sceneHandleRef.current) sceneHandleRef.current.controls.enabled = true;
         if (props.onConfigChange) {
-          props.onConfigChange('pins', pinsRef.current);
+          props.onConfigChange(Object.assign({}, config, { pins: pinsRef.current }));
         }
       }
       dragInfoRef.current = { active: false, pinId: null, timer: null, startX: 0, startY: 0 };
@@ -1252,8 +1256,11 @@ var Model3DViewer = (function () {
           type: type,
           label: type.charAt(0).toUpperCase() + type.slice(1)
         };
-        setPins(function (prev) { return prev.concat([newPin]); });
+        var nextPins = pinsRef.current.concat([newPin]);
+        pinsRef.current = nextPins;
+        setPins(nextPins);
         setConfiguringPinId(id);
+        if (props.onConfigChange) props.onConfigChange(Object.assign({}, config, { pins: nextPins }));
       };
 
       sceneHandle.renderer.domElement.addEventListener('click', handleClick);
@@ -1427,9 +1434,10 @@ var Model3DViewer = (function () {
             })
           ]})
         }),
-        // Pin overlay
+        // Pin overlay — zIndex above toolbar (z:40) and edit-mode indicator
+        // (z:40) so popups/detail cards aren't covered by them.
         jsx('div', {
-          style: { position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' },
+          style: { position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 45 },
           children: pins.map(function (pin) {
             return jsx(PinPopup, {
               key: pin.id,
