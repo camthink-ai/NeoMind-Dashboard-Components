@@ -1095,11 +1095,12 @@ var Model3DViewer = (function () {
             jsx('p', { style: { marginTop: 12, fontSize: 14, color: 'oklch(0.7 0.02 270)' }, children: 'Loading 3D Model...' })
           ]})
         }),
-        // Error overlay
+        // Error overlay — backdrop is click-through so it doesn't block the
+        // dashboard's top-right edit/delete chrome; only the Retry card captures.
         loadStateValue === 'error' && jsx('div', {
           className: 'absolute inset-0 flex flex-col items-center justify-center',
-          style: { backgroundColor: 'oklch(0.15 0.02 270 / 90%)', zIndex: 50 },
-          children: jsxs('div', { className: 'text-center space-y-2', children: [
+          style: { backgroundColor: 'oklch(0.15 0.02 270 / 90%)', zIndex: 50, pointerEvents: 'none' },
+          children: jsxs('div', { className: 'text-center space-y-2', style: { pointerEvents: 'auto' }, children: [
             jsx('p', { className: 'text-sm text-error', children: errorMsgValue || 'Failed to load model' }),
             jsx('button', {
               className: 'px-3 py-1 text-xs rounded-md',
