@@ -605,8 +605,12 @@ var NE101CameraPanel = (function () {
       return function () { cancelled = true; };
     }, [device ? device.id : null, wsTs]);
 
-    // Fetch virtual metrics (from transforms) on mount and when processing config changes.
+    // Fetch virtual metrics (from transforms) on mount and when processing config changes,
+    // AND poll periodically while processing is enabled.
     // Platform store may not include virtual metrics after page switch (batch refresh replaces telemetry).
+    // OCR/Transform writes results asynchronously AFTER the device frame lands — wsTs-triggered
+    // REST fetch (line ~581) may race and miss the latest OCR output. A 3s polling interval
+    // ensures we pick up those async detections.
     var virtualDataState = React.useState(null);
     var setVirtualData = virtualDataState[1];
     React.useEffect(function () {
@@ -617,30 +621,37 @@ var NE101CameraPanel = (function () {
       var neomind = window.neomind;
       if (!neomind || typeof neomind.fetchDeviceValues !== 'function') return;
 
-      neomind.fetchDeviceValues(device.id).then(function (v) {
-        if (!v) return;
-        // Extract virtual metrics for our extension
-        var pfx = 'virtual.' + processingExtId.replace(/-/g, '_') + '.';
-        var dets = null;
-        // Try nested path
-        var virt = v.virtual;
-        if (virt && typeof virt === 'object') {
-          var extKey = processingExtId.replace(/-/g, '_');
-          if (virt[extKey] && virt[extKey].detections) {
-            dets = virt[extKey].detections;
+      var cancelled = false;
+      var fetchOnce = function () {
+        neomind.fetchDeviceValues(device.id).then(function (v) {
+          if (cancelled || !v) return;
+          var virt = v.virtual;
+          if (virt && typeof virt === 'object') {
+            // Only the `virtual` subtree is consumed by the merge below; the rest of v
+            // (values.ts, values.imageUrl, etc.) would override fresh wsValues if we let it.
+            setVirtualData({ virtual: virt });
           }
-        }
-        if (virt && typeof virt === 'object') {
-          setVirtualData(v);
-        }
-      }).catch(function () {});
+        }).catch(function () {});
+      };
+      fetchOnce();
+      var iv = setInterval(fetchOnce, 3000);
+      return function () { cancelled = true; clearInterval(iv); };
     }, [device ? device.id : null, processingEnabled, processingExtId]);
 
     // Merge: REST as base (fallback), WS values overlay (real-time, freshest — WS delivers
     // the full image payload on this platform, no size filtering), virtual metrics on top.
     // Order matters: WS MUST win over REST, otherwise a stale REST response (lagging one frame
     // due to the fetchingRef race) would overwrite the fresh image WS just delivered.
-    var _vals = Object.assign({}, imageData || {}, wsValues, virtualDataState[0] || {});
+    //
+    // CRITICAL: only merge the `virtual` subtree from virtualDataState, NOT the whole response.
+    // virtualDataState is a snapshot taken when processing was enabled / on wsTs change.
+    // Merging the whole response would let its stale `values.ts`/`values.imageUrl` override
+    // fresh wsValues → imgTs pinned to the snapshot's ts → imageSrc cache-buster frozen →
+    // browser serves cached image forever (the "enable OCR breaks image updates" bug).
+    var _virtualOnly = (virtualDataState[0] && virtualDataState[0].virtual)
+      ? { virtual: virtualDataState[0].virtual }
+      : {};
+    var _vals = Object.assign({}, imageData || {}, wsValues, _virtualOnly);
 
     // Early-extract imageSrc — device may send URL or base64
     var rawImageSrc = getFirst(_vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
@@ -680,7 +691,22 @@ var NE101CameraPanel = (function () {
       // --- Processing OFF: delete Transform ---
       if (!processingEnabled || !processingExtId || !device) {
         if (_storedTid && neomind && neomind.deleteTransform) {
-          neomind.deleteTransform(_storedTid).catch(function () {});
+          // Verify existence before calling deleteTransform. A stale _storedTid (backend
+          // restart, manual deletion, phantom from failed create roundtrip) would 404 and
+          // the platform's API layer surfaces a "Failed Automation not found" toast that
+          // our local .catch() can't suppress. listTransforms first → only delete if found.
+          if (neomind.listTransforms) {
+            neomind.listTransforms({ id: _storedTid }).then(function (list) {
+              var arr = Array.isArray(list) ? list : [];
+              var found = false;
+              for (var vi = 0; vi < arr.length; vi++) {
+                if (arr[vi].id === _storedTid) { found = true; break; }
+              }
+              if (found) neomind.deleteTransform(_storedTid).catch(function () {});
+            }).catch(function () {});
+          } else {
+            neomind.deleteTransform(_storedTid).catch(function () {});
+          }
         }
         if (_storedTid) {
           transformIdRef.current = null;
