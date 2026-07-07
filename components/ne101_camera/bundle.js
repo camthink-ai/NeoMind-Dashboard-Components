@@ -141,7 +141,7 @@ var NE101CameraPanel = (function () {
   // ---------------------------------------------------------------------------
   // Extension profiles — which AI modes each extension supports
   // ---------------------------------------------------------------------------
-  var AI_EXT_IDS = ['locate-anything-v2', 'image-analyzer-v2', 'yolo-device-inference', 'ocr-device-inference'];
+  var AI_EXT_IDS = ['locate-anything-v2', 'image-analyzer-v2', 'yolo-device-inference', 'ocr-device-inference', 'paddle-ocr-v6'];
 
   // imageArg: extension's input parameter name for the image
   //   'image_base64' = locate-anything-v2 style (expects raw base64 string)
@@ -167,6 +167,9 @@ var NE101CameraPanel = (function () {
     ],
     'ocr-device-inference': [
       { id: 'text_detection', command: 'recognize_image', imageArg: 'image', responseType: 'ocr_text_blocks', label: 'Text Detection', desc: 'OCR text recognition', icon: 'text', args: [] }
+    ],
+    'paddle-ocr-v6': [
+      { id: 'text_detection', command: 'recognize', imageArg: 'image', responseType: 'ocr_text_blocks', label: 'PP-OCRv6', desc: 'PaddleOCR v6 (multi-tier, tiny/small/medium)', icon: 'text', args: [] }
     ]
   };
 
