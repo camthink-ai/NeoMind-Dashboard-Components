@@ -371,7 +371,13 @@ var NE101CameraPanel = (function () {
       L.push('  if (detArea <= 0) return false;');
       L.push('  var clipped = clipPolyRect(poly, dx1, dy1, dx2, dy2);');
       L.push('  if (clipped.length < 3) return false;');
-      L.push('  return polyArea(clipped) / detArea >= OVERLAP_TH;');
+      L.push('  var interArea = polyArea(clipped);');
+      L.push('  var roiArea = polyArea(poly);');
+      L.push('  if (roiArea <= 0) return false;');
+      L.push('  // Overlap coefficient: intersection / min(detArea, roiArea).');
+      L.push('  // Handles both detection-inside-roi AND roi-inside-detection');
+      L.push('  // (e.g. an OCR text line that spans beyond a small drawn ROI).');
+      L.push('  return interArea / Math.min(detArea, roiArea) >= OVERLAP_TH;');
       L.push('};');
       L.push('var inAnyRoi = function(d) {');
       L.push('  for (var r = 0; r < roiRegions.length; r++) {');
