@@ -862,9 +862,21 @@ var NE101CameraPanel = (function () {
       // Backend may store detections as a JSON string — parse it
       if (typeof vDet === 'string') { try { vDet = JSON.parse(vDet); } catch(e) { vDet = null; } }
       var vSourceTs = getFirst(vals, [pfx + 'source_ts', 'values.' + pfx + 'source_ts']);
-      // Match: detections' source_ts must align with the current image timestamp
+      // Match: detections' source_ts must align with the current image timestamp.
+      // Strict equality misses the common case where OCR (1-3s) is slower than
+      // the frame rate: by the time detections land, the displayed image has
+      // advanced to the next frame. Allow a 15s tolerance window so slow
+      // inference pipelines (OCR, VLM) still render their results.
       var imgTsVal = imgTs;
-      var tsMatch = !vSourceTs || !imgTsVal || String(vSourceTs) === String(imgTsVal);
+      var tsMatch = !vSourceTs || !imgTsVal;
+      if (!tsMatch) {
+        var srcNum = Number(vSourceTs), imgNum = Number(imgTsVal);
+        if (!isNaN(srcNum) && !isNaN(imgNum)) {
+          tsMatch = Math.abs(srcNum - imgNum) <= 15000;
+        } else {
+          tsMatch = String(vSourceTs) === String(imgTsVal);
+        }
+      }
       if (Array.isArray(vDet) && vDet.length > 0 && tsMatch) {
         detections = vDet;
         lastDetsRef.current = vDet;
