@@ -660,7 +660,7 @@ var NE101CameraPanel = (function () {
     var rawImageSrc = getFirst(_vals, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
     // Guard: only strings can be image sources — numbers/objects from metrics crash .indexOf()/.match()
     if (typeof rawImageSrc !== 'string') rawImageSrc = null;
-    var isBase64Image = rawImageSrc && (rawImageSrc.indexOf('data:image') === 0 || !rawImageSrc.match(/^https?:\/\//));
+    var isBase64Image = rawImageSrc && (rawImageSrc.indexOf('data:image') === 0 || (!rawImageSrc.match(/^https?:\/\//) && rawImageSrc.charAt(0) !== '/'));
     // For URL images: append ts-based cache buster; for base64: use as-is (ts change triggers re-render via new imageSrc ref)
     var imgTs = getFirst(_vals, ['ts', 'values.ts', 'timestamp', 'values.timestamp']);
     var imageSrc;
@@ -669,6 +669,10 @@ var NE101CameraPanel = (function () {
     } else if (isBase64Image) {
       // Ensure base64 has data URI prefix for <img> display
       imageSrc = rawImageSrc.indexOf('data:') === 0 ? rawImageSrc : 'data:image/jpeg;base64,' + rawImageSrc;
+    } else if (rawImageSrc.charAt(0) === '/') {
+      // Relative URL (/api/images/...) — prepend server origin
+      var _origin = (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) ? 'http://localhost:9375' : (typeof window !== 'undefined' ? window.location.origin : '');
+      imageSrc = _origin + rawImageSrc + (rawImageSrc.indexOf('?') >= 0 ? '&' : '?') + '_t=' + (imgTs || 0);
     } else {
       imageSrc = rawImageSrc + (rawImageSrc.indexOf('?') >= 0 ? '&' : '?') + '_t=' + (imgTs || 0);
     }
@@ -1673,7 +1677,14 @@ var NE101CameraPanel = (function () {
         if (!v) { previewLoadingState[1](false); return; }
         var img = getFirst(v, ['values.imageUrl', 'values.image', 'values.photo', 'imageUrl', 'image', 'photo', 'values.picture', 'picture']);
         if (img && typeof img === 'string') {
-          var src = img.indexOf('data:') === 0 ? img : 'data:image/jpeg;base64,' + img;
+          var src;
+          if (img.indexOf('data:') === 0) { src = img; }
+          else if (img.charAt(0) === '/') {
+            var _origin = (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) ? 'http://localhost:9375' : (typeof window !== 'undefined' ? window.location.origin : '');
+            src = _origin + img;
+          }
+          else if (img.match(/^https?:\/\//)) { src = img; }
+          else { src = 'data:image/jpeg;base64,' + img; }
           previewImgState[1](src);
         }
         previewLoadingState[1](false);
