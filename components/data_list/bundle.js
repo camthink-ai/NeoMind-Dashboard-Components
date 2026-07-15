@@ -354,7 +354,9 @@ var NeoMind_DataList = (function () {
                 tsMap[minKey]['s' + si2] = items[ii].value;
               }
             }
-            tsOrder.sort(function (a, b) { return a - b; });
+            // Newest first (descending) so the latest rows render at the top —
+            // matches the single-source `.reverse()` convention in adaptData.
+            tsOrder.sort(function (a, b) { return b - a; });
             var mergedRows = tsOrder.map(function (mk) { return tsMap[mk]; });
 
             // Build column defs for merged view
