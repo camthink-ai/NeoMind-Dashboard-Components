@@ -103,6 +103,26 @@ var NeoMind_TextDisplay = (function () {
     return lines;
   }
 
+  // Keep only the newest record when a source returns a time-ordered array
+  // (e.g. a series) — Text Display shows the latest snapshot, not history.
+  // Scalar arrays are passed through unchanged (multiple values, not time).
+  function latestOfArray(val) {
+    if (!Array.isArray(val) || !val.length) return val;
+    var first = val[0];
+    if (first == null || typeof first !== 'object') return val; // scalar array: keep all
+    var best = null, bestTs = -Infinity;
+    for (var i = 0; i < val.length; i++) {
+      var it = val[i];
+      if (it == null) continue;
+      var t = it.timestamp != null ? it.timestamp : (it.time != null ? it.time : (it.ts != null ? it.ts : null));
+      if (t == null) continue;
+      var tn = typeof t === 'number' ? (t < 1e12 ? t * 1000 : t) : Date.parse(t);
+      if (!isNaN(tn) && tn > bestTs) { bestTs = tn; best = it; }
+    }
+    // newest by timestamp if available, else assume ascending → last is newest
+    return best != null ? best : val[val.length - 1];
+  }
+
   function formatData(data) {
     if (data == null) return [];
     if (typeof data === 'string') {
@@ -174,7 +194,7 @@ var NeoMind_TextDisplay = (function () {
           var merged = [];
           for (var i = 0; i < result.length; i++) {
             var r = result[i];
-            var val = r && r.value != null ? r.value : r;
+            var val = latestOfArray(r && r.value != null ? r.value : r);
             if (val != null) {
               if (merged.length > 0) {
                 merged.push({ key: '', value: '', valueType: 'separator' });
@@ -186,6 +206,7 @@ var NeoMind_TextDisplay = (function () {
           setData(merged.length ? merged : null);
         } else {
           var val = result.value != null ? result.value : result;
+          val = latestOfArray(val);
           var lines = formatData(val);
           setData(lines.length ? lines : null);
         }
