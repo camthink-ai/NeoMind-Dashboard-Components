@@ -3,6 +3,19 @@ var NE101CameraPanel = (function () {
   var jsx = window.jsxRuntime.jsx;
   var jsxs = window.jsxRuntime.jsxs;
 
+  // Resolve the CURRENT server origin for relative /api/... references.
+  // Priority: the host app's live bridge (follows cloud-instance switching,
+  // `window.__neomind.getServerOrigin`), then the legacy behavior. The old
+  // hardcoded Tauri origin (http://localhost:9375) broke every image the
+  // moment the desktop app connected to a remote instance.
+  function ne101Origin() {
+    if (typeof window !== 'undefined' && window.__neomind && typeof window.__neomind.getServerOrigin === 'function') {
+      try { return window.__neomind.getServerOrigin(); } catch (e) { /* fall through */ }
+    }
+    if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) return 'http://localhost:9375';
+    return typeof window !== 'undefined' ? window.location.origin : '';
+  }
+
   // Helpers
   function batteryMeta(level) {
     if (level == null) return { bar: 'rgba(128,128,128,0.3)' };
@@ -671,7 +684,7 @@ var NE101CameraPanel = (function () {
       imageSrc = rawImageSrc.indexOf('data:') === 0 ? rawImageSrc : 'data:image/jpeg;base64,' + rawImageSrc;
     } else if (rawImageSrc.indexOf('/api/') === 0) {
       // Relative URL (/api/images/...) — prepend server origin
-      var _origin = (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) ? 'http://localhost:9375' : (typeof window !== 'undefined' ? window.location.origin : '');
+      var _origin = ne101Origin();
       imageSrc = _origin + rawImageSrc + (rawImageSrc.indexOf('?') >= 0 ? '&' : '?') + '_t=' + (imgTs || 0);
     } else {
       imageSrc = rawImageSrc + (rawImageSrc.indexOf('?') >= 0 ? '&' : '?') + '_t=' + (imgTs || 0);
@@ -1680,8 +1693,7 @@ var NE101CameraPanel = (function () {
           var src;
           if (img.indexOf('data:') === 0) { src = img; }
           else if (img.indexOf('/api/') === 0) {
-            var _origin = (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) ? 'http://localhost:9375' : (typeof window !== 'undefined' ? window.location.origin : '');
-            src = _origin + img;
+            src = ne101Origin() + img;
           }
           else if (img.match(/^https?:\/\//)) { src = img; }
           else { src = 'data:image/jpeg;base64,' + img; }
